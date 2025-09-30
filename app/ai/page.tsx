@@ -1,6 +1,10 @@
 "use client";
+
 import { useMemo, useState, useEffect, useId } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
+import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 /* ========= Types ========= */
 type Coord = { name: string; lat: number; lon: number };
@@ -17,10 +21,6 @@ type RegionKey =
   | "NorthAegean"
   | "Crete";
 type PlannerMode = "Region" | "Custom";
-
-/** Leaflet-friendly tuple without importing Leaflet types */
-type LatLng = [number, number];
-type LatLngExpression = LatLng | number[] | { lat: number; lng: number };
 
 /* ========= Ports (incl. Halkidiki & aliases) ========= */
 const PORTS: Coord[] = [
@@ -207,31 +207,16 @@ function addDaysISO(iso: string, plus: number) {
   return d.toISOString().slice(0, 10);
 }
 
+/* ========= Region rings ========= */
 type RegionRing = Record<RegionKey, string[]>;
 const BANK: RegionRing = {
-  Saronic: ["Alimos", "Aegina", "Agistri", "Poros", "Hydra", "Spetses", "Ermioni", "Porto Cheli", "Alimos"],
-  Cyclades: ["Lavrio", "Kea", "Kythnos", "Syros", "Mykonos", "Paros", "Naxos", "Ios", "Santorini", "Milos", "Sifnos", "Serifos", "Lavrio"],
-  Ionian: ["Corfu", "Paxos", "Antipaxos", "Lefkada", "Meganisi", "Kalamos", "Kastos", "Ithaca", "Kefalonia", "Zakynthos", "Lefkada"],
-  Dodecanese: ["Rhodes", "Symi", "Kos", "Kalymnos", "Patmos", "Rhodes"],
-  Sporades: ["Volos", "Skiathos", "Skopelos", "Alonissos", "Volos"],
-  NorthAegean: [
-    "Thessaloniki",
-    "Nea Moudania",
-    "Sani Marina",
-    "Nikiti",
-    "Vourvourou",
-    "Ormos Panagias",
-    "Ouranoupoli",
-    "Kavala",
-    "Thassos",
-    "Samothraki",
-    "Lemnos",
-    "Lesvos",
-    "Chios",
-    "Samos",
-    "Ikaria",
-  ],
-  Crete: ["Chania", "Rethymno", "Heraklion", "Agios Nikolaos", "Chania"],
+  Saronic: ["Alimos","Aegina","Agistri","Poros","Hydra","Spetses","Ermioni","Porto Cheli","Alimos"],
+  Cyclades: ["Lavrio","Kea","Kythnos","Syros","Mykonos","Paros","Naxos","Ios","Santorini","Milos","Sifnos","Serifos","Lavrio"],
+  Ionian: ["Corfu","Paxos","Antipaxos","Lefkada","Meganisi","Kalamos","Kastos","Ithaca","Kefalonia","Zakynthos","Lefkada"],
+  Dodecanese: ["Rhodes","Symi","Kos","Kalymnos","Patmos","Rhodes"],
+  Sporades: ["Volos","Skiathos","Skopelos","Alonissos","Volos"],
+  NorthAegean: ["Thessaloniki","Nea Moudania","Sani Marina","Nikiti","Vourvourou","Ormos Panagias","Ouranoupoli","Kavala","Thassos","Samothraki","Lemnos","Lesvos","Chios","Samos","Ikaria"],
+  Crete: ["Chania","Rethymno","Heraklion","Agios Nikolaos","Chania"],
 };
 
 function autoPickRegion(start: string, end: string): RegionKey {
@@ -245,23 +230,18 @@ function autoPickRegion(start: string, end: string): RegionKey {
   return "Cyclades";
 }
 function nearestIndexInRing(ring: string[], target: Coord): number {
-  let best = 0,
-    bestD = Number.POSITIVE_INFINITY;
+  let best = 0, bestD = Number.POSITIVE_INFINITY;
   for (let i = 0; i < ring.length; i++) {
-    const p = findPort(ring[i]);
-    if (!p) continue;
+    const p = findPort(ring[i]); if (!p) continue;
     const d = haversineNM(target, p);
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
+    if (d < bestD) { bestD = d; best = i; }
   }
   return best;
 }
 function buildRouteRegion(start: string, end: string, days: number, region: RegionKey, vias: string[]) {
   const ring = BANK[region] ?? [];
   const startCoord = findPort(start);
-  const endName = end && end.trim() ? end : start;
+  const endName = (end && end.trim()) ? end : start;
 
   if (!ring.length || !startCoord) {
     const seq = [start, ...vias.filter(Boolean), endName];
@@ -277,8 +257,7 @@ function buildRouteRegion(start: string, end: string, days: number, region: Regi
     const v = (raw || "").trim();
     if (!v || !findPort(v) || remainingLegs <= 0) continue;
     if (path[path.length - 1].toLowerCase() === v.toLowerCase()) continue;
-    path.push(v);
-    remainingLegs--;
+    path.push(v); remainingLegs--;
   }
 
   // Enter ring from closest
@@ -292,17 +271,15 @@ function buildRouteRegion(start: string, end: string, days: number, region: Regi
   if (extended[0] && extended[0].toLowerCase() === path[path.length - 1].toLowerCase()) k = 1;
 
   while (remainingLegs > 1 && k < extended.length) {
-    const c = extended[k++];
-    if (!c) continue;
+    const c = extended[k++]; if (!c) continue;
     if (c.toLowerCase() === path[path.length - 1].toLowerCase()) continue;
-    path.push(c);
-    remainingLegs--;
+    path.push(c); remainingLegs--;
   }
 
   const last = endName;
   if (path.length >= 1 && path[path.length - 1].toLowerCase() === last.toLowerCase()) {
     const tailMinus1 = path.length >= 2 ? path[path.length - 2].toLowerCase() : "";
-    const alt = extended.find((x) => x && x.toLowerCase() !== last.toLowerCase() && x.toLowerCase() !== tailMinus1);
+    const alt = extended.find(x => x && x.toLowerCase() !== last.toLowerCase() && x.toLowerCase() !== tailMinus1);
     if (alt) path[path.length - 1] = alt;
   }
   if (remainingLegs >= 1) path.push(last);
@@ -312,8 +289,8 @@ function buildRouteRegion(start: string, end: string, days: number, region: Regi
   return path;
 }
 function buildRouteCustomByDays(start: string, dayStops: string[]) {
-  const seq = [start, ...dayStops].map((s) => s.trim()).filter(Boolean);
-  const allValid = seq.every((s) => !!findPort(s));
+  const seq = [start, ...dayStops].map(s => s.trim()).filter(Boolean);
+  const allValid = seq.every(s => !!findPort(s));
   if (!allValid || seq.length < 2) return null;
   return seq;
 }
@@ -325,16 +302,8 @@ function formatHoursHM(hours: number) {
 
 /* ========= Autocomplete ========= */
 function AutoCompleteInput({
-  value,
-  onChange,
-  placeholder,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  options: string[];
-}) {
+  value, onChange, placeholder, options,
+}: { value: string; onChange: (v: string) => void; placeholder: string; options: string[] }) {
   const inputId = useId();
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -354,19 +323,11 @@ function AutoCompleteInput({
     setShowAll(false);
   }
   function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!open && (e.key === "ArrowDown" || e.key === "Enter")) {
-      setOpen(true);
-      return;
-    }
+    if (!open && (e.key === "ArrowDown" || e.key === "Enter")) { setOpen(true); return; }
     if (e.key === "ArrowDown") setHighlight((h) => Math.min(h + 1, filtered.length - 1));
     else if (e.key === "ArrowUp") setHighlight((h) => Math.max(h - 1, 0));
-    else if (e.key === "Enter") {
-      e.preventDefault();
-      if (filtered[highlight]) pick(filtered[highlight]);
-    } else if (e.key === "Escape") {
-      setOpen(false);
-      setShowAll(false);
-    }
+    else if (e.key === "Enter") { e.preventDefault(); if (filtered[highlight]) pick(filtered[highlight]); }
+    else if (e.key === "Escape") { setOpen(false); setShowAll(false); }
   }
 
   return (
@@ -375,25 +336,9 @@ function AutoCompleteInput({
         <input
           id={inputId}
           value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setOpen(true);
-            setShowAll(false);
-            setHighlight(0);
-          }}
-          onFocus={() => {
-            setHasFocus(true);
-            setOpen(true);
-          }}
-          onBlur={() => {
-            setHasFocus(false);
-            setTimeout(() => {
-              if (!hasFocus) {
-                setOpen(false);
-                setShowAll(false);
-              }
-            }, 120);
-          }}
+          onChange={(e) => { onChange(e.target.value); setOpen(true); setShowAll(false); setHighlight(0); }}
+          onFocus={() => { setHasFocus(true); setOpen(true); }}
+          onBlur={() => { setHasFocus(false); setTimeout(() => { if (!hasFocus) { setOpen(false); setShowAll(false); } }, 120); }}
           onKeyDown={onKey}
           placeholder={placeholder}
           className="w-full rounded-xl border border-slate-300 px-4 py-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
@@ -403,11 +348,7 @@ function AutoCompleteInput({
           type="button"
           aria-label="Show all options"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => {
-            setOpen((o) => !o || !showAll);
-            setShowAll((s) => !s || !open);
-            setHighlight(0);
-          }}
+          onClick={() => { setOpen((o) => !o || !showAll); setShowAll((s) => !s || !open); setHighlight(0); }}
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
         >
           ▼
@@ -423,13 +364,9 @@ function AutoCompleteInput({
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-3 py-1 text-[11px] text-slate-500">
             <span>{showAll ? "Showing all ports (type to filter)" : "Type to filter"}</span>
             {showAll ? (
-              <button type="button" className="underline" onClick={() => setShowAll(false)}>
-                Search mode
-              </button>
+              <button type="button" className="underline" onClick={() => setShowAll(false)}>Search mode</button>
             ) : (
-              <button type="button" className="underline" onClick={() => setShowAll(true)}>
-                Show all
-              </button>
+              <button type="button" className="underline" onClick={() => setShowAll(true)}>Show all</button>
             )}
           </div>
 
@@ -449,148 +386,109 @@ function AutoCompleteInput({
   );
 }
 
-/* ========= Leaflet Map — dashed route + OpenSeaMap + Fit to route ========= */
+/* ========= Leaflet Map — dashed route + OpenSeaMap + auto-fit ========= */
+// dynamic imports (no SSR)
+const RL_MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
+const RL_TileLayer = dynamic(() => import("react-leaflet").then(m => m.TileLayer), { ssr: false });
+const RL_Polyline = dynamic(() => import("react-leaflet").then(m => m.Polyline), { ssr: false });
+const RL_CircleMarker = dynamic(() => import("react-leaflet").then(m => m.CircleMarker), { ssr: false });
+const RL_Tooltip = dynamic(() => import("react-leaflet").then(m => m.Tooltip), { ssr: false });
+
 function RouteMap({ points }: { points: { name: string; lat: number; lon: number }[] }) {
-  const isClient = typeof window !== "undefined";
-  const [ready, setReady] = useState(false);
+  if (!points.length) return null;
 
-  useEffect(() => {
-    if (isClient) import("leaflet/dist/leaflet.css").then(() => setReady(true));
-  }, [isClient]);
+  const latlngs = useMemo<LatLngExpression[]>(
+    () => points.map((p) => [p.lat, p.lon] as LatLngExpression),
+    [points]
+  );
 
-  if (!isClient || !ready || points.length === 0) return null;
+  // bounds / center
+  const bounds = useMemo<LatLngBoundsExpression | null>(() => {
+    if (latlngs.length < 2) return null;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const L = require("leaflet") as typeof import("leaflet"); // τύποι μόνο, runtime ok
+    const b = L.latLngBounds(latlngs as any);
+    return b.pad(0.08);
+  }, [latlngs]);
 
-  // Dynamic import with proper typing (avoid 'any')
-  const RL = require("react-leaflet") as typeof import("react-leaflet");
-  const { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap } = RL;
-
-  // Build latlng array
-  const latlngs: LatLng[] = points.map((p) => [p.lat, p.lon]);
-  const center: LatLng = latlngs.length
-    ? [latlngs.reduce((a, b) => a + b[0], 0) / latlngs.length, latlngs.reduce((a, b) => a + b[1], 0) / latlngs.length]
-    : [37.97, 23.72];
-
-  // Helper: compute bounds of route
-  function routeBounds(): [LatLng, LatLng] {
-    const lats = latlngs.map(([la]) => la);
-    const lons = latlngs.map(([, lo]) => lo);
-    const minLat = Math.min(...lats),
-      maxLat = Math.max(...lats);
-    const minLon = Math.min(...lons),
-      maxLon = Math.max(...lons);
-    return [
-      [minLat, minLon],
-      [maxLat, maxLon],
-    ];
-  }
-
-  // Control that fits the map to the route
-  function FitToRouteControl() {
-    const map = useMap();
-    useEffect(() => {
-      if (latlngs.length >= 2) {
-        map.fitBounds(routeBounds() as unknown as [LatLngExpression, LatLngExpression], { padding: [30, 30] });
-      } else {
-        map.setView(center as unknown as LatLngExpression, 7);
-      }
-      const onResize = () => {
-        if (latlngs.length >= 2) map.fitBounds(routeBounds() as unknown as [LatLngExpression, LatLngExpression], { padding: [30, 30] });
-      };
-      window.addEventListener("resize", onResize);
-      return () => window.removeEventListener("resize", onResize);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [JSON.stringify(latlngs)]);
-
-    return (
-      <div className="leaflet-top leaflet-right" style={{ position: "absolute", zIndex: 1000, right: 10, top: 10 }}>
-        <button
-          type="button"
-          onClick={() => map.fitBounds(routeBounds() as unknown as [LatLngExpression, LatLngExpression], { padding: [30, 30] })}
-          title="Fit to route"
-          className="rounded-md border border-slate-300 bg-white/90 px-3 py-1 text-xs shadow hover:bg-white"
-        >
-          Fit to route
-        </button>
-      </div>
-    );
-  }
+  const center: LatLngExpression = latlngs[0] ?? ([37.97, 23.72] as LatLngExpression);
 
   return (
     <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
-      <MapContainer center={center as unknown as LatLngExpression} zoom={6} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}>
+      <RL_MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
         {/* Base map */}
-        <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <RL_TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         {/* Nautical overlay */}
-        <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.45} />
+        <RL_TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.45} />
 
-        {/* Dashed polyline (visual estimate) */}
+        {/* Dashed route */}
         {latlngs.length >= 2 && (
-          <Polyline
-            positions={latlngs as unknown as LatLngExpression[]}
+          <RL_Polyline
+            positions={latlngs}
             pathOptions={{ color: "#0b1220", weight: 3, opacity: 0.9, dashArray: "6 8", lineJoin: "round", lineCap: "round" }}
           />
         )}
 
         {/* Start */}
         {points[0] && (
-          <CircleMarker center={[points[0].lat, points[0].lon]} radius={8} pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}>
-            <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+          <RL_CircleMarker center={[points[0].lat, points[0].lon] as LatLngExpression} radius={8} pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}>
+            <RL_Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
               Start: {points[0].name}
-            </Tooltip>
-          </CircleMarker>
+            </RL_Tooltip>
+          </RL_CircleMarker>
         )}
 
         {/* Middles */}
         {points.slice(1, -1).map((p) => (
-          <CircleMarker key={`${p.name}-${p.lat}`} center={[p.lat, p.lon]} radius={5} pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}>
-            <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
+          <RL_CircleMarker key={`${p.name}-${p.lat}-${p.lon}`} center={[p.lat, p.lon] as LatLngExpression} radius={5} pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}>
+            <RL_Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
               {p.name}
-            </Tooltip>
-          </CircleMarker>
+            </RL_Tooltip>
+          </RL_CircleMarker>
         ))}
 
         {/* End */}
         {points.length > 1 && (
-          <CircleMarker center={[points.at(-1)!.lat, points.at(-1)!.lon]} radius={8} pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}>
-            <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+          <RL_CircleMarker center={[points.at(-1)!.lat, points.at(-1)!.lon] as LatLngExpression} radius={8} pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}>
+            <RL_Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
               End: {points.at(-1)!.name}
-            </Tooltip>
-          </CircleMarker>
+            </RL_Tooltip>
+          </RL_CircleMarker>
         )}
 
-        {/* Fit button */}
-        <FitToRouteControl />
-      </MapContainer>
+        {/* Fit to bounds via a tiny effect component */}
+        {bounds && (
+          <FitOnChange bounds={bounds} />
+        )}
+      </RL_MapContainer>
     </div>
   );
 }
 
+// μικρό helper για fitBounds χωρίς άμεσο useMap import στο module level
+const FitOnChange = dynamic(async () => {
+  const RL = await import("react-leaflet");
+  const { useEffect } = await import("react");
+  function Cmp({ bounds }: { bounds: LatLngBoundsExpression }) {
+    const map = RL.useMap();
+    useEffect(() => {
+      map.fitBounds(bounds, { padding: [30, 30] });
+      const onResize = () => map.fitBounds(bounds, { padding: [30, 30] });
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, [map, bounds]);
+    return null;
+  }
+  return Cmp;
+}, { ssr: false });
+
 /* ========= Query helpers (Share/Load) ========= */
-function encodeArr(arr: string[]) {
-  return arr.map((s) => encodeURIComponent(s)).join(",");
-}
-function decodeArr(s: string | null): string[] {
-  if (!s) return [];
-  return s
-    .split(",")
-    .map((x) => decodeURIComponent(x))
-    .filter(Boolean);
-}
+function encodeArr(arr: string[]) { return arr.map((s) => encodeURIComponent(s)).join(","); }
+function decodeArr(s: string | null): string[] { if (!s) return []; return s.split(",").map((x) => decodeURIComponent(x)).filter(Boolean); }
 function buildQueryFromState(state: {
-  mode: PlannerMode;
-  startDate: string;
-  yachtType: YachtType;
-  speed: number;
-  lph: number;
-  start: string;
-  end: string;
-  days: number;
-  regionMode: "Auto" | RegionKey;
-  vias: string[];
-  viaCanal: boolean;
-  customStart: string;
-  customDays: number;
-  customDayStops: string[];
+  mode: PlannerMode; startDate: string; yachtType: YachtType; speed: number; lph: number;
+  start: string; end: string; days: number; regionMode: "Auto" | RegionKey; vias: string[]; viaCanal: boolean;
+  customStart: string; customDays: number; customDayStops: string[];
 }) {
   const q = new URLSearchParams();
   q.set("mode", state.mode);
@@ -613,25 +511,13 @@ function buildQueryFromState(state: {
   q.set("autogen", "1");
   return q.toString();
 }
-function loadStateFromQuery(
-  sp: URLSearchParams,
-  setters: {
-    setMode: (v: PlannerMode) => void;
-    setStartDate: (v: string) => void;
-    setYachtType: (v: YachtType) => void;
-    setSpeed: (v: number) => void;
-    setLph: (v: number) => void;
-    setStart: (v: string) => void;
-    setEnd: (v: string) => void;
-    setDays: (v: number) => void;
-    setRegionMode: (v: "Auto" | RegionKey) => void;
-    setVias: (v: string[]) => void;
-    setViaCanal: (v: boolean) => void;
-    setCustomStart: (v: string) => void;
-    setCustomDays: (v: number) => void;
-    setCustomDayStops: (v: string[]) => void;
-  }
-) {
+function loadStateFromQuery(sp: URLSearchParams, setters: {
+  setMode: (v: PlannerMode) => void; setStartDate: (v: string) => void;
+  setYachtType: (v: YachtType) => void; setSpeed: (v: number) => void; setLph: (v: number) => void;
+  setStart: (v: string) => void; setEnd: (v: string) => void; setDays: (v: number) => void;
+  setRegionMode: (v: "Auto" | RegionKey) => void; setVias: (v: string[]) => void; setViaCanal: (v: boolean) => void;
+  setCustomStart: (v: string) => void; setCustomDays: (v: number) => void; setCustomDayStops: (v: string[]) => void;
+}) {
   const mode = (sp.get("mode") as PlannerMode) || "Region";
   setters.setMode(mode);
 
@@ -684,10 +570,7 @@ export default function AIPlannerPage() {
 
   // Common
   const [startDate, setStartDate] = useState<string>("");
-  useEffect(() => {
-    const d = new Date();
-    setStartDate(d.toISOString().slice(0, 10));
-  }, []);
+  useEffect(() => { const d = new Date(); setStartDate(d.toISOString().slice(0, 10)); }, []);
   const [yachtType, setYachtType] = useState<YachtType>("Motor");
   const [speed, setSpeed] = useState<number>(20);
   const [lph, setLph] = useState<number>(180);
@@ -707,8 +590,8 @@ export default function AIPlannerPage() {
   const [viaCanal, setViaCanal] = useState<boolean>(false);
   const effectiveVias = useMemo(() => {
     const list = [...vias].filter(Boolean);
-    if (viaCanal && !list.some((v) => normalize(v) === normalize("Corinth Canal (Isthmia)"))) list.unshift("Corinth Canal (Isthmia)");
-    return list.filter((v) => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
+    if (viaCanal && !list.some(v => normalize(v) === normalize("Corinth Canal (Isthmia)"))) list.unshift("Corinth Canal (Isthmia)");
+    return list.filter(v => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
   }, [vias, viaCanal, start, end]);
 
   // Custom mode
@@ -724,33 +607,18 @@ export default function AIPlannerPage() {
     });
   }, [customDays]);
 
-  // Φόρτωμα από URL (μόνο στο αρχικό mount)
+  // Load from URL once
   useEffect(() => {
     if (!searchParams) return;
     const { autogen } = loadStateFromQuery(searchParams, {
-      setMode,
-      setStartDate,
-      setYachtType,
-      setSpeed,
-      setLph,
-      setStart,
-      setEnd,
-      setDays,
-      setRegionMode,
-      setVias,
-      setViaCanal,
-      setCustomStart,
-      setCustomDays,
-      setCustomDayStops,
+      setMode, setStartDate, setYachtType, setSpeed, setLph,
+      setStart, setEnd, setDays, setRegionMode, setVias, setViaCanal,
+      setCustomStart, setCustomDays, setCustomDayStops,
     });
     const hasParams = Array.from(searchParams.keys()).length > 0;
     if (hasParams && autogen) {
       setTimeout(() => {
-        try {
-          document.getElementById("generate-btn")?.dispatchEvent(new Event("click", { bubbles: true }));
-        } catch {
-          /* noop */
-        }
+        try { document.getElementById("generate-btn")?.dispatchEvent(new Event("click", { bubbles: true })); } catch {}
       }, 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -759,47 +627,27 @@ export default function AIPlannerPage() {
   function onTogglePref(value: string) {
     setPrefs((prev) => (prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]));
   }
-  function addVia() {
-    setVias((v) => [...v, ""]);
-  }
-  function setViaAt(i: number, val: string) {
-    setVias((v) => v.map((x, idx) => (idx === i ? val : x)));
-  }
-  function removeVia(i: number) {
-    setVias((v) => v.filter((_, idx) => idx !== i));
-  }
-  function setCustomStopAt(i: number, val: string) {
-    setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x)));
-  }
+  function addVia() { setVias((v) => [...v, ""]); }
+  function setViaAt(i: number, val: string) { setVias((v) => v.map((x, idx) => (idx === i ? val : x))); }
+  function removeVia(i: number) { setVias((v) => v.filter((_, idx) => idx !== i)); }
+  function setCustomStopAt(i: number, val: string) { setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x))); }
 
   function handleGenerate(e?: React.FormEvent) {
     e?.preventDefault?.();
     let names: string[] | null = null;
 
     if (mode === "Region") {
-      if (!findPort(start) || !findPort(end)) {
-        alert("Please select valid Start/End from the suggestions.");
-        return;
-      }
+      if (!findPort(start) || !findPort(end)) { alert("Please select valid Start/End from the suggestions."); return; }
       names = buildRouteRegion(start, end, days, region, effectiveVias);
     } else {
-      if (!findPort(customStart)) {
-        alert("Please select a valid Start (custom).");
-        return;
-      }
+      if (!findPort(customStart)) { alert("Please select a valid Start (custom)."); return; }
       const seq = buildRouteCustomByDays(customStart, customDayStops);
-      if (!seq) {
-        alert("Please fill valid ports for each day (use suggestions).");
-        return;
-      }
+      if (!seq) { alert("Please fill valid ports for each day (use suggestions)."); return; }
       names = seq;
     }
 
     const coords = names.map((n) => findPort(n)).filter(Boolean) as Coord[];
-    if (coords.length < 2) {
-      setPlan([]);
-      return;
-    }
+    if (coords.length < 2) { setPlan([]); return; }
 
     const legs: Leg[] = [];
     for (let i = 0; i < coords.length - 1; i++) {
@@ -814,63 +662,37 @@ export default function AIPlannerPage() {
       const date = startDate ? addDaysISO(startDate, d) : "";
       const leg = legs[d];
       const notes = [
-        mode === "Region" && region === "Cyclades" ? "Meltemi possible; prefer morning hops." : "",
-        mode === "Region" && region === "Saronic" ? "Sheltered waters; ideal for families." : "",
-        mode === "Region" && region === "Ionian" ? "Green shores & calm channels; great anchorages." : "",
+        mode === "Region" && region === "Cyclades"   ? "Meltemi possible; prefer morning hops." : "",
+        mode === "Region" && region === "Saronic"    ? "Sheltered waters; ideal for families." : "",
+        mode === "Region" && region === "Ionian"     ? "Green shores & calm channels; great anchorages." : "",
         mode === "Region" && region === "Dodecanese" ? "Historic harbors & culture; longer open-sea legs." : "",
-        mode === "Region" && region === "Sporades" ? "Marine park & pine-clad islands; clear waters." : "",
-        mode === "Region" && region === "NorthAegean" ? "Authentic ports incl. Halkidiki; larger gaps in places." : "",
-        mode === "Region" && region === "Crete" ? "Longer hops; stunning coves, plan fuel & berths." : "",
+        mode === "Region" && region === "Sporades"   ? "Marine park & pine-clad islands; clear waters." : "",
+        mode === "Region" && region === "NorthAegean"? "Authentic ports incl. Halkidiki; larger gaps in places." : "",
+        mode === "Region" && region === "Crete"      ? "Longer hops; stunning coves, plan fuel & berths." : "",
         prefs.includes("nightlife") ? "Consider later arrival for dining/nightlife." : "",
-        prefs.includes("family") ? "Favor sandy coves & shorter hops." : "",
-        prefs.includes("gastronomy") ? "Reserve seaside taverna early." : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
+        prefs.includes("family")    ? "Favor sandy coves & shorter hops." : "",
+        prefs.includes("gastronomy")? "Reserve seaside taverna early." : "",
+      ].filter(Boolean).join(" ");
       cards.push({ day: d + 1, date, leg, notes });
     }
     setPlan(cards);
 
-    // === Update URL for share ===
+    // Update URL for share
     const qs = buildQueryFromState({
-      mode,
-      startDate,
-      yachtType,
-      speed,
-      lph,
-      start,
-      end,
-      days,
-      regionMode,
-      vias,
-      viaCanal,
-      customStart,
-      customDays,
-      customDayStops,
+      mode, startDate, yachtType, speed, lph,
+      start, end, days, regionMode, vias, viaCanal,
+      customStart, customDays, customDayStops,
     });
     router.replace(`/ai?${qs}`, { scroll: false });
   }
 
-  function handlePrint() {
-    window.print();
-  }
+  function handlePrint() { window.print(); }
 
   async function handleCopyLink() {
     const qs = buildQueryFromState({
-      mode,
-      startDate,
-      yachtType,
-      speed,
-      lph,
-      start,
-      end,
-      days,
-      regionMode,
-      vias,
-      viaCanal,
-      customStart,
-      customDays,
-      customDayStops,
+      mode, startDate, yachtType, speed, lph,
+      start, end, days, regionMode, vias, viaCanal,
+      customStart, customDays, customDayStops,
     });
     const url = `${window.location.origin}/ai?${qs}`;
     try {
@@ -897,7 +719,7 @@ export default function AIPlannerPage() {
     return { nm, hrs: `${hh}h ${mm}m`, fuel };
   }, [plan]);
 
-  // Points for map (simple sequence, dashed polyline)
+  // Points for map (simple sequence)
   const mapPoints = useMemo(() => {
     if (!plan?.length) return [];
     const names: string[] = [];
@@ -907,13 +729,18 @@ export default function AIPlannerPage() {
     return names.map((n) => findPort(n)).filter(Boolean) as Coord[];
   }, [plan]);
 
-  const PORT_OPTIONS = useMemo(() => Array.from(new Set([...PORTS.map((p) => p.name), ...Object.keys(ALIASES)])).sort(), []);
+  const PORT_OPTIONS = useMemo(
+    () => Array.from(new Set([...PORTS.map(p => p.name), ...Object.keys(ALIASES)])).sort(),
+    []
+  );
 
   return (
     <div className="bg-white text-slate-900">
       <section className="mx-auto max-w-7xl px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight text-brand-navy no-print">AI Itinerary Draft</h1>
-        <p className="mt-2 max-w-2xl text-slate-600 no-print">Region-guided or fully Custom itineraries. Enter dates & yacht specs, add stops, and generate.</p>
+        <p className="mt-2 max-w-2xl text-slate-600 no-print">
+          Region-guided or fully Custom itineraries. Enter dates & yacht specs, add stops, and generate.
+        </p>
 
         {/* FORM */}
         <form onSubmit={handleGenerate} className="mt-6 grid grid-cols-1 gap-4 no-print">
@@ -928,37 +755,13 @@ export default function AIPlannerPage() {
 
           {/* Common controls */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <input
-              type="date"
-              value={startDate || ""}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
-            />
-            <select
-              value={yachtType}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setYachtType(e.target.value as YachtType)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
-            >
-              <option value="Motor">Motor</option>
-              <option value="Sailing">Sailing</option>
+            <input type="date" value={startDate || ""} onChange={(e) => setStartDate(e.target.value)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" />
+            <select value={yachtType} onChange={(e) => setYachtType(e.target.value as YachtType)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold">
+              <option value="Motor">Motor</option><option value="Sailing">Sailing</option>
             </select>
-            <input
-              type="number"
-              min={4}
-              value={speed}
-              onChange={(e) => setSpeed(parseFloat(e.target.value || "10"))}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
-              placeholder="Cruise speed (kn)"
-            />
+            <input type="number" min={4} value={speed} onChange={(e) => setSpeed(parseFloat(e.target.value || "10"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Cruise speed (kn)" />
             {yachtType === "Motor" && (
-              <input
-                type="number"
-                min={5}
-                value={lph}
-                onChange={(e) => setLph(parseFloat(e.target.value || "120"))}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
-                placeholder="Fuel burn (L/h)"
-              />
+              <input type="number" min={5} value={lph} onChange={(e) => setLph(parseFloat(e.target.value || "120"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Fuel burn (L/h)" />
             )}
           </div>
 
@@ -968,11 +771,7 @@ export default function AIPlannerPage() {
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <AutoCompleteInput value={start} onChange={setStart} placeholder="Start port (e.g. Alimos / Αλιμος)" options={PORT_OPTIONS} />
                 <AutoCompleteInput value={end} onChange={setEnd} placeholder="End port (default: same as start)" options={PORT_OPTIONS} />
-                <select
-                  value={regionMode}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRegionMode(e.target.value as "Auto" | RegionKey)}
-                  className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
-                >
+                <select value={regionMode} onChange={(e) => setRegionMode(e.target.value as any)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold">
                   <option value="Auto">Region: Auto</option>
                   <option value="Saronic">Region: Saronic</option>
                   <option value="Cyclades">Region: Cyclades</option>
@@ -982,42 +781,23 @@ export default function AIPlannerPage() {
                   <option value="NorthAegean">Region: North Aegean</option>
                   <option value="Crete">Region: Crete</option>
                 </select>
-                <input
-                  type="number"
-                  min={2}
-                  max={21}
-                  value={days}
-                  onChange={(e) => setDays(parseInt(e.target.value || "7", 10))}
-                  className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
-                  placeholder="Days (legs)"
-                />
+                <input type="number" min={2} max={21} value={days} onChange={(e) => setDays(parseInt(e.target.value || "7", 10))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Days (legs)" />
               </div>
 
               <div className="rounded-2xl border border-slate-200 p-4">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-medium text-brand-navy">Optional passages / stops (in order)</div>
-                  <button type="button" onClick={addVia} className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50">
-                    + Add Stop
-                  </button>
+                  <button type="button" onClick={addVia} className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50">+ Add Stop</button>
                 </div>
                 <label className="mt-3 inline-flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={viaCanal} onChange={(e) => setViaCanal(e.target.checked)} />
-                  <span>
-                    Via <b>Corinth Canal (Isthmia)</b>
-                  </span>
+                  <span>Via <b>Corinth Canal (Isthmia)</b></span>
                 </label>
                 <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {vias.map((v, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <AutoCompleteInput value={v} onChange={(val) => setViaAt(i, val)} placeholder={`Stop ${i + 1}`} options={PORT_OPTIONS} />
-                      <button
-                        type="button"
-                        onClick={() => removeVia(i)}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50"
-                        title="Remove stop"
-                      >
-                        ✕
-                      </button>
+                      <button type="button" onClick={() => removeVia(i)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50" title="Remove stop">✕</button>
                     </div>
                   ))}
                 </div>
@@ -1030,21 +810,11 @@ export default function AIPlannerPage() {
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <AutoCompleteInput value={customStart} onChange={setCustomStart} placeholder="Start (Day 0)" options={PORT_OPTIONS} />
-                <input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={customDays}
-                  onChange={(e) => setCustomDays(parseInt(e.target.value || "7", 10))}
-                  className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
-                  placeholder="Number of days"
-                />
+                <input type="number" min={1} max={30} value={customDays} onChange={(e) => setCustomDays(parseInt(e.target.value || "7", 10))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Number of days" />
               </div>
               <div className="mt-4">
                 <div className="text-sm font-medium text-brand-navy">Destinations by day</div>
-                <p className="mt-1 text-xs text-slate-500">
-                  Συμπλήρωσε τον προορισμό <b>κάθε ημέρας</b> (τέλος ημέρας). Θα υπολογιστούν αυτόματα τα legs.
-                </p>
+                <p className="mt-1 text-xs text-slate-500">Συμπλήρωσε τον προορισμό <b>κάθε ημέρας</b> (τέλος ημέρας). Θα υπολογιστούν αυτόματα τα legs.</p>
                 <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {customDayStops.map((stop, i) => (
                     <div key={i} className="flex items-center gap-2">
@@ -1060,22 +830,11 @@ export default function AIPlannerPage() {
           {/* Preferences */}
           <div className="flex flex-wrap gap-2">
             {["family", "nightlife", "gastronomy"].map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => onTogglePref(p)}
-                className={`rounded-full border px-3 py-1 text-sm ${prefs.includes(p) ? "border-brand-navy bg-brand-navy text-white" : "border-slate-300 hover:bg-slate-50"}`}
-              >
-                {p}
-              </button>
+              <button key={p} type="button" onClick={() => onTogglePref(p)} className={`rounded-full border px-3 py-1 text-sm ${prefs.includes(p) ? "border-brand-navy bg-brand-navy text-white" : "border-slate-300 hover:bg-slate-50"}`}>{p}</button>
             ))}
           </div>
 
-          <button
-            id="generate-btn"
-            type="submit"
-            className="rounded-xl bg-brand-navy px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-navy"
-          >
+          <button id="generate-btn" type="submit" className="rounded-xl bg-brand-navy px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-navy">
             Generate Itinerary
           </button>
         </form>
@@ -1087,22 +846,13 @@ export default function AIPlannerPage() {
             <div className="mb-4 flex items-center justify-between no-print">
               <div className="text-sm text-slate-500">
                 Mode: <span className="font-medium text-brand-navy">{mode}</span>
-                {mode === "Region" && (
-                  <>
-                    {" "}
-                    • Region: <span className="font-medium text-brand-navy">{regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region}</span>
-                  </>
-                )}
+                {mode === "Region" && <> • Region: <span className="font-medium text-brand-navy">{regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region}</span></>}
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={handleCopyLink} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50">
                   Copy link
                 </button>
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="rounded-xl border border-brand-navy bg-white px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-gold hover:text-brand-navy"
-                >
+                <button type="button" onClick={handlePrint} className="rounded-xl border border-brand-navy bg-white px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-gold hover:text-brand-navy">
                   Export PDF
                 </button>
               </div>
@@ -1112,7 +862,9 @@ export default function AIPlannerPage() {
             {mapPoints.length >= 1 && (
               <div className="no-print mb-6">
                 <RouteMap points={mapPoints} />
-                <div className="mt-2 text-xs text-slate-500">* Map preview for planning. The dashed line is an estimate, not nautical routing.</div>
+                <div className="mt-2 text-xs text-slate-500">
+                  * Map preview for planning. The dashed line is an estimate, not nautical routing.
+                </div>
               </div>
             )}
 
@@ -1121,22 +873,10 @@ export default function AIPlannerPage() {
               <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium text-brand-navy">Trip summary</div>
                 <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-4">
-                  <div>
-                    <div className="text-xs print-subtle">Route</div>
-                    <div className="font-medium">{mode === "Region" ? `${start} → ${end}` : `${customStart}`}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs print-subtle">Region</div>
-                    <div className="font-medium">{mode === "Region" ? (regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region) : "Custom"}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs print-subtle">Distance</div>
-                    <div className="font-medium">{totals.nm} nm</div>
-                  </div>
-                  <div>
-                    <div className="text-xs print-subtle">Underway</div>
-                    <div className="font-medium">{totals.hrs}</div>
-                  </div>
+                  <div><div className="text-xs print-subtle">Route</div><div className="font-medium">{mode === "Region" ? `${start} → ${end}` : `${customStart}`}</div></div>
+                  <div><div className="text-xs print-subtle">Region</div><div className="font-medium">{mode === "Region" ? (regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region) : "Custom"}</div></div>
+                  <div><div className="text-xs print-subtle">Distance</div><div className="font-medium">{totals.nm} nm</div></div>
+                  <div><div className="text-xs print-subtle">Underway</div><div className="font-medium">{totals.hrs}</div></div>
                 </div>
                 {yachtType === "Motor" && (
                   <div className="mt-2 text-sm print-subtle">
@@ -1151,16 +891,12 @@ export default function AIPlannerPage() {
               {plan.map((d) => (
                 <div key={d.day} className="rounded-2xl bg-white p-4 shadow-sm print-card">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm text-slate-500">
-                      Day {d.day} • {d.date}
-                    </div>
+                    <div className="text-sm text-slate-500">Day {d.day} • {d.date}</div>
                     {d.leg && <div className="text-xs rounded-full bg-brand-gold/20 px-2 py-1 text-brand-navy">{d.leg.nm} nm</div>}
                   </div>
                   {d.leg ? (
                     <>
-                      <div className="mt-1 text-lg font-semibold text-brand-navy">
-                        {d.leg.from} → {d.leg.to}
-                      </div>
+                      <div className="mt-1 text-lg font-semibold text-brand-navy">{d.leg.from} → {d.leg.to}</div>
                       <p className="mt-1 text-sm text-slate-600">
                         ~{formatHoursHM(d.leg.hours)} underway
                         {yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel</>} • {speed} kn
