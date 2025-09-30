@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -12,104 +12,123 @@ import {
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-type Point = { name: string; lat: number; lon: number };
-
-type MarineSegment = {
-  ok: boolean;
-  coords: [number, number][]; // [lat, lon]
-};
+/** ================= Types ================= */
+export type Point = { name: string; lat: number; lon: number };
 
 export default function RouteMapClient({
   points,
-  useMarine = true, // αν δεν θέλεις θαλάσσιο routing, βάλε false
+  viaCanal = false,
 }: {
   points: Point[];
-  useMarine?: boolean;
+  /** αν το routing θέλεις να περάσει από τη Διώρυγα Κορίνθου */
+  viaCanal?: boolean;
 }) {
   if (!points?.length) return null;
 
-  // ευθείες (fallback) πάντα διαθέσιμες
-  const straightLatLngs = useMemo<LatLngExpression[]>(
-    () => points.map((p) => [p.lat, p.lon] as LatLngExpression),
-    [points]
-  );
+  /** ===== Marine routing heuristic (Greece gates) ===== */
+  type Gate = { name: string; lat: number; lon: number };
 
-  const center: LatLngExpression =
-    straightLatLngs[0] ?? ([37.97, 23.72] as LatLngExpression);
+  const GATES: Gate[] = [
+    { name: "Akra Sounio", lat: 37.650, lon: 24.017 },
+    { name: "Cavo Doro (Kafireas)", lat: 38.030, lon: 24.533 },
+    { name: "Akra Maleas", lat: 36.430, lon: 23.170 },
+    { name: "Corinth Canal (Isthmia)", lat: 37.932, lon: 22.993 },
+    // Χρήσιμα “κανάλια” στις Κυκλάδες (μαλακώνουν τη γραμμή)
+    { name: "Paros–Naxos Channel", lat: 37.085, lon: 25.270 },
+    { name: "Milos South Pass", lat: 36.650, lon: 24.500 },
+  ];
 
-  const bounds = useMemo<LatLngBoundsExpression | null>(() => {
-    if (straightLatLngs.length < 2) return null;
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const L = require("leaflet") as typeof import("leaflet");
-    const b = L.latLngBounds(straightLatLngs as any);
-    return b.pad(0.08);
-  }, [straightLatLngs]);
+  const toLL = (x: { lat: number; lon: number }) =>
+    [x.lat, x.lon] as [number, number];
 
-  // ===== Marine routing (Searoutes) =====
-  // Ορίζεις το κλειδί σου σε NEXT_PUBLIC_SEAROUTES_KEY
-  const apiKey =
-    (typeof window !== "undefined" &&
-      (window as any)?.__SEAROUTES_KEY__) ||
-    process.env.NEXT_PUBLIC_SEAROUTES_KEY ||
-    "";
+  const nearAtticaOrSaronic = (p: [number, number]) =>
+    p[0] > 37.2 && p[0] < 38.2 && p[1] > 23.0 && p[1] < 24.2;
 
-  const [marine, setMarine] = useState<MarineSegment[] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const northernCyclades = (p: [number, number]) =>
+    p[0] > 37.1 && p[0] < 38.6 && p[1] > 24.2 && p[1] < 25.8;
 
-  useEffect(() => {
-    let cancelled = false;
+  const crossesEviaBox = (a: [number, number], b: [number, number]) => {
+    // πρόχειρο κουτί γύρω από Εύβοια/Κάβο Ντόρο
+    const west = Math.min(a[1], b[1]);
+    const east = Math.max(a[1], b[1]);
+    const south = Math.min(a[0], b[0]);
+    const north = Math.max(a[0], b[0]);
+    const box = { W: 23.5, E: 24.9, S: 37.5, N: 38.7 };
+    return west < box.E && east > box.W && south < box.N && north > box.S;
+  };
 
-    async function run() {
-      if (!useMarine || !apiKey || points.length < 2) {
-        setMarine(null);
-        return;
-      }
-      setLoading(true);
-      const segs: MarineSegment[] = [];
+  function marineLeg(
+    a: [number, number],
+    b: [number, number],
+    useCanal = false
+  ): [number, number][] {
+    const out: [number, number][] = [a];
 
-      // κάνουμε ένα request ανά leg (Α→Β, Β→Γ, …)
-      for (let i = 0; i < points.length - 1; i++) {
-        const a = points[i];
-        const b = points[i + 1];
-
-        try {
-          // Searoutes v2 sea routing (Mapbox-like params)
-          // Προσοχή: το Searoutes συνήθως θέλει lon,lat (όχι lat,lon)
-          const url = `https://api.searoutes.com/route/v2/sea/${a.lon},${a.lat};${b.lon},${b.lat}?allowIceAreas=false&continuousCoordinates=true`;
-          const res = await fetch(url, {
-            headers: { "x-api-key": apiKey },
-          });
-
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const json = await res.json();
-
-          // Τα geometry coordinates είναι [lon, lat]; θα τα γυρίσουμε σε [lat, lon]
-          const coords: [number, number][] =
-            json?.routes?.[0]?.geometry?.coordinates?.map(
-              ([lon, lat]: [number, number]) => [lat, lon]
-            ) ?? [];
-
-          if (coords.length >= 2) {
-            segs.push({ ok: true, coords });
-          } else {
-            segs.push({ ok: false, coords: [] });
-          }
-        } catch {
-          segs.push({ ok: false, coords: [] });
-        }
-      }
-
-      if (!cancelled) {
-        setMarine(segs);
-        setLoading(false);
-      }
+    // Sounio “ευγενική στροφή” όταν φεύγουμε απ’ Αττική για Κυκλάδες
+    if (nearAtticaOrSaronic(a) && b[1] > 24.0) {
+      const so = GATES.find((g) => g.name.includes("Sounio"));
+      if (so) out.push(toLL(so));
     }
 
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [points, apiKey, useMarine]);
+    // Kάβο Ντόρο: Saronic/Attica <-> Β. Κυκλάδες (ή όταν "κόβει" Εύβοια)
+    if (
+      (nearAtticaOrSaronic(a) && northernCyclades(b)) ||
+      (nearAtticaOrSaronic(b) && northernCyclades(a)) ||
+      crossesEviaBox(a, b)
+    ) {
+      const kd = GATES.find((g) => g.name.includes("Cavo Doro"));
+      if (kd) out.push(toLL(kd));
+    }
+
+    // Maleas: όταν περνάμε άκρα Πελοποννήσου (π.χ. Σαρωνικός -> Κρήτη/Δωδ/νησα)
+    if (a[1] < 23.6 && b[1] < 24.2 && (a[0] < 37.1 || b[0] < 37.1)) {
+      const ml = GATES.find((g) => g.name.includes("Maleas"));
+      if (ml) out.push(toLL(ml));
+    }
+
+    // Διώρυγα Κορίνθου (αν ζητηθεί)
+    if (useCanal) {
+      const cc = GATES.find((g) => g.name.includes("Corinth Canal"));
+      if (cc) out.push(toLL(cc));
+    }
+
+    out.push(b);
+    return out;
+  }
+
+  function buildMarinePath(
+    raw: { lat: number; lon: number }[],
+    useCanal = false
+  ): [number, number][] {
+    if (raw.length < 2) return raw.map((p) => [p.lat, p.lon]);
+    const res: [number, number][] = [];
+    for (let i = 0; i < raw.length - 1; i++) {
+      const a = [raw[i].lat, raw[i].lon] as [number, number];
+      const b = [raw[i + 1].lat, raw[i + 1].lon] as [number, number];
+      const seg = marineLeg(a, b, useCanal);
+      if (i > 0) seg.shift(); // μην διπλασιάζεις το κοινό σημείο
+      res.push(...seg);
+    }
+    return res;
+  }
+
+  /** ===== latlngs (με marine gates) ===== */
+  const latlngs = useMemo<LatLngExpression[]>(
+    () => buildMarinePath(points, viaCanal),
+    [points, viaCanal]
+  );
+
+  /** ===== bounds για auto-fit ===== */
+  const bounds = useMemo<LatLngBoundsExpression | null>(() => {
+    if (latlngs.length < 2) return null;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const L = require("leaflet") as typeof import("leaflet");
+    const b = L.latLngBounds(latlngs as any);
+    return b.pad(0.10);
+  }, [latlngs]);
+
+  const center: LatLngExpression =
+    (latlngs[0] as LatLngExpression) ?? ([37.97, 23.72] as LatLngExpression);
 
   return (
     <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
@@ -119,78 +138,41 @@ export default function RouteMapClient({
         scrollWheelZoom={false}
         style={{ height: "100%", width: "100%" }}
       >
-        {/* Βασικά tiles + seamarks */}
+        {/* Base OSM */}
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        {/* Nautical overlay */}
         <TileLayer
           attribution="&copy; OpenSeaMap"
           url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
           opacity={0.45}
         />
 
-        {/* Θαλάσσιες γραμμές αν υπάρχουν, αλλιώς fallback dashed */}
-        {useMarine && apiKey && marine && marine.some((s) => s.ok) ? (
-          <>
-            {marine.map((s, i) =>
-              s.ok ? (
-                <Polyline
-                  key={`m-${i}`}
-                  positions={s.coords as LatLngExpression[]}
-                  pathOptions={{
-                    color: "#0b1220",
-                    weight: 3,
-                    opacity: 0.95,
-                    lineJoin: "round",
-                    lineCap: "round",
-                  }}
-                />
-              ) : (
-                // fallback για το συγκεκριμένο leg
-                <Polyline
-                  key={`f-${i}`}
-                  positions={
-                    [
-                      [points[i].lat, points[i].lon],
-                      [points[i + 1].lat, points[i + 1].lon],
-                    ] as LatLngExpression[]
-                  }
-                  pathOptions={{
-                    color: "#0b1220",
-                    weight: 3,
-                    opacity: 0.9,
-                    dashArray: "6 8",
-                  }}
-                />
-              )
-            )}
-          </>
-        ) : (
-          // καθολικό fallback (όλο το route dashed)
-          straightLatLngs.length >= 2 && (
-            <Polyline
-              positions={straightLatLngs}
-              pathOptions={{
-                color: "#0b1220",
-                weight: 3,
-                opacity: 0.9,
-                dashArray: "6 8",
-                lineJoin: "round",
-                lineCap: "round",
-              }}
-            />
-          )
+        {/* Dashed route */}
+        {latlngs.length >= 2 && (
+          <Polyline
+            positions={latlngs}
+            pathOptions={{
+              color: "#0b1220",
+              weight: 3,
+              opacity: 0.9,
+              dashArray: "6 8",
+              lineJoin: "round",
+              lineCap: "round",
+            }}
+          />
         )}
 
-        {/* Σημάδια start / mid / end */}
+        {/* Start */}
         {points[0] && (
           <CircleMarker
-            center={[points[0].lat, points[0].lon]}
+            center={[points[0].lat, points[0].lon] as LatLngExpression}
             radius={8}
             pathOptions={{
-              color: "#c4a962",
-              fillColor: "#c4a962",
+              color: "#16a34a",
+              fillColor: "#16a34a",
               fillOpacity: 1,
             }}
           >
@@ -200,10 +182,11 @@ export default function RouteMapClient({
           </CircleMarker>
         )}
 
+        {/* Middles */}
         {points.slice(1, -1).map((p) => (
           <CircleMarker
             key={`${p.name}-${p.lat}-${p.lon}`}
-            center={[p.lat, p.lon]}
+            center={[p.lat, p.lon] as LatLngExpression}
             radius={5}
             pathOptions={{
               color: "#0b1220",
@@ -217,13 +200,16 @@ export default function RouteMapClient({
           </CircleMarker>
         ))}
 
+        {/* End */}
         {points.length > 1 && (
           <CircleMarker
-            center={[points.at(-1)!.lat, points.at(-1)!.lon]}
+            center={
+              [points.at(-1)!.lat, points.at(-1)!.lon] as LatLngExpression
+            }
             radius={8}
             pathOptions={{
-              color: "#c4a962",
-              fillColor: "#c4a962",
+              color: "#c2410c",
+              fillColor: "#c2410c",
               fillOpacity: 1,
             }}
           >
@@ -233,25 +219,14 @@ export default function RouteMapClient({
           </CircleMarker>
         )}
 
-        {bounds && <FitToBounds bounds={bounds} />}
+        {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
-
-      {/* μικρό overlay status αν θες */}
-      {useMarine && apiKey && loading && (
-        <div className="pointer-events-none absolute left-2 top-2 rounded bg-white/90 px-2 py-1 text-xs shadow">
-          Routing at sea…
-        </div>
-      )}
-      {!apiKey && useMarine && (
-        <div className="pointer-events-none absolute left-2 top-2 rounded bg-white/90 px-2 py-1 text-xs shadow">
-          Add NEXT_PUBLIC_SEAROUTES_KEY to use sea routing
-        </div>
-      )}
     </div>
   );
 }
 
-function FitToBounds({ bounds }: { bounds: LatLngBoundsExpression }) {
+/** μικρό helper component για να γίνει fitBounds όταν αλλάζουν τα δεδομένα */
+function FitBounds({ bounds }: { bounds: LatLngBoundsExpression }) {
   const map = useMap();
   useEffect(() => {
     map.fitBounds(bounds, { padding: [30, 30] });
