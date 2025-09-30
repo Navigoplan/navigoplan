@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useEffect, useId } from "react";
+import { Suspense, useMemo, useState, useEffect, useId } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
+import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 /* ========= Types ========= */
@@ -153,7 +154,7 @@ const ALIASES: Record<string, string> = {
   "σιφνος": "Sifnos",
   "σεριφος": "Serifos",
 
-  // Dodecanese / Sporades / N. Aegean / Crete (ενδεικτικά)
+  // Dodecanese / Sporades / N. Aegean / Crete
   "ροδος": "Rhodes",
   "συμη": "Symi",
   "κος": "Kos",
@@ -171,7 +172,7 @@ const ALIASES: Record<string, string> = {
   "γλυφαδα": "Glyfada",
   "ραφινα": "Rafina",
 
-  // Διώρυγα
+  // Canal
   "διορυγα κορινθου": "Corinth Canal (Isthmia)",
   "ισθμια": "Corinth Canal (Isthmia)",
 };
@@ -397,21 +398,20 @@ const RL_Tooltip = dynamic(() => import("react-leaflet").then(m => m.Tooltip), {
 function RouteMap({ points }: { points: { name: string; lat: number; lon: number }[] }) {
   if (!points.length) return null;
 
-  const latlngs = useMemo<LatLngExpression[]>(
-    () => points.map((p) => [p.lat, p.lon] as LatLngExpression),
+  // use plain [number, number] tuples to satisfy Leaflet typings without "any"
+  const latlngs = useMemo<[number, number][]>(
+    () => points.map((p) => [p.lat, p.lon]),
     [points]
   );
 
   // bounds / center
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if (latlngs.length < 2) return null;
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const L = require("leaflet") as typeof import("leaflet"); // τύποι μόνο, runtime ok
-    const b = L.latLngBounds(latlngs as any);
+    const b = L.latLngBounds(latlngs);
     return b.pad(0.08);
   }, [latlngs]);
 
-  const center: LatLngExpression = latlngs[0] ?? ([37.97, 23.72] as LatLngExpression);
+  const center: LatLngExpression = (latlngs[0] as LatLngExpression) ?? ([37.97, 23.72] as LatLngExpression);
 
   return (
     <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
@@ -424,7 +424,7 @@ function RouteMap({ points }: { points: { name: string; lat: number; lon: number
         {/* Dashed route */}
         {latlngs.length >= 2 && (
           <RL_Polyline
-            positions={latlngs}
+            positions={latlngs as unknown as LatLngExpression[]}
             pathOptions={{ color: "#0b1220", weight: 3, opacity: 0.9, dashArray: "6 8", lineJoin: "round", lineCap: "round" }}
           />
         )}
@@ -457,15 +457,13 @@ function RouteMap({ points }: { points: { name: string; lat: number; lon: number
         )}
 
         {/* Fit to bounds via a tiny effect component */}
-        {bounds && (
-          <FitOnChange bounds={bounds} />
-        )}
+        {bounds && <FitOnChange bounds={bounds} />}
       </RL_MapContainer>
     </div>
   );
 }
 
-// μικρό helper για fitBounds χωρίς άμεσο useMap import στο module level
+// helper for fitBounds without importing useMap at module level
 const FitOnChange = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -562,7 +560,7 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
 }
 
 /* ========= Page ========= */
-export default function AIPlannerPage() {
+function AIPlannerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -913,5 +911,14 @@ export default function AIPlannerPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/* === Default export wrapped in Suspense to satisfy Next.js app router === */
+export default function AIPlannerPageWrapper() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading itinerary planner…</div>}>
+      <AIPlannerPage />
+    </Suspense>
   );
 }
