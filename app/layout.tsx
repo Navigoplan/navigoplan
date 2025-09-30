@@ -1,16 +1,23 @@
+// app/layout.tsx
 import './globals.css'
 import type { Metadata } from 'next'
+import Link from 'next/link'
+
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'http://localhost:3000'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: 'Navigoplan — Luxury Yacht Charter Itinerary Software',
   description: 'Plan, price and present luxury yacht charter itineraries.',
   icons: {
-    icon: '/favicon.ico',   // favicon από τον φάκελο public
+    icon: '/favicon.ico', // από τον φάκελο public
   },
   openGraph: {
     title: 'Navigoplan — Luxury Yacht Charter Itinerary Software',
-    description: 'Plan, price and present luxury yacht charter itineraries.',
-    url: 'https://navigoplan.com', // προσωρινά
+    description:
+      'Plan, price and present luxury yacht charter itineraries.',
+    url: 'https://navigoplan.com',
     siteName: 'Navigoplan',
     images: [
       {
@@ -27,9 +34,13 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     site: '@navigoplan',
   },
-};
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
       <head>
@@ -40,34 +51,47 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-brand-navy/70 backdrop-blur-lg">
           <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
             {/* Logo */}
-            <a href="/" className="text-lg font-semibold tracking-tight text-brand-gold">
+            <Link
+              href="/"
+              className="text-lg font-semibold tracking-tight text-brand-gold"
+              aria-label="Navigoplan Home"
+            >
               Navigoplan
-            </a>
+            </Link>
 
             {/* Menu */}
             <ul className="hidden items-center gap-6 md:flex">
               <li>
-                <a href="/features" className="text-sm text-white hover:text-brand-gold transition">
+                <Link
+                  href="/features"
+                  className="text-sm text-white transition hover:text-brand-gold"
+                >
                   Features
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/pricing" className="text-sm text-white hover:text-brand-gold transition">
+                <Link
+                  href="/pricing"
+                  className="text-sm text-white transition hover:text-brand-gold"
+                >
                   Pricing
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/ai" className="text-sm text-white hover:text-brand-gold transition">
+                <Link
+                  href="/ai"
+                  className="text-sm text-white transition hover:text-brand-gold"
+                >
                   AI Planner
-                </a>
+                </Link>
               </li>
               <li>
-                <a
+                <Link
                   href="/#trial"
                   className="rounded-xl bg-brand-gold px-4 py-2 text-sm font-medium text-brand-navy transition hover:opacity-90"
                 >
                   Start Free Trial
-                </a>
+                </Link>
               </li>
             </ul>
           </nav>
@@ -83,15 +107,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               © {new Date().getFullYear()} Navigoplan
             </div>
             <div className="flex items-center gap-4 text-sm">
-              <a href="/features" className="hover:underline">
+              <Link href="/features" className="hover:underline">
                 Features
-              </a>
-              <a href="/pricing" className="hover:underline">
+              </Link>
+              <Link href="/pricing" className="hover:underline">
                 Pricing
-              </a>
-              <a href="/ai" className="hover:underline">
+              </Link>
+              <Link href="/ai" className="hover:underline">
                 AI Planner
-              </a>
+              </Link>
               <a href="mailto:hello@navigoplan.com" className="hover:underline">
                 Contact
               </a>
