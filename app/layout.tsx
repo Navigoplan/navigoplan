@@ -1,45 +1,37 @@
-// app/layout.tsx
-import './globals.css'
-import type { Metadata } from 'next'
-import Link from 'next/link'
-
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'http://localhost:3000'
+import "./globals.css";
+import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: 'Navigoplan — Luxury Yacht Charter Itinerary Software',
-  description: 'Plan, price and present luxury yacht charter itineraries.',
-  icons: {
-    icon: '/favicon.ico', // από τον φάκελο public
-  },
+  title: "Navigoplan — Luxury Yacht Charter Itinerary Software",
+  description: "Plan, price and present luxury yacht charter itineraries.",
+  icons: { icon: "/favicon.ico" },
   openGraph: {
-    title: 'Navigoplan — Luxury Yacht Charter Itinerary Software',
-    description:
-      'Plan, price and present luxury yacht charter itineraries.',
-    url: 'https://navigoplan.com',
-    siteName: 'Navigoplan',
+    title: "Navigoplan — Luxury Yacht Charter Itinerary Software",
+    description: "Plan, price and present luxury yacht charter itineraries.",
+    url: "https://navigoplan.com",
+    siteName: "Navigoplan",
     images: [
       {
-        url: '/og-image.jpg', // placeholder
+        url: "/og-image.jpg",
         width: 1200,
         height: 630,
-        alt: 'Navigoplan Preview',
+        alt: "Navigoplan Preview",
       },
     ],
-    locale: 'en_US',
-    type: 'website',
+    locale: "en_US",
+    type: "website",
   },
   twitter: {
-    card: 'summary_large_image',
-    site: '@navigoplan',
+    card: "summary_large_image",
+    site: "@navigoplan",
   },
-}
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en">
@@ -54,7 +46,6 @@ export default function RootLayout({
             <Link
               href="/"
               className="text-lg font-semibold tracking-tight text-brand-gold"
-              aria-label="Navigoplan Home"
             >
               Navigoplan
             </Link>
@@ -116,6 +107,7 @@ export default function RootLayout({
               <Link href="/ai" className="hover:underline">
                 AI Planner
               </Link>
+              {/* external/email links μένουν <a> */}
               <a href="mailto:hello@navigoplan.com" className="hover:underline">
                 Contact
               </a>
@@ -124,5 +116,5 @@ export default function RootLayout({
         </footer>
       </body>
     </html>
-  )
+  );
 }
