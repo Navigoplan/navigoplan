@@ -388,22 +388,6 @@ function AutoCompleteInput({
   );
 }
 
-const FitOnChange = NextDynamic(async () => {
-  const RL = await import("react-leaflet");
-  const { useEffect } = await import("react");
-  function Cmp({ bounds }: { bounds: LatLngBoundsExpression }) {
-    const map = RL.useMap();
-    useEffect(() => {
-      map.fitBounds(bounds, { padding: [30, 30] });
-      const onResize = () => map.fitBounds(bounds, { padding: [30, 30] });
-      window.addEventListener("resize", onResize);
-      return () => window.removeEventListener("resize", onResize);
-    }, [map, bounds]);
-    return null;
-  }
-  return Cmp;
-}, { ssr: false });
-
 /* ========= Query helpers (Share/Load) ========= */
 function encodeArr(arr: string[]) { return arr.map((s) => encodeURIComponent(s)).join(","); }
 function decodeArr(s: string | null): string[] { if (!s) return []; return s.split(",").map((x) => decodeURIComponent(x)).filter(Boolean); }
