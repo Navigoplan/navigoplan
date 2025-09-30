@@ -1,4 +1,7 @@
-"use client";
+"use client";// αποτρέπουμε SSG/ISR για τη σελίδα /ai
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 
 import RouteMapClient from "./RouteMapClient";
 import { Suspense, useMemo, useState, useEffect, useId } from "react";
@@ -6,7 +9,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 
 // αποτρέπει prerender/SSG της σελίδας /ai (απαιτείται στο Vercel)
-export const dynamic = "force-dynamic";
 
 /* ========= Types ========= */
 type Coord = { name: string; lat: number; lon: number };
@@ -821,8 +823,14 @@ function AIPlannerInner() {
   );
 }
 
-/* ========= Page wrapper: Suspense γύρω από useSearchParams ========= */
+/* ======== Page wrapper: Suspense γύρω από useSearchParams ======== */
 export default function AIPlannerPage() {
+  // --- HYDRATION GUARD: μην κάνεις render στον server ---
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  if (!hydrated) return null;
+  // ------------------------------------------------------
+
   return (
     <Suspense fallback={null}>
       <AIPlannerInner />
