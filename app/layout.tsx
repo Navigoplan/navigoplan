@@ -25,9 +25,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
       <body className="min-h-screen bg-white text-slate-900">
+        {/* Premium NavBar (navy/gold) */}
         <NavBar />
+
         <main>{children}</main>
 
+        {/* Footer */}
         <footer className="border-t border-slate-200/60 py-8">
           <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
             <div className="text-sm text-slate-500">© {new Date().getFullYear()} Navigoplan</div>
