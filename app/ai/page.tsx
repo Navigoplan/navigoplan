@@ -2,13 +2,12 @@
 
 import { Suspense, useMemo, useState, useEffect, useId } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import NextDynamic from "next/dynamic";
+import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 // αποτρέπει prerender/SSG της σελίδας /ai (απαιτείται στο Vercel)
 export const dynamic = "force-dynamic";
-
-// ✅ χρησιμοποιούμε τον client-only χάρτη
-import RouteMapClient from "./RouteMapClient";
 
 /* ========= Types ========= */
 type Coord = { name: string; lat: number; lon: number };
@@ -390,6 +389,92 @@ function AutoCompleteInput({
   );
 }
 
+/* ========= Leaflet Map — dashed route + OpenSeaMap + auto-fit ========= */
+// dynamic imports (no SSR)
+const RL_MapContainer = NextDynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
+const RL_TileLayer    = NextDynamic(() => import("react-leaflet").then(m => m.TileLayer), { ssr: false });
+const RL_Polyline     = NextDynamic(() => import("react-leaflet").then(m => m.Polyline), { ssr: false });
+const RL_CircleMarker = NextDynamic(() => import("react-leaflet").then(m => m.CircleMarker), { ssr: false });
+const RL_Tooltip      = NextDynamic(() => import("react-leaflet").then(m => m.Tooltip), { ssr: false });
+
+function RouteMap({ points }: { points: { name: string; lat: number; lon: number }[] }) {
+  if (!points.length) return null;
+
+  const latlngs = useMemo<LatLngExpression[]>(
+    () => points.map((p) => [p.lat, p.lon] as LatLngExpression),
+    [points]
+  );
+
+  const bounds = useMemo<LatLngBoundsExpression | null>(() => {
+    if (latlngs.length < 2) return null;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const L = require("leaflet") as typeof import("leaflet");
+    const b = L.latLngBounds(latlngs as any);
+    return b.pad(0.08);
+  }, [latlngs]);
+
+  const center: LatLngExpression = latlngs[0] ?? ([37.97, 23.72] as LatLngExpression);
+
+  return (
+    <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
+      <RL_MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
+        <RL_TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <RL_TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.45} />
+
+        {latlngs.length >= 2 && (
+          <RL_Polyline
+            positions={latlngs}
+            pathOptions={{ color: "#0b1220", weight: 3, opacity: 0.9, dashArray: "6 8", lineJoin: "round", lineCap: "round" }}
+          />
+        )}
+
+        {points[0] && (
+          <RL_CircleMarker center={[points[0].lat, points[0].lon] as LatLngExpression} radius={8} pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}>
+            <RL_Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+              Start: {points[0].name}
+            </RL_Tooltip>
+          </RL_CircleMarker>
+        )}
+
+        {points.slice(1, -1).map((p) => (
+          <RL_CircleMarker key={`${p.name}-${p.lat}-${p.lon}`} center={[p.lat, p.lon] as LatLngExpression} radius={5} pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}>
+            <RL_Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
+              {p.name}
+            </RL_Tooltip>
+          </RL_CircleMarker>
+        ))}
+
+        {points.length > 1 && (
+          <RL_CircleMarker center={[points.at(-1)!.lat, points.at(-1)!.lon] as LatLngExpression} radius={8} pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}>
+            <RL_Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+              End: {points.at(-1)!.name}
+            </RL_Tooltip>
+          </RL_CircleMarker>
+        )}
+
+        {bounds && <FitOnChange bounds={bounds} />}
+      </RL_MapContainer>
+    </div>
+  );
+}
+
+// helper για fitBounds χωρίς import useMap σε module level
+const FitOnChange = NextDynamic(async () => {
+  const RL = await import("react-leaflet");
+  const { useEffect } = await import("react");
+  function Cmp({ bounds }: { bounds: LatLngBoundsExpression }) {
+    const map = RL.useMap();
+    useEffect(() => {
+      map.fitBounds(bounds, { padding: [30, 30] });
+      const onResize = () => map.fitBounds(bounds, { padding: [30, 30] });
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, [map, bounds]);
+    return null;
+  }
+  return Cmp;
+}, { ssr: false });
+
 /* ========= Query helpers (Share/Load) ========= */
 function encodeArr(arr: string[]) { return arr.map((s) => encodeURIComponent(s)).join(","); }
 function decodeArr(s: string | null): string[] { if (!s) return []; return s.split(",").map((x) => decodeURIComponent(x)).filter(Boolean); }
@@ -768,9 +853,9 @@ function AIPlannerInner() {
             {/* MAP */}
             {mapPoints.length >= 1 && (
               <div className="no-print mb-6">
-                <RouteMapClient points={mapPoints} />
+                <RouteMap points={mapPoints} />
                 <div className="mt-2 text-xs text-slate-500">
-                  * Straight-line preview for planning only (OpenSeaMap overlay). Not nautical routing.
+                  * Map preview for planning. The dashed line is an estimate, not nautical routing.
                 </div>
               </div>
             )}
