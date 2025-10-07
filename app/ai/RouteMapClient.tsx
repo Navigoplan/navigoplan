@@ -55,9 +55,9 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
 
 /* ======== Point in (Multi)Polygon (lon,lat) ======== */
 type Ring = [number, number][];
-type Poly = Ring[];             // ένα πολύγωνο = λίστα από δαχτυλίδια (εξωτερικό + holes)
-type MultiPoly = Poly[];        // multi-polygon = λίστα από πολύγωνα
+type Poly = Ring[];      // ένα πολύγωνο = λίστα από δακτυλίους (εξωτερικός + holes)
 
+/** Ray casting σε Ring */
 function pointInRing(pt: [number, number], ring: Ring): boolean {
   const [x, y] = pt;
   let inside = false;
@@ -68,31 +68,33 @@ function pointInRing(pt: [number, number], ring: Ring): boolean {
   }
   return inside;
 }
+
+/** even-odd σε Poly (τα holes αντιστρέφουν) */
 function pointInPoly(pt: [number, number], poly: Poly): boolean {
   let inside = false;
   for (const ring of poly) if (pointInRing(pt, ring)) inside = !inside;
   return inside;
 }
 
-/** Συλλογή ΟΛΩΝ των απλών πολυγώνων (Poly) από οποιοδήποτε GeoJSON */
+/** Μαζεύει ΟΛΑ τα polygons (Poly) από GeoJSON, ισοπεδώνοντας τα MultiPolygon */
 function collectPolys(geo: any): Poly[] {
   const polys: Poly[] = [];
   if (!geo) return polys;
 
   if (geo.type === "FeatureCollection") {
-    for (const f of geo.features ?? []) {
+    for (const f of (geo.features ?? []) as any[]) {
       const g = f?.geometry;
       if (!g) continue;
       if (g.type === "Polygon") {
         polys.push(g.coordinates as Poly);
       } else if (g.type === "MultiPolygon") {
-        for (const poly of (g.coordinates as MultiPoly)) polys.push(poly);
+        for (const poly of (g.coordinates as Poly[])) polys.push(poly as Poly);
       }
     }
   } else if (geo.type === "Polygon") {
     polys.push(geo.coordinates as Poly);
   } else if (geo.type === "MultiPolygon") {
-    for (const poly of (geo.coordinates as MultiPoly)) polys.push(poly);
+    for (const poly of (geo.coordinates as Poly[])) polys.push(poly as Poly);
   }
   return polys;
 }
@@ -245,28 +247,6 @@ function simplifyRDP(path: [number, number][], epsilonDeg = 0.008): [number, num
   }
 }
 
-/* (helpers για projected point — reserved) */
-function closestPointOnSegment(p: [number, number], a: [number, number], b: [number, number]): [number, number] {
-  const px = p[1], py = p[0];
-  const ax = a[1], ay = a[0];
-  const bx = b[1], by = b[0];
-  const abx = bx - ax, aby = by - ay;
-  const t = Math.max(0, Math.min(1, ((px - ax)*abx + (py - ay)*aby) / (abx*abx + aby*aby + 1e-12)));
-  return [ay + t * aby, ax + t * abx];
-}
-function nearestOnPath(path: [number, number][], p: [number, number]): [number, number] {
-  if (path.length === 0) return p;
-  if (path.length === 1) return path[0];
-  let best: [number, number] = path[0];
-  let bestD = Infinity;
-  for (let i = 0; i < path.length - 1; i++) {
-    const q = closestPointOnSegment(p, path[i], path[i+1]);
-    const d = haversineMeters(p[0], p[1], q[0], q[1]);
-    if (d < bestD) { bestD = d; best = q; }
-  }
-  return best;
-}
-
 /* =======================================================
  * RouteMapClient
  * ======================================================= */
@@ -282,10 +262,10 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
     return () => { cancelled = true; };
   }, []);
 
-  /* Πολύγωνα στεριάς (απλά Poly[]) */
+  /* όλα τα polygons στεριάς */
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* SNAP: φέρνουμε ΟΛΑ τα waypoints στο πιο κοντινό water cell */
+  /* SNAP: μετακίνηση ΟΛΩΝ των waypoints στο κοντινότερο νερό */
   const snappedPoints = useMemo<Point[]>(() => {
     if (!coastPolys.length) return points;
     return points.map((p) => {
@@ -299,11 +279,12 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
     });
   }, [points, coastPolys]);
 
-  /* Route που περνά από τα snapped waypoints */
+  /* Υπολογισμός διαδρομής που ΠΕΡΝΑ ακριβώς από τα ίδια σημεία με τα markers */
   const waterLatLngs = useMemo<LatLngExpression[]>(() => {
     if (!coastPolys.length || snappedPoints.length < 2) {
       return snappedPoints.map(p => [p.lat, p.lon] as LatLngExpression);
     }
+
     const result: [number, number][] = [];
     for (let i = 0; i < snappedPoints.length - 1; i++) {
       const a = snappedPoints[i], b = snappedPoints[i + 1];
@@ -316,15 +297,19 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
         continue;
       }
 
+      // ⛳ ΑΓΚΙΣΤΡΩΣΗ ΑΚΡΩΝ ΣΤΑ MARKERS
       const seg: [number, number][] = path.map(n => [n.lat, n.lon]);
-      const simplified = simplifyRDP(seg, 0.008); // κρατά endpoints
+      seg[0] = [a.lat, a.lon];
+      seg[seg.length - 1] = [b.lat, b.lon];
+
+      const simplified = simplifyRDP(seg, 0.008); // κρατά τα endpoints ως έχουν
       if (result.length === 0) result.push(...simplified);
       else result.push(...simplified.slice(1));
     }
     return result as LatLngExpression[];
   }, [snappedPoints, coastPolys]);
 
-  /* Markers = τα snapped points */
+  /* Markers */
   const markerStart = snappedPoints[0] ?? null;
   const markerMids  = snappedPoints.slice(1, -1);
   const markerEnd   = snappedPoints.at(-1) ?? null;
@@ -433,7 +418,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* route + markers */}
+        {/* route + markers (οι τελείες τώρα είναι ΠΑΝΩ στη γραμμή) */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline
@@ -450,7 +435,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
             />
           )}
 
-          {/* START */}
           {markerStart && (
             <CircleMarker
               pane="pane-route"
@@ -464,7 +448,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
             </CircleMarker>
           )}
 
-          {/* MIDDLE */}
           {markerMids.map((p, i) => (
             <CircleMarker
               key={`${p.name}-${i}`}
@@ -479,7 +462,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
             </CircleMarker>
           ))}
 
-          {/* END */}
           {markerEnd && (
             <CircleMarker
               pane="pane-route"
