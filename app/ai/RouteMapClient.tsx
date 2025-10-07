@@ -37,7 +37,7 @@ export default function RouteMapClient({
   points: Point[];
   viaCanal?: boolean;
 }) {
-  // ----- Load coastlines GeoJSON -----
+  // Coastlines GeoJSON
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +48,7 @@ export default function RouteMapClient({
     return () => { cancelled = true; };
   }, []);
 
-  // ----- LatLngs & bounds -----
+  // LatLngs & bounds
   const latlngs = useMemo<LatLngExpression[]>(
     () => points.map(p => [p.lat, p.lon] as LatLngExpression),
     [points]
@@ -66,9 +66,9 @@ export default function RouteMapClient({
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200">
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* === LAYERS (από κάτω προς τα πάνω) === */}
+        {/* === LAYERS (bottom → top) === */}
 
-        {/* 1) GEBCO bathymetry — ΠΟΛΥ έντονο */}
+        {/* 1) GEBCO bathymetry (UNDERLAY) */}
         <TileLayer
           attribution="&copy; GEBCO"
           url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
@@ -76,18 +76,7 @@ export default function RouteMapClient({
           zIndex={200}
         />
 
-        {/* 2) OpenStreetMap — πολύ διάφανο (βάλ' το σε σχόλιο αν θες μόνο GEBCO) */}
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          opacity={0.30}
-          zIndex={300}
-        />
-        {/*
-        // <-- αν θες test μόνο GEBCO, σβήσε/σχολίασε τελείως το OSM layer παραπάνω
-        */}
-
-        {/* 3) Seamarks — πάνω απ’ όλα */}
+        {/* 2) Seamarks (OVERLAY) */}
         <TileLayer
           attribution="&copy; OpenSeaMap"
           url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
@@ -95,7 +84,7 @@ export default function RouteMapClient({
           zIndex={400}
         />
 
-        {/* 4) Greek coastlines (GeoJSON) */}
+        {/* 3) Greek coastlines (GeoJSON) */}
         {coast && (
           <GeoJSON
             data={coast}
@@ -108,7 +97,7 @@ export default function RouteMapClient({
           />
         )}
 
-        {/* 5) Route polyline */}
+        {/* Route polyline */}
         {latlngs.length >= 2 && (
           <Polyline
             positions={latlngs}
@@ -123,7 +112,7 @@ export default function RouteMapClient({
           />
         )}
 
-        {/* 6) Markers */}
+        {/* Markers */}
         {points[0] && (
           <CircleMarker
             center={[points[0].lat, points[0].lon] as LatLngExpression}
@@ -159,7 +148,7 @@ export default function RouteMapClient({
           </CircleMarker>
         )}
 
-        {/* 7) Fit bounds */}
+        {/* Fit to bounds */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
