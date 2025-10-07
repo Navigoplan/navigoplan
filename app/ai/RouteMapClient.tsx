@@ -73,6 +73,14 @@ export default function RouteMapClient({
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+
+        {/* Bathymetry (GEBCO) */}
+        <TileLayer
+          attribution="&copy; GEBCO"
+          url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
+          opacity={0.55}
+        />
+
         {/* Seamarks overlay */}
         <TileLayer
           attribution="&copy; OpenSeaMap"
