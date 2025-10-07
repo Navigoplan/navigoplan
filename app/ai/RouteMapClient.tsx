@@ -34,6 +34,7 @@ const FitBounds = dynamic(async () => {
 export type Point = { name: string; lat: number; lon: number };
 
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
+const TRANSPARENT_1PX = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
 export default function RouteMapClient({ points }: { points: Point[] }) {
   const [coast, setCoast] = useState<any | null>(null);
@@ -82,49 +83,45 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 2) Μπλε νερό */}
+        {/* 2) Μπλε νερό (σταθερό overlay) */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
           <Rectangle
             bounds={WORLD_BOUNDS}
-            pathOptions={{
-              color: "transparent",
-              weight: 0,
-              fillColor: "#7fa8d8",
-              fillOpacity: 0.35,
-            }}
+            pathOptions={{ color: "transparent", weight: 0, fillColor: "#7fa8d8", fillOpacity: 0.35 }}
             interactive={false}
           />
         </Pane>
 
-        {/* 3) Στεριά */}
+        {/* 3) Στεριά (GeoJSON) */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (
             <GeoJSON
               data={coast}
-              style={() => ({
-                color: "#0b1220",
-                weight: 2,
-                opacity: 1,
-                fillColor: "#ffffff",
-                fillOpacity: 1,
-              })}
+              style={() => ({ color: "#0b1220", weight: 2, opacity: 1, fillColor: "#ffffff", fillOpacity: 1 })}
             />
           )}
         </Pane>
 
-        {/* 4) Labels (χωρίς zoomOffset για να μην “χάνονται”) */}
+        {/* 4) Labels — κύριο “μεγαλωμένο” + fallback κανονικό */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
+          {/* Μεγαλύτερα labels: zoomOffset -1, ΧΩΡΙΣ detectRetina για σταθερότητα */}
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.36}     // λίγο πιο έντονα
-            detectRetina
+            tileSize={256}
+            zoomOffset={-1}
+            detectRetina={false}
+            opacity={0.40}
+            errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
+          {/* Fallback labels: normal zoom, με retina */}
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.14}     // απαλό boost
+            tileSize={256}
             detectRetina
+            opacity={0.16}
+            errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
         </Pane>
@@ -138,20 +135,13 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 6) Route & markers (πάνω απ’ όλα) */}
+        {/* 6) Route & markers */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {latlngs.length >= 2 && (
             <Polyline
               pane="pane-route"
               positions={latlngs}
-              pathOptions={{
-                color: "#0b1220",
-                weight: 3,
-                opacity: 0.9,
-                dashArray: "6 8",
-                lineJoin: "round",
-                lineCap: "round",
-              }}
+              pathOptions={{ color: "#0b1220", weight: 3, opacity: 0.9, dashArray: "6 8", lineJoin: "round", lineCap: "round" }}
             />
           )}
 
