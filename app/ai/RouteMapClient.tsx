@@ -33,7 +33,7 @@ const FitBounds = dynamic(async () => {
 
 export type Point = { name: string; lat: number; lon: number };
 
-// παγκόσμια ορθογώνια όρια (για το water tint overlay)
+// παγκόσμια όρια για το water tint overlay
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 
 export default function RouteMapClient({ points }: { points: Point[] }) {
@@ -84,15 +84,15 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 2) Water tint overlay (σίγουρο μπλε, μόνο πάνω από θάλασσα γιατί η στεριά μπαίνει πάνω του) */}
+        {/* 2) Water tint overlay (σίγουρο μπλε, μόνο πάνω από θάλασσα γιατί η στεριά μπαίνει από πάνω) */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
           <Rectangle
             bounds={WORLD_BOUNDS}
             pathOptions={{
               color: "transparent",
               weight: 0,
-              fillColor: "#7fa8d8",      // βάση μπλε
-              fillOpacity: 0.35,         // ένταση μπλε (0.20–0.50)
+              fillColor: "#7fa8d8",   // βάση μπλε
+              fillOpacity: 0.35,      // 0.25 πιο απαλό • 0.45 πιο έντονο
             }}
             interactive={false}
           />
@@ -114,12 +114,22 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           )}
         </Pane>
 
-        {/* 4) Labels μόνο (Carto) */}
+        {/* 4) Labels-only (Carto) – πιο “γερά” & καθαρά */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
+          {/* Κύριο layer */}
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.22}
+            opacity={0.32}          // πριν ~0.22
+            detectRetina            // @2x σε HiDPI
+            pane="pane-labels"
+          />
+          {/* Ήπιο boost */}
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
+            opacity={0.12}
+            detectRetina
+            pane="pane-labels"
           />
         </Pane>
 
@@ -132,7 +142,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 6) Route & markers — πάνω από όλα τα παραπάνω */}
+        {/* 6) Route & markers — πάνω από όλα */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {latlngs.length >= 2 && (
             <Polyline
