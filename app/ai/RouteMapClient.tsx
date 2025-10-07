@@ -66,18 +66,18 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200">
-      {/* Global CSS: μπλε tint μόνο στο pane του GEBCO */}
+      {/* Σωστό selector για το pane του GEBCO – tint μόνο εκεί */}
       <style jsx global>{`
-        .leaflet-pane.pane-gebco {
-          filter: hue-rotate(200deg) saturate(1.6) brightness(1.0) contrast(1.06);
+        .leaflet-gebco-pane {
+          filter: hue-rotate(200deg) saturate(1.6) brightness(1.05) contrast(1.08);
         }
       `}</style>
 
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
         {/* === Panes & Layers (κάτω → πάνω) === */}
 
-        {/* 1) GEBCO bathymetry με tint (μέσω κλάσης στο pane) */}
-        <Pane name="gebco-pane" className="pane-gebco" style={{ zIndex: 200 }}>
+        {/* 1) GEBCO bathymetry με μπλε tint (pane class + zIndex μέσω style) */}
+        <Pane name="gebco" className="leaflet-gebco-pane" style={{ zIndex: 200 }}>
           <TileLayer
             attribution="&copy; GEBCO"
             url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
@@ -85,17 +85,17 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* 2) Labels-only overlay (πολύ διακριτικά) */}
-        <Pane name="labels-pane" style={{ zIndex: 360 }}>
+        {/* 2) Labels-only overlay (Carto) — διακριτικό, πάνω από GEBCO */}
+        <Pane name="labels" style={{ zIndex: 360 }}>
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.22}  // αυξομείωσε εδώ αν θες
+            opacity={0.22}   // 0.16–0.30 ανάλογα με προτίμηση
           />
         </Pane>
 
-        {/* 3) Seamarks (πάνω από labels) */}
-        <Pane name="seamarks-pane" style={{ zIndex: 400 }}>
+        {/* 3) Seamarks — πάνω από labels */}
+        <Pane name="seamarks" style={{ zIndex: 400 }}>
           <TileLayer
             attribution="&copy; OpenSeaMap"
             url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
@@ -103,7 +103,7 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* 4) Land (λευκό fill, μαύρο περίγραμμα) */}
+        {/* 4) Στεριά: λευκό fill με μαύρο περίγραμμα */}
         {coast && (
           <GeoJSON
             data={coast}
