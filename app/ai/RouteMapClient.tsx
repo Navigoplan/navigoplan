@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
-// SSR-safe react-leaflet imports
+// SSR-safe react-leaflet
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
 const TileLayer     = dynamic(() => import("react-leaflet").then(m => m.TileLayer),     { ssr: false });
 const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline),      { ssr: false });
@@ -37,19 +37,18 @@ export default function RouteMapClient({
   points: Point[];
   viaCanal?: boolean;
 }) {
-  // ----- Load coastlines GeoJSON -----
+  // Coastlines GeoJSON
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const url = "/data/coastlines-gr.geojson";
-    fetch(url)
+    fetch("/data/coastlines-gr.geojson")
       .then(r => (r.ok ? r.json() : Promise.reject(new Error("GeoJSON fetch failed"))))
       .then(j => { if (!cancelled) setCoast(j); })
       .catch(() => { if (!cancelled) setCoast(null); });
     return () => { cancelled = true; };
   }, []);
 
-  // ----- Build latlngs & bounds -----
+  // LatLngs & bounds
   const latlngs = useMemo<LatLngExpression[]>(
     () => points.map(p => [p.lat, p.lon] as LatLngExpression),
     [points]
@@ -59,8 +58,7 @@ export default function RouteMapClient({
     if (latlngs.length < 2) return null;
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const L = require("leaflet") as typeof import("leaflet");
-    const b = L.latLngBounds(latlngs as any);
-    return b.pad(0.08);
+    return L.latLngBounds(latlngs as any).pad(0.08);
   }, [latlngs]);
 
   const center: LatLngExpression = latlngs[0] ?? ([37.97, 23.72] as LatLngExpression);
@@ -68,32 +66,33 @@ export default function RouteMapClient({
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200">
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* Base map */}
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        {/* Bathymetry (GEBCO) */}
+        {/* Bathymetry UNDERLAY (βάζει τα βάθη κάτω) */}
         <TileLayer
           attribution="&copy; GEBCO"
           url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
-          opacity={0.55}
+          opacity={0.7}
         />
 
-        {/* Seamarks overlay */}
+        {/* Base map OVERLAY (λίγο διάφανο για να φαίνονται τα βάθη) */}
+        <TileLayer
+          attribution="&copy; OpenStreetMap contributors"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          opacity={0.6}
+        />
+
+        {/* Seamarks overlay (πάνω από όλα) */}
         <TileLayer
           attribution="&copy; OpenSeaMap"
           url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
           opacity={0.45}
         />
 
-        {/* Greek coastlines GeoJSON (stronger visibility) */}
+        {/* Greek coastlines GeoJSON */}
         {coast && (
           <GeoJSON
             data={coast}
             style={() => ({
-              color: "#2d3748",   // darker gray to stand out
+              color: "#2d3748",
               weight: 2.5,
               opacity: 0.9,
               fillOpacity: 0.08,
