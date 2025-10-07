@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
-// SSR-safe react-leaflet
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
 const TileLayer     = dynamic(() => import("react-leaflet").then(m => m.TileLayer),     { ssr: false });
 const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline),      { ssr: false });
@@ -14,7 +13,6 @@ const GeoJSON       = dynamic(() => import("react-leaflet").then(m => m.GeoJSON)
 const Pane          = dynamic(() => import("react-leaflet").then(m => m.Pane),          { ssr: false });
 const Rectangle     = dynamic(() => import("react-leaflet").then(m => m.Rectangle),     { ssr: false });
 
-// Fit-bounds helper
 const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -34,8 +32,7 @@ const FitBounds = dynamic(async () => {
 export type Point = { name: string; lat: number; lon: number };
 
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
-const TRANSPARENT_1PX =
-  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+const TRANSPARENT_1PX = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
 export default function RouteMapClient({ points }: { points: Point[] }) {
   const [coast, setCoast] = useState<any | null>(null);
@@ -66,17 +63,28 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
       <style jsx global>{`
+        /* ελαφρύ tint στα GEBCO */
         .leaflet-tile[src*="tiles.gebco.net"] {
           filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
         }
+        /* τονίζουμε τα labels, να φαίνονται πιο έντονα */
         .leaflet-pane.pane-labels img.leaflet-tile {
           image-rendering: -webkit-optimize-contrast;
           image-rendering: crisp-edges;
+          filter: brightness(0.75) contrast(1.45);
         }
       `}</style>
 
-      <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* 1) GEBCO */}
+      {/* minZoom για να μη φτάνουμε σε scale όπου όλα γίνονται πολύ μικρά */}
+      <MapContainer
+        center={center}
+        zoom={7}
+        minZoom={6}
+        maxZoom={10}
+        scrollWheelZoom={false}
+        style={{ height: "100%", width: "100%" }}
+      >
+        {/* GEBCO */}
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
           <TileLayer
             attribution="&copy; GEBCO"
@@ -85,7 +93,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 2) Νερό (σταθερό overlay) */}
+        {/* Μπλε νερό overlay */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
           <Rectangle
             bounds={WORLD_BOUNDS}
@@ -94,7 +102,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 3) Στεριά */}
+        {/* Στεριά από GeoJSON */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (
             <GeoJSON
@@ -104,41 +112,41 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           )}
         </Pane>
 
-        {/* 4) Labels — πιο μεγάλα + “outline” + fallback */}
+        {/* Labels: πολύ μεγαλύτερα + «outline» + fallback */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
-          {/* Μεγάλα light labels */}
+          {/* Main labels, ΠΟΛΥ μεγαλύτερα */}
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
             tileSize={256}
-            zoomOffset={-2}         // πιο μεγάλα
-            detectRetina={false}     // σταθερότητα
-            opacity={0.56}
+            zoomOffset={-3}        // <- πιο επιθετικό μέγεθος
+            detectRetina={false}
+            opacity={0.68}
             errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
-          {/* Ελαφρύ “outline” από dark labels */}
+          {/* «Outline» με dark labels για να “γράφουν” πάνω στο γαλάζιο */}
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png"
             tileSize={256}
-            zoomOffset={-2}
+            zoomOffset={-3}
             detectRetina={false}
-            opacity={0.22}
+            opacity={0.25}
             errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
-          {/* Fallback labels (normal zoom, retina) */}
+          {/* Fallback κανονικό (retina) για ό,τι δεν σερβίρει ο πάροχος στα χαμηλά z */}
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
             tileSize={256}
             detectRetina
-            opacity={0.15}
+            opacity={0.12}
             errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
         </Pane>
 
-        {/* 5) Seamarks */}
+        {/* Seamarks */}
         <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
           <TileLayer
             attribution="&copy; OpenSeaMap"
@@ -147,7 +155,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 6) Route & markers */}
+        {/* Route & markers */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {latlngs.length >= 2 && (
             <Polyline
@@ -156,7 +164,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
               pathOptions={{ color: "#0b1220", weight: 3, opacity: 0.9, dashArray: "6 8", lineJoin: "round", lineCap: "round" }}
             />
           )}
-
           {points[0] && (
             <CircleMarker
               pane="pane-route"
@@ -169,7 +176,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
               </Tooltip>
             </CircleMarker>
           )}
-
           {points.slice(1, -1).map((p) => (
             <CircleMarker
               key={`${p.name}-${p.lat}-${p.lon}`}
@@ -183,7 +189,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
               </Tooltip>
             </CircleMarker>
           ))}
-
           {points.length > 1 && (
             <CircleMarker
               pane="pane-route"
