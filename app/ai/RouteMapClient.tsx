@@ -63,24 +63,23 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
       <style jsx global>{`
-        /* ελαφρύ tint στα GEBCO */
+        /* Ελαφρύ tint στα GEBCO για να «μπλέκουν» όμορφα με το overlay νερού */
         .leaflet-tile[src*="tiles.gebco.net"] {
           filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
         }
-        /* τονίζουμε τα labels, να φαίνονται πιο έντονα */
+        /* Πιο έντονα labels (λίγη αντίθεση) */
         .leaflet-pane.pane-labels img.leaflet-tile {
           image-rendering: -webkit-optimize-contrast;
           image-rendering: crisp-edges;
-          filter: brightness(0.75) contrast(1.45);
+          filter: brightness(0.8) contrast(1.5);
         }
       `}</style>
 
-      {/* minZoom για να μη φτάνουμε σε scale όπου όλα γίνονται πολύ μικρά */}
       <MapContainer
         center={center}
         zoom={7}
-        minZoom={6}
-        maxZoom={10}
+        minZoom={3}     /* ↓ δίνουμε περιθώριο για zoom-out */
+        maxZoom={13}    /* ↑ και αρκετό zoom-in */
         scrollWheelZoom={false}
         style={{ height: "100%", width: "100%" }}
       >
@@ -112,34 +111,34 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           )}
         </Pane>
 
-        {/* Labels: πολύ μεγαλύτερα + «outline» + fallback */}
+        {/* Labels: @2x + zoomOffset(-2) για ΠΡΑΓΜΑΤΙΚΑ μεγαλύτερα γράμματα, με outline */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
-          {/* Main labels, ΠΟΛΥ μεγαλύτερα */}
+          {/* κύρια (light) */}
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
-            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            tileSize={256}
-            zoomOffset={-3}        // <- πιο επιθετικό μέγεθος
+            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
+            tileSize={512}
+            zoomOffset={-2}         // <- μεγαλώνει οπτικά το κείμενο χωρίς να γίνει θολό
             detectRetina={false}
-            opacity={0.68}
+            opacity={0.70}
             errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
-          {/* «Outline» με dark labels για να “γράφουν” πάνω στο γαλάζιο */}
+          {/* outline (dark) */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png"
-            tileSize={256}
-            zoomOffset={-3}
+            url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"
+            tileSize={512}
+            zoomOffset={-2}
             detectRetina={false}
-            opacity={0.25}
+            opacity={0.28}
             errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
-          {/* Fallback κανονικό (retina) για ό,τι δεν σερβίρει ο πάροχος στα χαμηλά z */}
+          {/* πολύ ελαφρύ fallback χωρίς zoomOffset, για κενά tiles σε ορισμένα z */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            tileSize={256}
-            detectRetina
+            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
+            tileSize={512}
+            detectRetina={false}
             opacity={0.12}
             errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
@@ -155,7 +154,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* Route & markers */}
+        {/* Route & markers πάνω από όλα */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {latlngs.length >= 2 && (
             <Polyline
