@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
-// SSR-safe react-leaflet
+// SSR-safe react-leaflet δυναμικά
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
 const TileLayer     = dynamic(() => import("react-leaflet").then(m => m.TileLayer),     { ssr: false });
 const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline),      { ssr: false });
@@ -13,6 +13,7 @@ const Tooltip       = dynamic(() => import("react-leaflet").then(m => m.Tooltip)
 const GeoJSON       = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),       { ssr: false });
 const Pane          = dynamic(() => import("react-leaflet").then(m => m.Pane),          { ssr: false });
 
+// Fit bounds helper (χωρίς SSR)
 const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -33,10 +34,12 @@ export type Point = { name: string; lat: number; lon: number };
 
 export default function RouteMapClient({
   points,
+  viaCanal,
 }: {
   points: Point[];
+  viaCanal?: boolean;
 }) {
-  // Land/Coast GeoJSON
+  // Φόρτωση ακτογραμμών
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -64,17 +67,17 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* 1) Μπλε tint ΣΙΓΟΥΡΑ πάνω στο GEBCO (στοχεύουμε τα img .leaflet-tile με URL του GEBCO) */}
+      {/* Ναυτικό μπλε για GEBCO (τα πλακίδια του GEBCO είναι grayscale, οπότε τα χρωματίζουμε) */}
       <style jsx global>{`
         .leaflet-tile[src*="tiles.gebco.net"] {
-          filter: hue-rotate(200deg) saturate(1.6) brightness(1.05) contrast(1.08);
+          filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
         }
       `}</style>
 
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* === Panes & Layers (κάτω → πάνω) === */}
+        {/* === Σειρά panes (κάτω → πάνω) === */}
 
-        {/* GEBCO bathymetry */}
+        {/* 1) GEBCO bathymetry (θα πάρει το tint από το CSS πιο πάνω) */}
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
           <TileLayer
             attribution="&copy; GEBCO"
@@ -83,7 +86,7 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* LAND (λευκό fill με μαύρο περίγραμμα) — ΚΑΤΩ από route */}
+        {/* 2) Στεριά (λευκό fill, μαύρο περίγραμμα) — ΚΑΤΩ από τη διαδρομή */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (
             <GeoJSON
@@ -99,16 +102,16 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* LABELS μόνο, πολύ διακριτικά (πάνω από land/GEBCO) */}
+        {/* 3) Labels-only (Carto) — διακριτικά πάνω από land/GEBCO */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.22}
+            opacity={0.22} // ρύθμισε 0.16–0.30 ανάλογα με προτίμηση
           />
         </Pane>
 
-        {/* SEAMARKS */}
+        {/* 4) Seamarks */}
         <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
           <TileLayer
             attribution="&copy; OpenSeaMap"
@@ -117,7 +120,7 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* ROUTE & MARKERS — ΠΑΝΩ από land/labels/seamarks */}
+        {/* 5) Διαδρομή & markers — ΠΑΝΩ από όλα τα προηγούμενα */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {latlngs.length >= 2 && (
             <Polyline
@@ -134,7 +137,6 @@ export default function RouteMapClient({
             />
           )}
 
-          {/* Markers */}
           {points[0] && (
             <CircleMarker
               pane="pane-route"
@@ -147,6 +149,7 @@ export default function RouteMapClient({
               </Tooltip>
             </CircleMarker>
           )}
+
           {points.slice(1, -1).map((p) => (
             <CircleMarker
               key={`${p.name}-${p.lat}-${p.lon}`}
@@ -160,6 +163,7 @@ export default function RouteMapClient({
               </Tooltip>
             </CircleMarker>
           ))}
+
           {points.length > 1 && (
             <CircleMarker
               pane="pane-route"
@@ -174,7 +178,7 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* Fit bounds */}
+        {/* Fit σε αλλαγές */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
