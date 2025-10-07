@@ -11,7 +11,6 @@ const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline
 const CircleMarker  = dynamic(() => import("react-leaflet").then(m => m.CircleMarker),  { ssr: false });
 const Tooltip       = dynamic(() => import("react-leaflet").then(m => m.Tooltip),       { ssr: false });
 const GeoJSON       = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),       { ssr: false });
-const Pane          = dynamic(() => import("react-leaflet").then(m => m.Pane),          { ssr: false });
 
 const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
@@ -65,43 +64,40 @@ export default function RouteMapClient({
   const center: LatLngExpression = latlngs[0] ?? ([37.97, 23.72] as LatLngExpression);
 
   return (
-    <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200">
-      {/* Σωστό selector για το pane του GEBCO – tint μόνο εκεί */}
+    <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
+      {/* Navionics-like tint: εφαρμόζεται ΜΟΝΟ στο GEBCO layer μέσω className */}
       <style jsx global>{`
-        .leaflet-gebco-pane {
+        .leaflet-layer.gebco-tint img,
+        .leaflet-layer.gebco-tint .leaflet-tile {
           filter: hue-rotate(200deg) saturate(1.6) brightness(1.05) contrast(1.08);
         }
       `}</style>
 
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* === Panes & Layers (κάτω → πάνω) === */}
+        {/* 1) GEBCO bathymetry (UNDERLAY, με tint μέσω .gebco-tint) */}
+        <TileLayer
+          attribution="&copy; GEBCO"
+          url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
+          opacity={0.9}
+          className="gebco-tint"
+          zIndex={200}
+        />
 
-        {/* 1) GEBCO bathymetry με μπλε tint (pane class + zIndex μέσω style) */}
-        <Pane name="gebco" className="leaflet-gebco-pane" style={{ zIndex: 200 }}>
-          <TileLayer
-            attribution="&copy; GEBCO"
-            url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
-            opacity={0.9}
-          />
-        </Pane>
-
-        {/* 2) Labels-only overlay (Carto) — διακριτικό, πάνω από GEBCO */}
-        <Pane name="labels" style={{ zIndex: 360 }}>
-          <TileLayer
-            attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
-            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.22}   // 0.16–0.30 ανάλογα με προτίμηση
-          />
-        </Pane>
+        {/* 2) Labels-only overlay (Carto) — πολύ διακριτικά πάνω από GEBCO */}
+        <TileLayer
+          attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
+          url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
+          opacity={0.22}   /* 0.16–0.30 ανάλογα με προτίμηση */
+          zIndex={360}
+        />
 
         {/* 3) Seamarks — πάνω από labels */}
-        <Pane name="seamarks" style={{ zIndex: 400 }}>
-          <TileLayer
-            attribution="&copy; OpenSeaMap"
-            url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
-            opacity={0.5}
-          />
-        </Pane>
+        <TileLayer
+          attribution="&copy; OpenSeaMap"
+          url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
+          opacity={0.5}
+          zIndex={400}
+        />
 
         {/* 4) Στεριά: λευκό fill με μαύρο περίγραμμα */}
         {coast && (
