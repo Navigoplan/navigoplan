@@ -37,6 +37,7 @@ export default function RouteMapClient({
   points: Point[];
   viaCanal?: boolean;
 }) {
+  // Land/Coast GeoJSON
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +48,7 @@ export default function RouteMapClient({
     return () => { cancelled = true; };
   }, []);
 
+  // Route latlngs & bounds
   const latlngs = useMemo<LatLngExpression[]>(
     () => points.map(p => [p.lat, p.lon] as LatLngExpression),
     [points]
@@ -63,19 +65,28 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* Overlay gradient για Navionics sea effect */}
-      <div className="absolute inset-0 z-[150] bg-gradient-to-b from-[#8cc0ff]/20 via-[#5ea7ff]/20 to-[#2563eb]/30 pointer-events-none" />
+      {/* Ocean-blue gradient overlay (Navionics flavor) */}
+      <div className="absolute inset-0 z-[150] bg-gradient-to-b from-[#8cc0ff]/18 via-[#5ea7ff]/20 to-[#2563eb]/28 pointer-events-none" />
 
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* GEBCO BATHYMETRY */}
+        {/* 1) GEBCO bathymetry (UNDERLAY) */}
         <TileLayer
           attribution="&copy; GEBCO"
           url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
-          opacity={0.85}
+          opacity={0.88}
           zIndex={200}
         />
 
-        {/* SEAMARKS */}
+        {/* 2) Labels-only overlay (very faint) */}
+        <TileLayer
+          // Carto labels-only tiles (χωρίς δρόμους/γεμίσματα)
+          attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
+          url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
+          opacity={0.16}
+          zIndex={360}
+        />
+
+        {/* 3) Seamarks (πάνω από labels) */}
         <TileLayer
           attribution="&copy; OpenSeaMap"
           url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
@@ -83,7 +94,7 @@ export default function RouteMapClient({
           zIndex={400}
         />
 
-        {/* LAND (λευκό με μαύρο περίγραμμα) */}
+        {/* 4) Land (λευκό fill, μαύρο περίγραμμα) */}
         {coast && (
           <GeoJSON
             data={coast}
@@ -97,7 +108,7 @@ export default function RouteMapClient({
           />
         )}
 
-        {/* ROUTE */}
+        {/* 5) Route polyline */}
         {latlngs.length >= 2 && (
           <Polyline
             positions={latlngs}
@@ -112,7 +123,7 @@ export default function RouteMapClient({
           />
         )}
 
-        {/* MARKERS */}
+        {/* 6) Markers */}
         {points[0] && (
           <CircleMarker
             center={[points[0].lat, points[0].lon] as LatLngExpression}
@@ -148,6 +159,7 @@ export default function RouteMapClient({
           </CircleMarker>
         )}
 
+        {/* 7) Fit bounds */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
