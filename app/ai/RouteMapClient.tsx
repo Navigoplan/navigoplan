@@ -37,7 +37,6 @@ export default function RouteMapClient({
   points: Point[];
   viaCanal?: boolean;
 }) {
-  // ----- Coastlines (νησιά/ξηρά) -----
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +47,6 @@ export default function RouteMapClient({
     return () => { cancelled = true; };
   }, []);
 
-  // ----- Route points & bounds -----
   const latlngs = useMemo<LatLngExpression[]>(
     () => points.map(p => [p.lat, p.lon] as LatLngExpression),
     [points]
@@ -64,49 +62,42 @@ export default function RouteMapClient({
   const center: LatLngExpression = latlngs[0] ?? ([37.97, 23.72] as LatLngExpression);
 
   return (
-    <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200">
-      {/* Navionics-like recolor για GEBCO tiles */}
-      <style jsx global>{`
-        /* Εφαρμόζουμε φίλτρα μόνο στα GEBCO tiles */
-        .leaflet-tile.gebco-tint {
-          /* Μεταφορά σε θαλάσσιο μπλε + ελαφρύ contrast */
-          filter: hue-rotate(200deg) saturate(1.7) brightness(1.0) contrast(1.05);
-        }
-      `}</style>
+    <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
+      {/* Overlay gradient για Navionics sea effect */}
+      <div className="absolute inset-0 z-[150] bg-gradient-to-b from-[#8cc0ff]/20 via-[#5ea7ff]/20 to-[#2563eb]/30 pointer-events-none" />
 
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* 1) Bathymetry (GEBCO) — UNDERLAY, με κλάση για tint */}
+        {/* GEBCO BATHYMETRY */}
         <TileLayer
           attribution="&copy; GEBCO"
           url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
-          opacity={0.95}
+          opacity={0.85}
           zIndex={200}
-          className="gebco-tint"
         />
 
-        {/* 2) Seamarks — OVERLAY */}
+        {/* SEAMARKS */}
         <TileLayer
           attribution="&copy; OpenSeaMap"
           url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
-          opacity={0.45}
+          opacity={0.5}
           zIndex={400}
         />
 
-        {/* 3) Land (νησιά/ξηρά) από το GeoJSON — λευκά με μαύρο περίγραμμα */}
+        {/* LAND (λευκό με μαύρο περίγραμμα) */}
         {coast && (
           <GeoJSON
             data={coast}
             style={() => ({
-              color: "#0b1220",     // περίγραμμα στεριάς (σκούρο)
-              weight: 2.5,
+              color: "#0b1220",
+              weight: 2,
               opacity: 1,
-              fillColor: "#ffffff", // στεριά λευκή
+              fillColor: "#ffffff",
               fillOpacity: 1,
             })}
           />
         )}
 
-        {/* 4) Route polyline */}
+        {/* ROUTE */}
         {latlngs.length >= 2 && (
           <Polyline
             positions={latlngs}
@@ -121,7 +112,7 @@ export default function RouteMapClient({
           />
         )}
 
-        {/* 5) Markers */}
+        {/* MARKERS */}
         {points[0] && (
           <CircleMarker
             center={[points[0].lat, points[0].lon] as LatLngExpression}
@@ -157,7 +148,6 @@ export default function RouteMapClient({
           </CircleMarker>
         )}
 
-        {/* 6) Fit bounds */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
