@@ -11,6 +11,7 @@ const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline
 const CircleMarker  = dynamic(() => import("react-leaflet").then(m => m.CircleMarker),  { ssr: false });
 const Tooltip       = dynamic(() => import("react-leaflet").then(m => m.Tooltip),       { ssr: false });
 const GeoJSON       = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),       { ssr: false });
+const Pane          = dynamic(() => import("react-leaflet").then(m => m.Pane),          { ssr: false });
 
 const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
@@ -32,10 +33,8 @@ export type Point = { name: string; lat: number; lon: number };
 
 export default function RouteMapClient({
   points,
-  viaCanal,
 }: {
   points: Point[];
-  viaCanal?: boolean;
 }) {
   // Land/Coast GeoJSON
   const [coast, setCoast] = useState<any | null>(null);
@@ -65,106 +64,117 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* Navionics-like tint: εφαρμόζεται ΜΟΝΟ στο GEBCO layer μέσω className */}
+      {/* 1) Μπλε tint ΣΙΓΟΥΡΑ πάνω στο GEBCO (στοχεύουμε τα img .leaflet-tile με URL του GEBCO) */}
       <style jsx global>{`
-        .leaflet-layer.gebco-tint img,
-        .leaflet-layer.gebco-tint .leaflet-tile {
+        .leaflet-tile[src*="tiles.gebco.net"] {
           filter: hue-rotate(200deg) saturate(1.6) brightness(1.05) contrast(1.08);
         }
       `}</style>
 
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* 1) GEBCO bathymetry (UNDERLAY, με tint μέσω .gebco-tint) */}
-        <TileLayer
-          attribution="&copy; GEBCO"
-          url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
-          opacity={0.9}
-          className="gebco-tint"
-          zIndex={200}
-        />
+        {/* === Panes & Layers (κάτω → πάνω) === */}
 
-        {/* 2) Labels-only overlay (Carto) — πολύ διακριτικά πάνω από GEBCO */}
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
-          url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-          opacity={0.22}   /* 0.16–0.30 ανάλογα με προτίμηση */
-          zIndex={360}
-        />
-
-        {/* 3) Seamarks — πάνω από labels */}
-        <TileLayer
-          attribution="&copy; OpenSeaMap"
-          url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
-          opacity={0.5}
-          zIndex={400}
-        />
-
-        {/* 4) Στεριά: λευκό fill με μαύρο περίγραμμα */}
-        {coast && (
-          <GeoJSON
-            data={coast}
-            style={() => ({
-              color: "#0b1220",
-              weight: 2,
-              opacity: 1,
-              fillColor: "#ffffff",
-              fillOpacity: 1,
-            })}
+        {/* GEBCO bathymetry */}
+        <Pane name="pane-gebco" style={{ zIndex: 200 }}>
+          <TileLayer
+            attribution="&copy; GEBCO"
+            url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
+            opacity={0.9}
           />
-        )}
+        </Pane>
 
-        {/* 5) Route polyline */}
-        {latlngs.length >= 2 && (
-          <Polyline
-            positions={latlngs}
-            pathOptions={{
-              color: "#0b1220",
-              weight: 3,
-              opacity: 0.9,
-              dashArray: "6 8",
-              lineJoin: "round",
-              lineCap: "round",
-            }}
+        {/* LAND (λευκό fill με μαύρο περίγραμμα) — ΚΑΤΩ από route */}
+        <Pane name="pane-land" style={{ zIndex: 310 }}>
+          {coast && (
+            <GeoJSON
+              data={coast}
+              style={() => ({
+                color: "#0b1220",
+                weight: 2,
+                opacity: 1,
+                fillColor: "#ffffff",
+                fillOpacity: 1,
+              })}
+            />
+          )}
+        </Pane>
+
+        {/* LABELS μόνο, πολύ διακριτικά (πάνω από land/GEBCO) */}
+        <Pane name="pane-labels" style={{ zIndex: 360 }}>
+          <TileLayer
+            attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
+            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
+            opacity={0.22}
           />
-        )}
+        </Pane>
 
-        {/* 6) Markers */}
-        {points[0] && (
-          <CircleMarker
-            center={[points[0].lat, points[0].lon] as LatLngExpression}
-            radius={8}
-            pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
-          >
-            <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
-              Start: {points[0].name}
-            </Tooltip>
-          </CircleMarker>
-        )}
-        {points.slice(1, -1).map((p) => (
-          <CircleMarker
-            key={`${p.name}-${p.lat}-${p.lon}`}
-            center={[p.lat, p.lon] as LatLngExpression}
-            radius={5}
-            pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}
-          >
-            <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-              {p.name}
-            </Tooltip>
-          </CircleMarker>
-        ))}
-        {points.length > 1 && (
-          <CircleMarker
-            center={[points.at(-1)!.lat, points.at(-1)!.lon] as LatLngExpression}
-            radius={8}
-            pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
-          >
-            <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
-              End: {points.at(-1)!.name}
-            </Tooltip>
-          </CircleMarker>
-        )}
+        {/* SEAMARKS */}
+        <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
+          <TileLayer
+            attribution="&copy; OpenSeaMap"
+            url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"
+            opacity={0.5}
+          />
+        </Pane>
 
-        {/* Fit */}
+        {/* ROUTE & MARKERS — ΠΑΝΩ από land/labels/seamarks */}
+        <Pane name="pane-route" style={{ zIndex: 450 }}>
+          {latlngs.length >= 2 && (
+            <Polyline
+              positions={latlngs}
+              pane="pane-route"
+              pathOptions={{
+                color: "#0b1220",
+                weight: 3,
+                opacity: 0.9,
+                dashArray: "6 8",
+                lineJoin: "round",
+                lineCap: "round",
+              }}
+            />
+          )}
+
+          {/* Markers */}
+          {points[0] && (
+            <CircleMarker
+              pane="pane-route"
+              center={[points[0].lat, points[0].lon] as LatLngExpression}
+              radius={8}
+              pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
+            >
+              <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+                Start: {points[0].name}
+              </Tooltip>
+            </CircleMarker>
+          )}
+          {points.slice(1, -1).map((p) => (
+            <CircleMarker
+              key={`${p.name}-${p.lat}-${p.lon}`}
+              pane="pane-route"
+              center={[p.lat, p.lon] as LatLngExpression}
+              radius={5}
+              pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}
+            >
+              <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
+                {p.name}
+              </Tooltip>
+            </CircleMarker>
+          ))}
+          {points.length > 1 && (
+            <CircleMarker
+              pane="pane-route"
+              center={[points.at(-1)!.lat, points.at(-1)!.lon] as LatLngExpression}
+              radius={8}
+              pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
+            >
+              <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+                End: {points.at(-1)!.name}
+              </Tooltip>
+            </CircleMarker>
+          )}
+        </Pane>
+
+        {/* Fit bounds */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
