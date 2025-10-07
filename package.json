@@ -12,8 +12,13 @@
     "node": ">=18 <23"
   },
   "dependencies": {
+    "@turf/boolean-intersects": "^7.2.0",
+    "@turf/buffer": "^7.2.0",
+    "@turf/helpers": "^7.2.0",
+    "@turf/turf": "^7.2.0",
     "leaflet": "^1.9.4",
     "next": "15.5.3",
+    "ol": "^10.6.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-leaflet": "^5.0.0"
@@ -21,6 +26,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/geojson": "^7946.0.16",
     "@types/leaflet": "^1.9.20",
     "@types/node": "^20",
     "@types/react": "^19",
