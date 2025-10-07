@@ -35,13 +35,15 @@ const FitBounds = dynamic(async () => {
 export type Point = { name: string; lat: number; lon: number };
 
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
-const TRANSPARENT_1PX = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+const TRANSPARENT_1PX =
+  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
 /* === Tunables === */
 const CELL_DEG = 0.05;          // ~5–6 km κελί
 const GRID_MARGIN_DEG = 0.30;   // περιθώριο γύρω από bbox leg
 const NEAR_LAND_PENALTY = 0.25; // ελαφρύ κόστος κοντά σε στεριά
-const SNAP_MARGIN_DEG = 0.20;   // τοπικό bbox για snapping waypoint σε νερό
+const SNAP_MARGIN_DEG = 0.20;   // bbox για τοπικό snap ενός waypoint
+const CLEARANCE_CELLS = 1;      // «πάχος» αποκλεισμού γύρω από στεριά (1=ασφαλές)
 
 /* ======== μικρές geo helpers ======== */
 function toRad(x: number) { return (x * Math.PI) / 180; }
@@ -55,9 +57,9 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
 
 /* ======== Point in (Multi)Polygon (lon,lat) ======== */
 type Ring = [number, number][];
-type Poly = Ring[];      // ένα πολύγωνο = λίστα από δακτυλίους (εξωτερικός + holes)
+type Poly = Ring[];
+type MultiPoly = Poly[]; // μόνο για parsing MultiPolygon
 
-/** Ray casting σε Ring */
 function pointInRing(pt: [number, number], ring: Ring): boolean {
   const [x, y] = pt;
   let inside = false;
@@ -68,33 +70,31 @@ function pointInRing(pt: [number, number], ring: Ring): boolean {
   }
   return inside;
 }
-
-/** even-odd σε Poly (τα holes αντιστρέφουν) */
 function pointInPoly(pt: [number, number], poly: Poly): boolean {
   let inside = false;
   for (const ring of poly) if (pointInRing(pt, ring)) inside = !inside;
   return inside;
 }
 
-/** Μαζεύει ΟΛΑ τα polygons (Poly) από GeoJSON, ισοπεδώνοντας τα MultiPolygon */
+/** Μαζεύει ΟΛΑ τα πολύγωνα στεριάς (κάθε Polygon ως ένα Poly, κάθε MultiPolygon «σπάει» σε πολλά Poly). */
 function collectPolys(geo: any): Poly[] {
   const polys: Poly[] = [];
   if (!geo) return polys;
 
   if (geo.type === "FeatureCollection") {
-    for (const f of (geo.features ?? []) as any[]) {
+    for (const f of geo.features ?? []) {
       const g = f?.geometry;
       if (!g) continue;
       if (g.type === "Polygon") {
         polys.push(g.coordinates as Poly);
       } else if (g.type === "MultiPolygon") {
-        for (const poly of (g.coordinates as Poly[])) polys.push(poly as Poly);
+        for (const poly of (g.coordinates as MultiPoly)) polys.push(poly);
       }
     }
   } else if (geo.type === "Polygon") {
     polys.push(geo.coordinates as Poly);
   } else if (geo.type === "MultiPolygon") {
-    for (const poly of (geo.coordinates as Poly[])) polys.push(poly as Poly);
+    for (const poly of (geo.coordinates as MultiPoly)) polys.push(poly);
   }
   return polys;
 }
@@ -120,6 +120,8 @@ function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxL
       grid[r][c] = { r, c, lat, lon, walkable: !onLand, nearLand: false };
     }
   }
+
+  // κοντινά στη στεριά => σημαδέψτα
   const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -134,6 +136,24 @@ function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxL
       cell.nearLand = near;
     }
   }
+
+  // ΑΠΟΚΛΕΙΣΜΟΣ γύρω από στεριά για να μην «ακουμπά» η γραμμή
+  if (CLEARANCE_CELLS > 0) {
+    const toBlock: [number, number][] = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      if (!grid[r][c].walkable) {
+        for (let dr = -CLEARANCE_CELLS; dr <= CLEARANCE_CELLS; dr++) {
+          for (let dc = -CLEARANCE_CELLS; dc <= CLEARANCE_CELLS; dc++) {
+            const rr = r + dr, cc = c + dc;
+            if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+            toBlock.push([rr, cc]);
+          }
+        }
+      }
+    }
+    for (const [rr, cc] of toBlock) grid[rr][cc].walkable = false;
+  }
+
   function nodeFor(lat: number, lon: number) {
     const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
     const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
@@ -221,7 +241,7 @@ function aStarWater(grid: GridNode[][], start: GridNode, goal: GridNode) {
   return null;
 }
 
-/* ======== RDP simplify ======== */
+/* ======== RDP simplify (κρατά ΠΑΝΤΑ endpoints) ======== */
 function perpendicularDistance(p: [number, number], a: [number, number], b: [number, number]) {
   const x0 = p[1], y0 = p[0];
   const x1 = a[1], y1 = a[0];
@@ -262,10 +282,9 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
     return () => { cancelled = true; };
   }, []);
 
-  /* όλα τα polygons στεριάς */
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* SNAP: μετακίνηση ΟΛΩΝ των waypoints στο κοντινότερο νερό */
+  /* 1) Snap ΟΛΑ τα waypoints στο κοντινότερο νερό (ώστε markers και γραμμές να συμπίπτουν) */
   const snappedPoints = useMemo<Point[]>(() => {
     if (!coastPolys.length) return points;
     return points.map((p) => {
@@ -279,7 +298,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
     });
   }, [points, coastPolys]);
 
-  /* Υπολογισμός διαδρομής που ΠΕΡΝΑ ακριβώς από τα ίδια σημεία με τα markers */
+  /* 2) Υπολόγισε διαδρομή που ΠΕΡΝΑ ακριβώς από τις snapped τελείες */
   const waterLatLngs = useMemo<LatLngExpression[]>(() => {
     if (!coastPolys.length || snappedPoints.length < 2) {
       return snappedPoints.map(p => [p.lat, p.lon] as LatLngExpression);
@@ -297,19 +316,19 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
         continue;
       }
 
-      // ⛳ ΑΓΚΙΣΤΡΩΣΗ ΑΚΡΩΝ ΣΤΑ MARKERS
       const seg: [number, number][] = path.map(n => [n.lat, n.lon]);
+      // Κάρφωσε τα endpoints ώστε να κουμπώνει 100% πάνω στην τελεία
       seg[0] = [a.lat, a.lon];
       seg[seg.length - 1] = [b.lat, b.lon];
 
-      const simplified = simplifyRDP(seg, 0.008); // κρατά τα endpoints ως έχουν
+      const simplified = simplifyRDP(seg, 0.008); // κρατά τα endpoints
       if (result.length === 0) result.push(...simplified);
       else result.push(...simplified.slice(1));
     }
     return result as LatLngExpression[];
   }, [snappedPoints, coastPolys]);
 
-  /* Markers */
+  /* Markers = τα ίδια τα snapped (ίδιες συντεταγμένες με το path) */
   const markerStart = snappedPoints[0] ?? null;
   const markerMids  = snappedPoints.slice(1, -1);
   const markerEnd   = snappedPoints.at(-1) ?? null;
@@ -418,7 +437,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* route + markers (οι τελείες τώρα είναι ΠΑΝΩ στη γραμμή) */}
+        {/* route + markers */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline
@@ -443,7 +462,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
               pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
-                Start: {points[0]?.name}
+                Start: {snappedPoints[0]?.name}
               </Tooltip>
             </CircleMarker>
           )}
@@ -470,7 +489,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
               pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
-                End: {points.at(-1)?.name}
+                End: {snappedPoints.at(-1)?.name}
               </Tooltip>
             </CircleMarker>
           )}
