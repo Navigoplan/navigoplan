@@ -4,17 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
-// react-leaflet dynamic (SSR safe)
+// SSR-safe react-leaflet imports
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
-const TileLayer     = dynamic(() => import("react-leaflet").then(m => m.TileLayer), { ssr: false });
-const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline), { ssr: false });
-const CircleMarker  = dynamic(() => import("react-leaflet").then(m => m.CircleMarker), { ssr: false });
-const Tooltip       = dynamic(() => import("react-leaflet").then(m => m.Tooltip), { ssr: false });
-const GeoJSON       = dynamic(() => import("react-leaflet").then(m => m.GeoJSON), { ssr: false });
-const UseMapFit     = dynamic(async () => {
-  const { useEffect } = await import("react");
+const TileLayer     = dynamic(() => import("react-leaflet").then(m => m.TileLayer),     { ssr: false });
+const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline),      { ssr: false });
+const CircleMarker  = dynamic(() => import("react-leaflet").then(m => m.CircleMarker),  { ssr: false });
+const Tooltip       = dynamic(() => import("react-leaflet").then(m => m.Tooltip),       { ssr: false });
+const GeoJSON       = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),       { ssr: false });
+
+const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
-  function Fit({ bounds }: { bounds: LatLngBoundsExpression }) {
+  const { useEffect } = await import("react");
+  function Cmp({ bounds }: { bounds: LatLngBoundsExpression }) {
     const map = RL.useMap();
     useEffect(() => {
       map.fitBounds(bounds, { padding: [30, 30] });
@@ -24,7 +25,7 @@ const UseMapFit     = dynamic(async () => {
     }, [map, bounds]);
     return null;
   }
-  return Fit;
+  return Cmp;
 }, { ssr: false });
 
 export type Point = { name: string; lat: number; lon: number };
@@ -36,25 +37,23 @@ export default function RouteMapClient({
   points: Point[];
   viaCanal?: boolean;
 }) {
-  // ---- Coastlines GeoJSON ----
+  // ----- Load coastlines GeoJSON -----
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
-
-    // αν το αρχείο σου είναι ...geojson.json, άλλαξε το path εδώ:
-    const url = "/data/coastlines-gr.geojson"; 
-    // const url = "/data/coastlines-gr.geojson.json";
-
+    const url = "/data/coastlines-gr.geojson";
     fetch(url)
-      .then(r => r.ok ? r.json() : Promise.reject(new Error("GeoJSON fetch failed")))
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error("GeoJSON fetch failed"))))
       .then(j => { if (!cancelled) setCoast(j); })
       .catch(() => { if (!cancelled) setCoast(null); });
-
     return () => { cancelled = true; };
   }, []);
 
-  // ---- LatLngs & bounds ----
-  const latlngs = useMemo<LatLngExpression[]>(() => points.map(p => [p.lat, p.lon] as LatLngExpression), [points]);
+  // ----- Build latlngs & bounds -----
+  const latlngs = useMemo<LatLngExpression[]>(
+    () => points.map(p => [p.lat, p.lon] as LatLngExpression),
+    [points]
+  );
 
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if (latlngs.length < 2) return null;
@@ -81,15 +80,15 @@ export default function RouteMapClient({
           opacity={0.45}
         />
 
-        {/* Greek coastlines GeoJSON */}
+        {/* Greek coastlines GeoJSON (stronger visibility) */}
         {coast && (
           <GeoJSON
             data={coast}
             style={() => ({
-              color: "#8a8f99",
-              weight: 1,
-              opacity: 0.6,
-              fillOpacity: 0.05,
+              color: "#2d3748",   // darker gray to stand out
+              weight: 2.5,
+              opacity: 0.9,
+              fillOpacity: 0.08,
             })}
           />
         )}
@@ -109,38 +108,48 @@ export default function RouteMapClient({
           />
         )}
 
-        {/* Start */}
+        {/* Start marker */}
         {points[0] && (
-          <CircleMarker center={[points[0].lat, points[0].lon] as LatLngExpression} radius={8}
-            pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}>
+          <CircleMarker
+            center={[points[0].lat, points[0].lon] as LatLngExpression}
+            radius={8}
+            pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
+          >
             <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
               Start: {points[0].name}
             </Tooltip>
           </CircleMarker>
         )}
 
-        {/* Middles */}
+        {/* Middle markers */}
         {points.slice(1, -1).map((p) => (
-          <CircleMarker key={`${p.name}-${p.lat}-${p.lon}`} center={[p.lat, p.lon] as LatLngExpression} radius={5}
-            pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}>
+          <CircleMarker
+            key={`${p.name}-${p.lat}-${p.lon}`}
+            center={[p.lat, p.lon] as LatLngExpression}
+            radius={5}
+            pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}
+          >
             <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
               {p.name}
             </Tooltip>
           </CircleMarker>
         ))}
 
-        {/* End */}
+        {/* End marker */}
         {points.length > 1 && (
-          <CircleMarker center={[points.at(-1)!.lat, points.at(-1)!.lon] as LatLngExpression} radius={8}
-            pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}>
+          <CircleMarker
+            center={[points.at(-1)!.lat, points.at(-1)!.lon] as LatLngExpression}
+            radius={8}
+            pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
+          >
             <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
               End: {points.at(-1)!.name}
             </Tooltip>
           </CircleMarker>
         )}
 
-        {/* Auto-fit on change */}
-        {bounds && <UseMapFit bounds={bounds} />}
+        {/* Fit to bounds on change */}
+        {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
   );
