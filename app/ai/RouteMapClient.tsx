@@ -78,8 +78,8 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
       <MapContainer
         center={center}
         zoom={7}
-        minZoom={3}     /* ↓ δίνουμε περιθώριο για zoom-out */
-        maxZoom={13}    /* ↑ και αρκετό zoom-in */
+        minZoom={3}     /* ↓ περιθώριο για zoom-out */
+        maxZoom={13}    /* ↑ αρκετό zoom-in */
         scrollWheelZoom={false}
         style={{ height: "100%", width: "100%" }}
       >
@@ -111,28 +111,26 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           )}
         </Pane>
 
-        {/* Labels: @2x + zoomOffset(-2) για ΠΡΑΓΜΑΤΙΚΑ μεγαλύτερα γράμματα, με outline */}
+        {/* Labels: @2x + zoomOffset(-1) για μεγαλύτερα, σταθερά tiles (με outline) */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
           {/* κύρια (light) */}
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
             tileSize={512}
-            zoomOffset={-2}         // <- μεγαλώνει οπτικά το κείμενο χωρίς να γίνει θολό
+            zoomOffset={-1}         // <- ασφαλές & μεγαλύτερο
             detectRetina={false}
-            opacity={0.70}
+            opacity={0.80}
             errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
           />
           {/* outline (dark) */}
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"
             tileSize={512}
-            zoomOffset={-2}
+            zoomOffset={-1}
             detectRetina={false}
-            opacity={0.28}
+            opacity={0.36}
             errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
           />
           {/* πολύ ελαφρύ fallback χωρίς zoomOffset, για κενά tiles σε ορισμένα z */}
           <TileLayer
@@ -141,7 +139,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
             detectRetina={false}
             opacity={0.12}
             errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
           />
         </Pane>
 
