@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
-// SSR-safe react-leaflet δυναμικά
+// SSR-safe react-leaflet
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
 const TileLayer     = dynamic(() => import("react-leaflet").then(m => m.TileLayer),     { ssr: false });
 const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline),      { ssr: false });
@@ -13,7 +13,6 @@ const Tooltip       = dynamic(() => import("react-leaflet").then(m => m.Tooltip)
 const GeoJSON       = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),       { ssr: false });
 const Pane          = dynamic(() => import("react-leaflet").then(m => m.Pane),          { ssr: false });
 
-// Fit bounds helper (χωρίς SSR)
 const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -34,12 +33,10 @@ export type Point = { name: string; lat: number; lon: number };
 
 export default function RouteMapClient({
   points,
-  viaCanal,
 }: {
   points: Point[];
-  viaCanal?: boolean;
 }) {
-  // Φόρτωση ακτογραμμών
+  // Load coastlines
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +47,7 @@ export default function RouteMapClient({
     return () => { cancelled = true; };
   }, []);
 
-  // Route & bounds
+  // Route geometry
   const latlngs = useMemo<LatLngExpression[]>(
     () => points.map(p => [p.lat, p.lon] as LatLngExpression),
     [points]
@@ -67,17 +64,28 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* Ναυτικό μπλε για GEBCO (τα πλακίδια του GEBCO είναι grayscale, οπότε τα χρωματίζουμε) */}
+      {/* GEBCO: αν ο browser το επιτρέπει, βάφουμε τα grayscale tiles σε ναυτικό μπλε */}
       <style jsx global>{`
         .leaflet-tile[src*="tiles.gebco.net"] {
           filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
         }
+        /* Water tint overlay (fallback + αισθητικό gradient), μόνο πάνω από τη θάλασσα
+           γιατί η στεριά (pane-land) είναι από πάνω */
+        .leaflet-pane.pane-water-tint {
+          pointer-events: none;
+        }
+        .leaflet-pane.pane-water-tint .water-tint {
+          position: absolute;
+          inset: 0;
+          /* απαλό κάθετο gradient θάλασσας */
+          background: linear-gradient(180deg, rgba(140,170,210,0.35) 0%, rgba(115,150,195,0.45) 100%);
+        }
       `}</style>
 
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* === Σειρά panes (κάτω → πάνω) === */}
+        {/* === ΠΑΤΩΜΑ → ΤΑΒΑΝΙ === */}
 
-        {/* 1) GEBCO bathymetry (θα πάρει το tint από το CSS πιο πάνω) */}
+        {/* 1) GEBCO (bathymetry) */}
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
           <TileLayer
             attribution="&copy; GEBCO"
@@ -86,7 +94,12 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* 2) Στεριά (λευκό fill, μαύρο περίγραμμα) — ΚΑΤΩ από τη διαδρομή */}
+        {/* 2) Water tint overlay — ανάμεσα σε GEBCO και στεριά */}
+        <Pane name="pane-water-tint" className="pane-water-tint" style={{ zIndex: 305 }}>
+          <div className="water-tint" />
+        </Pane>
+
+        {/* 3) Land (λευκό fill, μαύρο περίγραμμα) */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (
             <GeoJSON
@@ -102,16 +115,16 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* 3) Labels-only (Carto) — διακριτικά πάνω από land/GEBCO */}
+        {/* 4) Labels-only (Carto) */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.22} // ρύθμισε 0.16–0.30 ανάλογα με προτίμηση
+            opacity={0.22}
           />
         </Pane>
 
-        {/* 4) Seamarks */}
+        {/* 5) Seamarks */}
         <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
           <TileLayer
             attribution="&copy; OpenSeaMap"
@@ -120,7 +133,7 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* 5) Διαδρομή & markers — ΠΑΝΩ από όλα τα προηγούμενα */}
+        {/* 6) Route & markers — ΠΑΝΩ απ' όλα τα παραπάνω */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {latlngs.length >= 2 && (
             <Polyline
@@ -178,7 +191,7 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* Fit σε αλλαγές */}
+        {/* Fit */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
