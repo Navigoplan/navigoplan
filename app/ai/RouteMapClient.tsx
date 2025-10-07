@@ -34,10 +34,12 @@ const FitBounds = dynamic(async () => {
 export type Point = { name: string; lat: number; lon: number };
 
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
-const TRANSPARENT_1PX = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+const TRANSPARENT_1PX =
+  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
 export default function RouteMapClient({ points }: { points: Point[] }) {
   const [coast, setCoast] = useState<any | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     fetch("/data/coastlines-gr.geojson")
@@ -83,7 +85,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 2) Μπλε νερό (σταθερό overlay) */}
+        {/* 2) Νερό (σταθερό overlay) */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
           <Rectangle
             bounds={WORLD_BOUNDS}
@@ -92,7 +94,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 3) Στεριά (GeoJSON) */}
+        {/* 3) Στεριά */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (
             <GeoJSON
@@ -102,25 +104,35 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           )}
         </Pane>
 
-        {/* 4) Labels — κύριο “μεγαλωμένο” + fallback κανονικό */}
+        {/* 4) Labels — πιο μεγάλα + “outline” + fallback */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
-          {/* Μεγαλύτερα labels: zoomOffset -1, ΧΩΡΙΣ detectRetina για σταθερότητα */}
+          {/* Μεγάλα light labels */}
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
             tileSize={256}
-            zoomOffset={-1}
-            detectRetina={false}
-            opacity={0.40}
+            zoomOffset={-2}         // πιο μεγάλα
+            detectRetina={false}     // σταθερότητα
+            opacity={0.56}
             errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
-          {/* Fallback labels: normal zoom, με retina */}
+          {/* Ελαφρύ “outline” από dark labels */}
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png"
+            tileSize={256}
+            zoomOffset={-2}
+            detectRetina={false}
+            opacity={0.22}
+            errorTileUrl={TRANSPARENT_1PX}
+            pane="pane-labels"
+          />
+          {/* Fallback labels (normal zoom, retina) */}
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
             tileSize={256}
             detectRetina
-            opacity={0.16}
+            opacity={0.15}
             errorTileUrl={TRANSPARENT_1PX}
             pane="pane-labels"
           />
