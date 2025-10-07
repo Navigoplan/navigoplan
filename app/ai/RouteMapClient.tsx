@@ -35,16 +35,12 @@ const FitBounds = dynamic(async () => {
 export type Point = { name: string; lat: number; lon: number };
 
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
-const TRANSPARENT_1PX =
-  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+const TRANSPARENT_1PX = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-/* === Tunables (προσαρμόζεις αν θες) === */
-const CELL_DEG = 0.03;          // μικρότερο => πιο ακριβές routing (λίγο βαρύτερο)
-const GRID_MARGIN_DEG = 0.35;   // περιθώριο γύρω από κάθε σκέλος
-const NEAR_LAND_PENALTY = 0.35; // μικρό penalty κοντά σε στεριά
-const SNAP_MARGIN_DEG = 0.20;   // bbox για local snap waypoint σε νερό
-const CLEARANCE_CELLS = 2;      // «πάχος» αποκλεισμού γύρω από στεριά (>=2 = καθαρά δεν την ακουμπά)
-const ANIMATE_ANTS = true;      // εφέ “marching-ants” στο route
+/* === Tunables === */
+const CELL_DEG = 0.05;          // ~5–6 km κελί
+const GRID_MARGIN_DEG = 0.30;   // περιθώριο γύρω από bbox leg
+const NEAR_LAND_PENALTY = 0.25; // ελαφρύ κόστος κοντά σε στεριά
 
 /* ======== μικρές geo helpers ======== */
 function toRad(x: number) { return (x * Math.PI) / 180; }
@@ -56,11 +52,12 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/* ======== Polygon types & PIP (lon,lat) ======== */
-type Ring = [number, number][];   // [lon,lat]
-type Poly = Ring[];               // 1 πολύγωνο με τυχόν holes
-type CoastPoly = Poly;            // απλώς alias για καθαρότητα
+/* ======== Point in (Multi)Polygon (lon,lat) ======== */
+type Ring = [number, number][];
+type Poly = Ring[];
+type MultiPoly = Poly[];
 
+/** classic ray casting σε (lon,lat) */
 function pointInRing(pt: [number, number], ring: Ring): boolean {
   const [x, y] = pt;
   let inside = false;
@@ -71,15 +68,16 @@ function pointInRing(pt: [number, number], ring: Ring): boolean {
   }
   return inside;
 }
+/** even-odd με holes */
 function pointInPoly(pt: [number, number], poly: Poly): boolean {
   let inside = false;
   for (const ring of poly) if (pointInRing(pt, ring)) inside = !inside;
   return inside;
 }
 
-/* Συλλογή όλων των Πολυγώνων (Polygon/MultiPolygon) σε λίστα από Poly */
-function collectCoastPolys(geo: any): CoastPoly[] {
-  const polys: CoastPoly[] = [];
+/** συλλογή όλων των (Multi)Polys από GeoJSON, σε μορφή MultiPoly[] */
+function collectPolys(geo: any): MultiPoly[] {
+  const polys: MultiPoly[] = [];
   if (!geo) return polys;
 
   if (geo.type === "FeatureCollection") {
@@ -89,13 +87,13 @@ function collectCoastPolys(geo: any): CoastPoly[] {
       if (g.type === "Polygon") {
         polys.push(g.coordinates as Poly);
       } else if (g.type === "MultiPolygon") {
-        for (const poly of (g.coordinates as Poly[])) polys.push(poly);
+        for (const poly of (g.coordinates as MultiPoly)) polys.push(poly);
       }
     }
   } else if (geo.type === "Polygon") {
     polys.push(geo.coordinates as Poly);
   } else if (geo.type === "MultiPolygon") {
-    for (const poly of (geo.coordinates as Poly[])) polys.push(poly);
+    for (const poly of (geo.coordinates as MultiPoly)) polys.push(poly);
   }
   return polys;
 }
@@ -103,7 +101,11 @@ function collectCoastPolys(geo: any): CoastPoly[] {
 /* ======== Water-grid router (A*) ======== */
 type GridNode = { r: number; c: number; lat: number; lon: number; walkable: boolean; nearLand: boolean };
 
-function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxLon: number, coastPolys: CoastPoly[]) {
+function buildGridForLeg(a: Point, b: Point, coastPolys: MultiPoly[]) {
+  const minLat = Math.min(a.lat, b.lat) - GRID_MARGIN_DEG;
+  const maxLat = Math.max(a.lat, b.lat) + GRID_MARGIN_DEG;
+  const minLon = Math.min(a.lon, b.lon) - GRID_MARGIN_DEG;
+  const maxLon = Math.max(a.lon, b.lon) + GRID_MARGIN_DEG;
   const rows = Math.max(8, Math.ceil((maxLat - minLat) / CELL_DEG));
   const cols = Math.max(8, Math.ceil((maxLon - minLon) / CELL_DEG));
 
@@ -116,13 +118,12 @@ function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxL
       const pt: [number, number] = [lon, lat]; // (lon,lat)
       let onLand = false;
       for (const poly of coastPolys) {
-        if (pointInPoly(pt, poly)) { onLand = true; break; }
+        if (pointInPoly(pt, poly as Poly)) { onLand = true; break; }
       }
       grid[r][c] = { r, c, lat, lon, walkable: !onLand, nearLand: false };
     }
   }
 
-  // μαρκάρισμα κοντά στη στεριά
   const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -138,64 +139,39 @@ function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxL
     }
   }
 
-  // «ζώνη ασφαλείας» γύρω από στεριές
-  if (CLEARANCE_CELLS > 0) {
-    const toBlock: [number, number][] = [];
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      if (!grid[r][c].walkable) {
-        for (let dr = -CLEARANCE_CELLS; dr <= CLEARANCE_CELLS; dr++) {
-          for (let dc = -CLEARANCE_CELLS; dc <= CLEARANCE_CELLS; dc++) {
-            const rr = r + dr, cc = c + dc;
-            if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-            toBlock.push([rr, cc]);
-          }
-        }
-      }
-    }
-    for (const [rr, cc] of toBlock) grid[rr][cc].walkable = false;
-  }
-
   function nodeFor(lat: number, lon: number) {
     const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
     const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
     return grid[r][c];
   }
-  return { grid, nodeFor };
-}
 
-function buildGridForLeg(a: Point, b: Point, coastPolys: CoastPoly[]) {
-  const minLat = Math.min(a.lat, b.lat) - GRID_MARGIN_DEG;
-  const maxLat = Math.max(a.lat, b.lat) + GRID_MARGIN_DEG;
-  const minLon = Math.min(a.lon, b.lon) - GRID_MARGIN_DEG;
-  const maxLon = Math.max(a.lon, b.lon) + GRID_MARGIN_DEG;
-  const { grid, nodeFor } = buildGridForBounds(minLat, maxLat, minLon, maxLon, coastPolys);
   return { grid, start: nodeFor(a.lat, a.lon), goal: nodeFor(b.lat, b.lon) };
 }
 
-function nearestWaterNode(grid: GridNode[][], start: GridNode) {
-  if (start.walkable) return start;
-  const q: GridNode[] = [start];
-  const seen = new Set<string>([`${start.r},${start.c}`]);
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
-  while (q.length) {
-    const cur = q.shift()!;
-    for (const [dr, dc] of dirs) {
-      const rr = cur.r + dr, cc = cur.c + dc;
-      if (rr < 0 || cc < 0 || rr >= grid.length || cc >= grid[0].length) continue;
-      const nb = grid[rr][cc];
-      const key = `${rr},${cc}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (nb.walkable) return nb;
-      q.push(nb);
-    }
-  }
-  return start;
-}
-
 function aStarWater(grid: GridNode[][], start: GridNode, goal: GridNode) {
-  start = nearestWaterNode(grid, start);
-  goal  = nearestWaterNode(grid, goal);
+  function nearestWater(node: GridNode): GridNode {
+    if (node.walkable) return node;
+    const q: GridNode[] = [node];
+    const seen = new Set<string>([`${node.r},${node.c}`]);
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+    while (q.length) {
+      const cur = q.shift()!;
+      for (const [dr, dc] of dirs) {
+        const rr = cur.r + dr, cc = cur.c + dc;
+        if (rr < 0 || cc < 0 || rr >= grid.length || cc >= grid[0].length) continue;
+        const nb = grid[rr][cc];
+        const key = `${rr},${cc}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (nb.walkable) return nb;
+        q.push(nb);
+      }
+    }
+    return node;
+  }
+
+  start = nearestWater(start);
+  goal  = nearestWater(goal);
 
   const key = (n: GridNode) => `${n.r},${n.c}`;
   const open: GridNode[] = [start];
@@ -242,7 +218,7 @@ function aStarWater(grid: GridNode[][], start: GridNode, goal: GridNode) {
   return null;
 }
 
-/* ======== RDP simplify (κρατά ΠΑΝΤΑ endpoints) ======== */
+/* ======== RDP simplify ======== */
 function perpendicularDistance(p: [number, number], a: [number, number], b: [number, number]) {
   const x0 = p[1], y0 = p[0];
   const x1 = a[1], y1 = a[0];
@@ -251,7 +227,7 @@ function perpendicularDistance(p: [number, number], a: [number, number], b: [num
   const den = Math.sqrt((y2 - y1)**2 + (x2 - x1)**2) + 1e-9;
   return num / den;
 }
-function simplifyRDP(path: [number, number][], epsilonDeg = 0.008): [number, number][] {
+function simplifyRDP(path: [number, number][], epsilonDeg = 0.01): [number, number][] {
   if (path.length <= 2) return path;
   let dmax = 0, index = 0;
   const end = path.length - 1;
@@ -266,6 +242,29 @@ function simplifyRDP(path: [number, number][], epsilonDeg = 0.008): [number, num
   } else {
     return [path[0], path[end]];
   }
+}
+
+/* ======== project point πάνω σε polyline (για να “κάτσουν” οι τελείες) ======== */
+function closestPointOnSegment(p: [number, number], a: [number, number], b: [number, number]): [number, number] {
+  // απλή προβολή σε επίπεδο (deg), αρκετή για μικρές αποστάσεις
+  const px = p[1], py = p[0];
+  const ax = a[1], ay = a[0];
+  const bx = b[1], by = b[0];
+  const abx = bx - ax, aby = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax)*abx + (py - ay)*aby) / (abx*abx + aby*aby + 1e-12)));
+  return [ay + t * aby, ax + t * abx];
+}
+function nearestOnPath(path: [number, number][], p: [number, number]): [number, number] {
+  if (path.length === 0) return p;
+  if (path.length === 1) return path[0];
+  let best: [number, number] = path[0];
+  let bestD = Infinity;
+  for (let i = 0; i < path.length - 1; i++) {
+    const q = closestPointOnSegment(p, path[i], path[i+1]);
+    const d = haversineMeters(p[0], p[1], q[0], q[1]);
+    if (d < bestD) { bestD = d; best = q; }
+  }
+  return best;
 }
 
 /* =======================================================
@@ -283,72 +282,69 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
     return () => { cancelled = true; };
   }, []);
 
-  const coastPolys = useMemo(() => collectCoastPolys(coast), [coast]);
-
-  /* 1) Snap ΟΛΑ τα waypoints στο κοντινότερο νερό
-     ώστε οι τελείες και οι γραμμές να συμπίπτουν */
-  const snappedPoints = useMemo<Point[]>(() => {
-    if (!coastPolys.length) return points;
-    return points.map((p) => {
-      const minLat = p.lat - SNAP_MARGIN_DEG;
-      const maxLat = p.lat + SNAP_MARGIN_DEG;
-      const minLon = p.lon - SNAP_MARGIN_DEG;
-      const maxLon = p.lon + SNAP_MARGIN_DEG;
-      const { grid, nodeFor } = buildGridForBounds(minLat, maxLat, minLon, maxLon, coastPolys);
-      const node = nearestWaterNode(grid, nodeFor(p.lat, p.lon));
-      return { name: p.name, lat: node.lat, lon: node.lon };
-    });
-  }, [points, coastPolys]);
-
-  /* 2) Υπολόγισε διαδρομή ΑΝΑ ΣΚΕΛΟΣ (1→2, 2→3, …) */
-  const legs = useMemo<LatLngExpression[][]>(() => {
-    if (!coastPolys.length || snappedPoints.length < 2) {
-      return [];
+  /* ===== Υπολογισμός διαδρομής που αποφεύγει στεριά ===== */
+  const waterLatLngs = useMemo<LatLngExpression[]>(() => {
+    if (!coast || points.length < 2) {
+      return points.map(p => [p.lat, p.lon] as LatLngExpression);
     }
-    const out: LatLngExpression[][] = [];
-    for (let i = 0; i < snappedPoints.length - 1; i++) {
-      const a = snappedPoints[i], b = snappedPoints[i + 1];
+
+    const coastPolys = collectPolys(coast);
+    const result: [number, number][] = [];
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
       const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
       const path = aStarWater(grid, start, goal);
 
       if (!path) {
-        out.push([[a.lat, a.lon], [b.lat, b.lon]] as LatLngExpression[]);
+        // fallback: ευθεία
+        if (result.length === 0) result.push([a.lat, a.lon]);
+        result.push([b.lat, b.lon]);
         continue;
       }
 
       const seg: [number, number][] = path.map(n => [n.lat, n.lon]);
-      // «κάρφωσε» στα endpoints για να περνά από τις τελείες
-      seg[0] = [a.lat, a.lon];
-      seg[seg.length - 1] = [b.lat, b.lon];
-
-      out.push(simplifyRDP(seg, 0.008) as LatLngExpression[]);
+      const simplified = simplifyRDP(seg, 0.008); // ~0.8km ανοχή
+      if (result.length === 0) result.push(...simplified);
+      else result.push(...simplified.slice(1));
     }
-    return out;
-  }, [snappedPoints, coastPolys]);
 
-  /* Όλα τα σημεία από όλα τα σκέλη για bounds */
-  const allCoords: LatLngExpression[] = useMemo(() => (
-    legs.flat()
-  ), [legs]);
+    return result as LatLngExpression[];
+  }, [coast, points]);
 
+  /* ===== Markers: τα κουμπώνουμε στη γραμμή ===== */
+  const snappedMarkers = useMemo(() => {
+    const path = waterLatLngs.map(ll => ll as [number, number]);
+    if (path.length === 0) {
+      return {
+        start: points[0] ? [points[0].lat, points[0].lon] as [number, number] : null,
+        mids: [] as [number, number][],
+        end: points.at(-1) ? [points.at(-1)!.lat, points.at(-1)!.lon] as [number, number] : null
+      };
+    }
+    const start = path[0];
+    const end   = path[path.length - 1];
+    const mids  = points.slice(1, -1).map(p => nearestOnPath(path, [p.lat, p.lon]));
+    return { start, mids, end };
+  }, [waterLatLngs, points]);
+
+  /* ===== bounds/center ===== */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
-    if (allCoords.length < 2) return null;
+    if (waterLatLngs.length < 2) return null;
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const L = require("leaflet") as typeof import("leaflet");
-    return L.latLngBounds(allCoords as any).pad(0.08);
-  }, [allCoords]);
+    return L.latLngBounds(waterLatLngs as any).pad(0.08);
+  }, [waterLatLngs]);
 
   const center: LatLngExpression =
-    (allCoords[0] as LatLngExpression) ?? ([37.97, 23.72] as LatLngExpression);
+    (waterLatLngs[0] as LatLngExpression) ?? ([37.97, 23.72] as LatLngExpression);
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
       <style jsx global>{`
-        /* GEBCO tint */
         .leaflet-tile[src*="tiles.gebco.net"] {
           filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
         }
-        /* labels πιο καθαρά */
         .leaflet-pane.pane-labels img.leaflet-tile {
           image-rendering: -webkit-optimize-contrast;
           image-rendering: crisp-edges;
@@ -357,14 +353,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
         .leaflet-pane.pane-labels img[src*="voyager_labels_over"]{
           filter: brightness(0.88) contrast(1.45);
         }
-        /* marching-ants εφέ για τα σκέλη (αν ANIMATE_ANTS=true) */
-        ${ANIMATE_ANTS ? `
-        .route-leg {
-          stroke-dasharray: 6 8;
-          animation: ants 6s linear infinite;
-        }
-        @keyframes ants { to { stroke-dashoffset: -200; } }
-        ` : ``}
       `}</style>
 
       <MapContainer
@@ -403,7 +391,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           )}
         </Pane>
 
-        {/* Labels */}
+        {/* Labels: βασικό + outline + extra για περισσότερα τοπωνύμια */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
@@ -444,64 +432,62 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* route ανά σκέλος + markers */}
+        {/* route + markers (πάνω από όλα) */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
-          {legs.map((segment, idx) => (
+          {waterLatLngs.length >= 2 && (
             <Polyline
-              key={`leg-${idx}`}
               pane="pane-route"
-              positions={segment}
+              positions={waterLatLngs}
               pathOptions={{
                 color: "#0b1220",
                 weight: 3,
                 opacity: 0.9,
-                dashArray: ANIMATE_ANTS ? undefined : "6 8",
+                dashArray: "6 8",
                 lineJoin: "round",
                 lineCap: "round",
               }}
-              className={ANIMATE_ANTS ? "route-leg" : undefined}
             />
-          ))}
+          )}
 
-          {/* START marker */}
-          {snappedPoints[0] && (
+          {/* START πάνω στο πρώτο σημείο της polyline */}
+          {snappedMarkers.start && (
             <CircleMarker
               pane="pane-route"
-              center={[snappedPoints[0].lat, snappedPoints[0].lon] as LatLngExpression}
+              center={snappedMarkers.start as LatLngExpression}
               radius={8}
               pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
-                Start: {snappedPoints[0].name}
+                Start: {points[0]?.name}
               </Tooltip>
             </CircleMarker>
           )}
 
-          {/* ενδιάμεσα */}
-          {snappedPoints.slice(1, -1).map((p, i) => (
+          {/* ενδιάμεσα: πάνω στην πιο κοντινή θέση της polyline */}
+          {snappedMarkers.mids.map((xy, i) => (
             <CircleMarker
-              key={`${p.name}-${i}`}
+              key={`${points[i+1]?.name}-${i}`}
               pane="pane-route"
-              center={[p.lat, p.lon] as LatLngExpression}
+              center={xy as LatLngExpression}
               radius={5}
               pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}
             >
               <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-                {p.name}
+                {points[i+1]?.name}
               </Tooltip>
             </CircleMarker>
           ))}
 
-          {/* END marker */}
-          {snappedPoints.length > 1 && (
+          {/* END πάνω στο τελευταίο σημείο της polyline */}
+          {snappedMarkers.end && (
             <CircleMarker
               pane="pane-route"
-              center={[snappedPoints.at(-1)!.lat, snappedPoints.at(-1)!.lon] as LatLngExpression}
+              center={snappedMarkers.end as LatLngExpression}
               radius={8}
               pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
-                End: {snappedPoints.at(-1)!.name}
+                End: {points.at(-1)?.name}
               </Tooltip>
             </CircleMarker>
           )}
