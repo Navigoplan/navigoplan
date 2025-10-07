@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
-// SSR-safe react-leaflet δυναμικές εισαγωγές
+// SSR-safe react-leaflet
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
 const TileLayer     = dynamic(() => import("react-leaflet").then(m => m.TileLayer),     { ssr: false });
 const Polyline      = dynamic(() => import("react-leaflet").then(m => m.Polyline),      { ssr: false });
@@ -14,7 +14,7 @@ const GeoJSON       = dynamic(() => import("react-leaflet").then(m => m.GeoJSON)
 const Pane          = dynamic(() => import("react-leaflet").then(m => m.Pane),          { ssr: false });
 const Rectangle     = dynamic(() => import("react-leaflet").then(m => m.Rectangle),     { ssr: false });
 
-// Fit-bounds helper (χωρίς SSR)
+// Fit-bounds helper
 const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -33,11 +33,9 @@ const FitBounds = dynamic(async () => {
 
 export type Point = { name: string; lat: number; lon: number };
 
-// Παγκόσμια όρια για overlay θάλασσας
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 
 export default function RouteMapClient({ points }: { points: Point[] }) {
-  // Φόρτωση ακτογραμμών
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +46,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Route + bounds
   const latlngs = useMemo<LatLngExpression[]>(
     () => points.map(p => [p.lat, p.lon] as LatLngExpression),
     [points]
@@ -65,12 +62,10 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* Ελαφρύ tint στα GEBCO tiles (αν ο browser το επιτρέπει) */}
       <style jsx global>{`
         .leaflet-tile[src*="tiles.gebco.net"] {
           filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
         }
-        /* Κάνει τα labels λίγο πιο “κοφτερά” σε μη-retina */
         .leaflet-pane.pane-labels img.leaflet-tile {
           image-rendering: -webkit-optimize-contrast;
           image-rendering: crisp-edges;
@@ -78,9 +73,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
       `}</style>
 
       <MapContainer center={center} zoom={6} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        {/* ===== Σειρά layer: Πάτωμα → Ταβάνι ===== */}
-
-        {/* 1) GEBCO (bathymetry) */}
+        {/* 1) GEBCO */}
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
           <TileLayer
             attribution="&copy; GEBCO"
@@ -89,21 +82,21 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 2) Water tint overlay (σίγουρο μπλε). Καλύπτεται από τη στεριά. */}
+        {/* 2) Μπλε νερό */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
           <Rectangle
             bounds={WORLD_BOUNDS}
             pathOptions={{
               color: "transparent",
               weight: 0,
-              fillColor: "#7fa8d8",   // μπλε
-              fillOpacity: 0.35,      // 0.25–0.45 ανάλογα με προτίμηση
+              fillColor: "#7fa8d8",
+              fillOpacity: 0.35,
             }}
             interactive={false}
           />
         </Pane>
 
-        {/* 3) Στεριά (λευκό fill, μαύρο περίγραμμα) */}
+        {/* 3) Στεριά */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (
             <GeoJSON
@@ -119,21 +112,19 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           )}
         </Pane>
 
-        {/* 4) Labels (Carto) — πιο μεγάλα/γερά: zoomOffset -1 + retina + διπλό layer */}
+        {/* 4) Labels (χωρίς zoomOffset για να μην “χάνονται”) */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.34}
+            opacity={0.36}     // λίγο πιο έντονα
             detectRetina
-            zoomOffset={-1}     // ζητά χαμηλότερο zoom -> εμφανίζονται μεγαλύτερα
             pane="pane-labels"
           />
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png"
-            opacity={0.14}
+            opacity={0.14}     // απαλό boost
             detectRetina
-            zoomOffset={-1}
             pane="pane-labels"
           />
         </Pane>
@@ -147,7 +138,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           />
         </Pane>
 
-        {/* 6) Route & markers — πάνω απ' όλα */}
+        {/* 6) Route & markers (πάνω απ’ όλα) */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {latlngs.length >= 2 && (
             <Polyline
@@ -205,7 +196,6 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           )}
         </Pane>
 
-        {/* Fit στα όρια της διαδρομής */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
