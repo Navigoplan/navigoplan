@@ -6,10 +6,8 @@ import type React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
 
-// ✅ canonical ports hook από το dataset σου
 import { usePorts } from "../../lib/ports";
 
-// αποτρέπει prerender/SSG της σελίδας /ai (απαιτείται στο Vercel)
 export const dynamic = "force-dynamic";
 
 /* ========= Types ========= */
@@ -27,15 +25,14 @@ type RegionKey =
   | "Crete";
 type PlannerMode = "Region" | "Custom";
 
-// Ελάχιστος τύπος συντεταγμένων για χρήση στον planner/χάρτη
 type PortCoord = { id?: string; name: string; lat: number; lon: number; aliases?: string[] };
 
-/* ========= Βοηθητικά ========= */
+/* ========= Helpers ========= */
 function normalize(s: string) {
   return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 function haversineNM(a: PortCoord, b: PortCoord) {
-  const R = 3440.065; // nm
+  const R = 3440.065;
   const toRad = (x: number) => (x * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLon = toRad(b.lon - a.lon);
@@ -45,7 +42,7 @@ function haversineNM(a: PortCoord, b: PortCoord) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 function legStats(nm: number, yacht: Yacht) {
-  const hours = (nm / yacht.speed) * 1.15; // +15% buffer
+  const hours = (nm / yacht.speed) * 1.15;
   const fuelL = yacht.type === "Motor" ? hours * yacht.lph : 0;
   return { hours: +hours.toFixed(2), fuelL: Math.round(fuelL) };
 }
@@ -55,7 +52,7 @@ function addDaysISO(iso: string, plus: number) {
   return d.toISOString().slice(0, 10);
 }
 
-/* ========= Region rings (ονόματα όπως στο dataset) ========= */
+/* ========= Regions (by canonical dataset names) ========= */
 type RegionRing = Record<RegionKey, string[]>;
 const BANK: RegionRing = {
   Saronic: [
@@ -179,24 +176,6 @@ function AutoCompleteInput({
   );
 }
 
-/* ========= Map Adapter ========= */
-function hashPoints(points: { lat: number; lon: number }[]) {
-  return points.map((p) => `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`).join("|");
-}
-function MapAdapter({ points }: { points: { name: string; lat: number; lon: number }[] }) {
-  if (!points.length) return null;
-  const key = useMemo(() => hashPoints(points), [points]);
-  return (
-    <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
-      <RouteMapClient
-        key={key}
-        points={points}
-        // viaCanal={viaCanal} // αν το υποστηρίζει ο RouteMapClient
-      />
-    </div>
-  );
-}
-
 /* ========= Query helpers ========= */
 function encodeArr(arr: string[]) { return arr.map((s) => encodeURIComponent(s)).join(","); }
 function decodeArr(s: string | null): string[] { if (!s) return []; return s.split(",").map((x) => decodeURIComponent(x)).filter(Boolean); }
@@ -276,7 +255,7 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
   return { mode, autogen };
 }
 
-/* ========= Builders που χρησιμοποιούν το hook findPort() ========= */
+/* ========= Route builders ========= */
 function nearestIndexInRing(
   ring: string[],
   target: PortCoord,
@@ -364,22 +343,24 @@ function formatHoursHM(hours: number) {
   return `${h}h ${m}m`;
 }
 
-/* ========= Κύριο component ========= */
+/* ========= Map helpers ========= */
+function hashPoints(points: { lat: number; lon: number }[]) {
+  return points.map((p) => `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`).join("|");
+}
+
+/* ========= Main ========= */
 function AIPlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // ⛳️ dataset hook – ΜΟΡΦΗ: { ready, error, ports, options, findPort }
-  const { ready, error, options, findPort: findPortRaw } = usePorts();
+  const { ready, error, ports, options, findPort: findPortRaw } = usePorts();
 
-  // wrapper για να ταιριάζει με τον δικό μας τύπο
   const findPort = (input: string): PortCoord | null => {
     if (!input) return null;
     const p = findPortRaw(input);
     return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
   };
 
-  // Επιλογές για τα inputs (ήδη περιλαμβάνουν aliases από το hook σου)
   const PORT_OPTIONS = useMemo(() => {
     const arr = Array.isArray(options) ? options.slice() : [];
     arr.sort((a: string, b: string) => a.localeCompare(b));
@@ -429,7 +410,12 @@ function AIPlannerInner() {
     });
   }, [customDays]);
 
-  // Φόρτωση από URL ΜΟΝΟ όταν το dataset είναι έτοιμο
+  // Map pick mode
+  type MapPick = "Start" | "End" | "Via" | "Custom";
+  const [mapPickMode, setMapPickMode] = useState<MapPick>("Via");
+  const [customPickIndex, setCustomPickIndex] = useState<number>(1); // Day 1..customDays
+
+  // Load from URL (μετά το ready)
   useEffect(() => {
     if (!searchParams || !ready) return;
     const { autogen } = loadStateFromQuery(searchParams, {
@@ -454,7 +440,7 @@ function AIPlannerInner() {
 
   function handleGenerate(e?: React.FormEvent) {
     e?.preventDefault?.();
-    if (!ready) { alert("Φόρτωση θυλάκων/μαρινών… δοκίμασε ξανά σε λίγο."); return; }
+    if (!ready) { alert("Φορτώνω ports… δοκίμασε ξανά σε λίγο."); return; }
 
     let namesSeq: string[] | null = null;
 
@@ -464,7 +450,7 @@ function AIPlannerInner() {
     } else {
       if (!findPort(customStart)) { alert("Επίλεξε έγκυρο Start (custom)."); return; }
       const seq = buildRouteCustomByDays(customStart, customDayStops, findPort);
-      if (!seq) { alert("Συμπλήρωσε έγκυρο προορισμό για ΚΑΘΕ ημέρα (χρησιμοποίησε τις προτάσεις)."); return; }
+      if (!seq) { alert("Συμπλήρωσε έγκυρους προορισμούς για κάθε ημέρα."); return; }
       namesSeq = seq;
     }
 
@@ -484,22 +470,21 @@ function AIPlannerInner() {
       const date = startDate ? addDaysISO(startDate, d) : "";
       const leg = legs[d];
       const notes = [
-        mode === "Region" && region === "Cyclades"   ? "Meltemi possible; προτίμησε πρωινές μετακινήσεις." : "",
+        mode === "Region" && region === "Cyclades"   ? "Meltemi possible· προτίμησε πρωινές μετακινήσεις." : "",
         mode === "Region" && region === "Saronic"    ? "Προστατευμένα νερά· ιδανικό για οικογένειες." : "",
         mode === "Region" && region === "Ionian"     ? "Ήρεμα κανάλια & πράσινες ακτές· εξαιρετικά αγκυροβόλια." : "",
         mode === "Region" && region === "Dodecanese" ? "Ιστορικά λιμάνια· πιο μεγάλα ανοικτά σκέλη." : "",
-        mode === "Region" && region === "Sporades"   ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά· πολύ καθαρά νερά." : "",
-        mode === "Region" && region === "NorthAegean"? "Αυθεντικά λιμάνια (incl. Χαλκιδική)· μεγαλύτερα κενά ενδιάμεσα." : "",
+        mode === "Region" && region === "Sporades"   ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά." : "",
+        mode === "Region" && region === "NorthAegean"? "Αυθεντικά λιμάνια (incl. Χαλκιδική)." : "",
         mode === "Region" && region === "Crete"      ? "Μεγαλύτερα σκέλη· οργάνωσε καύσιμα & θέσεις." : "",
-        prefs.includes("nightlife") ? "Σκέψου άφιξη αργά για βραδινό/μπαρ." : "",
-        prefs.includes("family")    ? "Προτίμησε αμμουδιές & μικρότερα σκέλη." : "",
+        prefs.includes("nightlife") ? "Άφιξη αργά για βραδινό/μπαρ." : "",
+        prefs.includes("family")    ? "Αμμουδιές & μικρότερα σκέλη." : "",
         prefs.includes("gastronomy")? "Κράτηση σε παραθαλάσσια ταβέρνα." : "",
       ].filter(Boolean).join(" ");
       cards.push({ day: d + 1, date, leg, notes });
     }
     setPlan(cards);
 
-    // share URL
     const qs = buildQueryFromState({
       mode, startDate, yachtType, speed, lph,
       start, end, days, regionMode, vias, viaCanal,
@@ -549,6 +534,67 @@ function AIPlannerInner() {
     for (const d of plan) if (d.leg?.to) namesSeq.push(d.leg.to);
     return namesSeq.map((n) => findPort(n)).filter(Boolean) as PortCoord[];
   }, [plan]);
+
+  // 🔵 Markers από το dataset
+  const markers: { name: string; lat: number; lon: number }[] = useMemo(() => {
+    if (!ready || !ports?.length) return [];
+    return ports.map((p: any) => ({ name: p.name, lat: p.lat, lon: p.lon }));
+  }, [ready, ports]);
+
+  // ⭐ Active (για highlight)
+  const activeNames = useMemo(() => {
+    const set = new Set<string>();
+    if (mode === "Region") {
+      if (start) set.add(start);
+      effectiveVias.forEach(v => set.add(v));
+      if (end) set.add(end);
+    } else {
+      if (customStart) set.add(customStart);
+      customDayStops.forEach(v => v && set.add(v));
+    }
+    return Array.from(set);
+  }, [mode, start, end, effectiveVias, customStart, customDayStops]);
+
+  // 🖱️ Click σε marker → γεμίζει Start / End / Via / Custom Day
+  function handleMarkerClick(portName: string) {
+    if (mode === "Region") {
+      if (mapPickMode === "Start") {
+        setStart(portName);
+        return;
+      }
+      if (mapPickMode === "End") {
+        setEnd(portName);
+        return;
+      }
+      // Via: βάζουμε στο πρώτο κενό ή κάνουμε append
+      const idx = vias.findIndex(v => !v);
+      if (mapPickMode === "Via") {
+        if (idx >= 0) setViaAt(idx, portName);
+        else setVias(v => [...v, portName]);
+        return;
+      }
+    } else {
+      // Custom
+      if (mapPickMode === "Start") { setCustomStart(portName); return; }
+      if (mapPickMode === "Custom") {
+        const i = Math.max(1, Math.min(customDays, customPickIndex)) - 1; // day index
+        setCustomStopAt(i, portName);
+        return;
+      }
+      if (mapPickMode === "End") {
+        // για Custom δεν υπάρχει "end" ξεχωριστά — οπότε το βάζουμε στην τελευταία ημέρα
+        const i = customDays - 1;
+        setCustomStopAt(i, portName);
+        return;
+      }
+      if (mapPickMode === "Via") {
+        // βρες πρώτο κενό day stop
+        const i = customDayStops.findIndex(x => !x);
+        setCustomStopAt(i >= 0 ? i : customDayStops.length - 1, portName);
+        return;
+      }
+    }
+  }
 
   return (
     <div className="bg-white text-slate-900">
@@ -676,10 +722,50 @@ function AIPlannerInner() {
               </div>
             </div>
 
-            {/* MAP */}
+            {/* MAP + Map Pick Mode */}
+            <div className="no-print mb-2 flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-brand-navy">Map Pick Mode:</span>
+              <label className="text-sm flex items-center gap-1">
+                <input type="radio" name="pick" checked={mapPickMode==="Start"} onChange={() => setMapPickMode("Start")} />
+                Start
+              </label>
+              <label className="text-sm flex items-center gap-1">
+                <input type="radio" name="pick" checked={mapPickMode==="End"} onChange={() => setMapPickMode("End")} />
+                End
+              </label>
+              <label className="text-sm flex items-center gap-1">
+                <input type="radio" name="pick" checked={mapPickMode==="Via"} onChange={() => setMapPickMode("Via")} />
+                {mode==="Region" ? "Via (Region)" : "Next Stop (Custom)"}
+              </label>
+              {mode === "Custom" && (
+                <>
+                  <label className="text-sm flex items-center gap-1">
+                    <input type="radio" name="pick" checked={mapPickMode==="Custom"} onChange={() => setMapPickMode("Custom")} />
+                    Set Day:
+                  </label>
+                  <select
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                    value={customPickIndex}
+                    onChange={(e) => setCustomPickIndex(parseInt(e.target.value, 10))}
+                  >
+                    {Array.from({ length: customDays }, (_, i) => i + 1).map(d => (
+                      <option key={d} value={d}>Day {d}</option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </div>
+
             {mapPoints.length >= 1 && (
               <div className="no-print mb-6">
-                <MapAdapter points={mapPoints} />
+                <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
+                  <RouteMapClient
+                    points={mapPoints}
+                    markers={markers}
+                    activeNames={activeNames}
+                    onMarkerClick={handleMarkerClick}
+                  />
+                </div>
                 <div className="mt-2 text-xs text-slate-500">
                   * Map preview για σχεδιασμό. Η διακεκομμένη γραμμή είναι εκτίμηση, όχι ναυτικός διάδρομος.
                 </div>
@@ -734,7 +820,6 @@ function AIPlannerInner() {
   );
 }
 
-/* ========= Page wrapper ========= */
 export default function AIPlannerPage() {
   return (
     <Suspense fallback={null}>

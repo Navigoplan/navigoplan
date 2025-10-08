@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import L from "leaflet";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
 /* ---- react-leaflet dynamic (no SSR) ---- */
@@ -13,6 +14,8 @@ const Tooltip      = dynamic(() => import("react-leaflet").then(m => m.Tooltip),
 const GeoJSON      = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),      { ssr: false });
 const Pane         = dynamic(() => import("react-leaflet").then(m => m.Pane),         { ssr: false });
 const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle),    { ssr: false });
+const Marker       = dynamic(() => import("react-leaflet").then(m => m.Marker),       { ssr: false });
+const Popup        = dynamic(() => import("react-leaflet").then(m => m.Popup),        { ssr: false });
 
 /* auto fit-bounds */
 const FitBounds = dynamic(async () => {
@@ -243,8 +246,32 @@ function simplifyRDP(path: [number, number][], epsilonDeg = SIMPLIFY_EPS): [numb
   }
 }
 
+/* ======= Icons για dataset markers ======= */
+const makeIcon = (active: boolean) =>
+  L.divIcon({
+    className: "np-marker",
+    html: `<div style="
+      width:12px;height:12px;border-radius:50%;
+      border:2px solid ${active ? '#0f172a' : '#64748b'};
+      background:${active ? '#facc15' : 'white'};
+      box-shadow:0 1px 3px rgba(0,0,0,.3);
+    "></div>`,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+
 /* ===================================================== */
-export default function RouteMapClient({ points }: { points: Point[] }) {
+export default function RouteMapClient({
+  points,
+  markers,
+  activeNames,
+  onMarkerClick,
+}: {
+  points: Point[];
+  markers?: Point[];
+  activeNames?: string[];
+  onMarkerClick?: (name: string) => void;
+}) {
   const [coast, setCoast] = useState<any | null>(null);
 
   useEffect(() => {
@@ -299,7 +326,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
     return joined as LatLngExpression[];
   }, [points, coastPolys]);
 
-  /* markers: ακριβώς στα input points */
+  /* markers: ακριβώς στα input points (start/mid/end) */
   const markerStart = points[0] ?? null;
   const markerMids  = points.slice(1, -1);
   const markerEnd   = points.at(-1) ?? null;
@@ -307,11 +334,13 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
   /* bounds/center */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if (waterLatLngs.length < 2) return null;
-    const L = require("leaflet") as typeof import("leaflet");
-    return L.latLngBounds(waterLatLngs as any).pad(0.08);
+    const Lm = require("leaflet") as typeof import("leaflet");
+    return Lm.latLngBounds(waterLatLngs as any).pad(0.08);
   }, [waterLatLngs]);
 
   const center: LatLngExpression = (waterLatLngs[0] as LatLngExpression) ?? ([37.97, 23.72] as LatLngExpression);
+
+  const activeSet = useMemo(() => new Set((activeNames ?? []).map(s => s.toLowerCase())), [activeNames]);
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
@@ -398,7 +427,7 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
-        {/* route + markers */}
+        {/* route + markers (για τα waypoints του πλάνου) */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline
@@ -454,6 +483,37 @@ export default function RouteMapClient({ points }: { points: Point[] }) {
               </Tooltip>
             </CircleMarker>
           )}
+        </Pane>
+
+        {/* 🔵 DATASET PORT MARKERS (click → planner) */}
+        <Pane name="pane-ports" style={{ zIndex: 470 }}>
+          {(markers ?? []).map((m) => {
+            const active = activeSet.has(m.name.toLowerCase());
+            return (
+              <Marker
+                key={`${m.name}-${m.lat.toFixed(4)}-${m.lon.toFixed(4)}`}
+                position={[m.lat, m.lon]}
+                pane="pane-ports"
+                icon={makeIcon(active)}
+                eventHandlers={
+                  onMarkerClick
+                    ? { click: () => onMarkerClick(m.name) }
+                    : undefined
+                }
+              >
+                <Popup>
+                  <div className="text-sm">
+                    <div className="font-semibold text-brand-navy">{m.name}</div>
+                    {onMarkerClick && (
+                      <div className="mt-1 text-xs text-slate-600">
+                        Click = επιλογή στον planner
+                      </div>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </Pane>
 
         {bounds && <FitBounds bounds={bounds} />}
