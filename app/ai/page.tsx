@@ -4,10 +4,9 @@ import RouteMapClient from "./RouteMapClient";
 import { Suspense, useMemo, useState, useEffect, useId } from "react";
 import type React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// ✅ canonical ports hook (dataset + aliases + search)
+// ✅ canonical ports hook από το dataset σου
 import { usePorts } from "../../lib/ports";
 
 // αποτρέπει prerender/SSG της σελίδας /ai (απαιτείται στο Vercel)
@@ -28,14 +27,13 @@ type RegionKey =
   | "Crete";
 type PlannerMode = "Region" | "Custom";
 
-// minimal Port type expected from lib/ports.ts
+// Ελάχιστος τύπος συντεταγμένων για χρήση στον planner/χάρτη
 type PortCoord = { id?: string; name: string; lat: number; lon: number; aliases?: string[] };
 
-/* ========= Helpers (dataset-aware) ========= */
+/* ========= Βοηθητικά ========= */
 function normalize(s: string) {
   return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
-
 function haversineNM(a: PortCoord, b: PortCoord) {
   const R = 3440.065; // nm
   const toRad = (x: number) => (x * Math.PI) / 180;
@@ -57,7 +55,7 @@ function addDaysISO(iso: string, plus: number) {
   return d.toISOString().slice(0, 10);
 }
 
-/* ========= Region rings (by canonical names from dataset) ========= */
+/* ========= Region rings (ονόματα όπως στο dataset) ========= */
 type RegionRing = Record<RegionKey, string[]>;
 const BANK: RegionRing = {
   Saronic: [
@@ -77,7 +75,6 @@ const BANK: RegionRing = {
   Dodecanese: ["Rhodes", "Symi", "Kos", "Kalymnos", "Patmos", "Rhodes"],
   Sporades: ["Volos", "Skiathos", "Skopelos", "Alonissos", "Volos"],
   NorthAegean: [
-    // incl. Halkidiki ring entries (dataset should include these)
     "Thessaloniki", "Nea Moudania", "Sani Marina", "Nikiti", "Vourvourou",
     "Ormos Panagias", "Ouranoupoli", "Kavala", "Thassos", "Samothraki",
     "Lemnos", "Lesvos", "Chios", "Samos", "Ikaria",
@@ -96,7 +93,7 @@ function autoPickRegion(start: string, end: string): RegionKey {
   return "Cyclades";
 }
 
-/* ========= Autocomplete (generic) ========= */
+/* ========= Autocomplete ========= */
 function AutoCompleteInput({
   value, onChange, placeholder, options,
 }: { value: string; onChange: (v: string) => void; placeholder: string; options: string[] }) {
@@ -182,7 +179,7 @@ function AutoCompleteInput({
   );
 }
 
-/* ========= Map Adapter (keeps your RouteMapClient integration) ========= */
+/* ========= Map Adapter ========= */
 function hashPoints(points: { lat: number; lon: number }[]) {
   return points.map((p) => `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`).join("|");
 }
@@ -194,13 +191,13 @@ function MapAdapter({ points }: { points: { name: string; lat: number; lon: numb
       <RouteMapClient
         key={key}
         points={points}
-        // viaCanal={viaCanal} // hook up if your RouteMapClient supports it
+        // viaCanal={viaCanal} // αν το υποστηρίζει ο RouteMapClient
       />
     </div>
   );
 }
 
-/* ========= Query helpers (Share/Load) ========= */
+/* ========= Query helpers ========= */
 function encodeArr(arr: string[]) { return arr.map((s) => encodeURIComponent(s)).join(","); }
 function decodeArr(s: string | null): string[] { if (!s) return []; return s.split(",").map((x) => decodeURIComponent(x)).filter(Boolean); }
 function buildQueryFromState(state: {
@@ -279,7 +276,7 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
   return { mode, autogen };
 }
 
-/* ========= Dataset-aware builders ========= */
+/* ========= Builders που χρησιμοποιούν το hook findPort() ========= */
 function nearestIndexInRing(
   ring: string[],
   target: PortCoord,
@@ -306,7 +303,6 @@ function buildRouteRegion(
   const startCoord = findPortStrict(start);
   const endName = (end && end.trim()) ? end : start;
 
-  // Fallback: just chain what we have if ring/ports missing
   if (!ring.length || !startCoord) {
     const seq = [start, ...vias.filter(Boolean), endName];
     while (seq.length < days + 1) seq.splice(seq.length - 1, 0, endName);
@@ -316,7 +312,6 @@ function buildRouteRegion(
   const path: string[] = [start];
   let remainingLegs = days;
 
-  // VIA chain
   for (const raw of vias) {
     const v = (raw || "").trim();
     if (!v || !findPortStrict(v) || remainingLegs <= 0) continue;
@@ -324,7 +319,6 @@ function buildRouteRegion(
     path.push(v); remainingLegs--;
   }
 
-  // Enter ring from closest
   const current = findPortStrict(path[path.length - 1]) || startCoord;
   const entryIdx = nearestIndexInRing(ring, current, findPortStrict);
   const rotated = [...ring.slice(entryIdx), ...ring.slice(0, entryIdx)];
@@ -341,7 +335,7 @@ function buildRouteRegion(
   }
 
   const last = endName;
-  if (path.length >= 1 && path[path.length - 1].toLowerCase() === last.toLowerCase()) {
+  if (path[path.length - 1]?.toLowerCase() === last.toLowerCase()) {
     const tailMinus1 = path.length >= 2 ? path[path.length - 2].toLowerCase() : "";
     const alt = extended.find(x => x && x.toLowerCase() !== last.toLowerCase() && x.toLowerCase() !== tailMinus1);
     if (alt) path[path.length - 1] = alt;
@@ -370,28 +364,27 @@ function formatHoursHM(hours: number) {
   return `${h}h ${m}m`;
 }
 
-/* ========= Inner (uses useSearchParams + usePorts) ========= */
+/* ========= Κύριο component ========= */
 function AIPlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 🔗 load canonical dataset
-  const { ready, names, aliasNames, findByName, search } = usePorts();
+  // ⛳️ dataset hook – ΜΟΡΦΗ: { ready, error, ports, options, findPort }
+  const { ready, error, options, findPort: findPortRaw } = usePorts();
 
-  // helper to resolve any user input (aliases included)
+  // wrapper για να ταιριάζει με τον δικό μας τύπο
   const findPort = (input: string): PortCoord | null => {
     if (!input) return null;
-    const p = findByName(input); // should resolve aliases internally
-    return p ?? null;
+    const p = findPortRaw(input);
+    return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
   };
 
-  // Options for inputs (canonical names + aliases for discoverability)
+  // Επιλογές για τα inputs (ήδη περιλαμβάνουν aliases από το hook σου)
   const PORT_OPTIONS = useMemo(() => {
-    const all = new Set<string>();
-    names.forEach(n => all.add(n));
-    aliasNames.forEach(a => all.add(a));
-    return Array.from(all).sort((a, b) => a.localeCompare(b));
-  }, [names, aliasNames]);
+    const arr = Array.isArray(options) ? options.slice() : [];
+    arr.sort((a: string, b: string) => a.localeCompare(b));
+    return arr;
+  }, [options]);
 
   const [mode, setMode] = useState<PlannerMode>("Region");
 
@@ -417,11 +410,9 @@ function AIPlannerInner() {
   const [viaCanal, setViaCanal] = useState<boolean>(false);
   const effectiveVias = useMemo(() => {
     const list = [...vias].filter(Boolean);
-    // Ensure canal prepends if toggled and exists in dataset
     if (viaCanal && !list.some(v => normalize(v) === normalize("Corinth Canal (Isthmia)"))) {
       list.unshift("Corinth Canal (Isthmia)");
     }
-    // Avoid duplicating start/end
     return list.filter(v => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
   }, [vias, viaCanal, start, end]);
 
@@ -438,7 +429,7 @@ function AIPlannerInner() {
     });
   }, [customDays]);
 
-  // Load from URL once (after dataset is ready so aliases resolve)
+  // Φόρτωση από URL ΜΟΝΟ όταν το dataset είναι έτοιμο
   useEffect(() => {
     if (!searchParams || !ready) return;
     const { autogen } = loadStateFromQuery(searchParams, {
@@ -463,17 +454,17 @@ function AIPlannerInner() {
 
   function handleGenerate(e?: React.FormEvent) {
     e?.preventDefault?.();
-    if (!ready) { alert("Ports still loading—try again in a moment."); return; }
+    if (!ready) { alert("Φόρτωση θυλάκων/μαρινών… δοκίμασε ξανά σε λίγο."); return; }
 
     let namesSeq: string[] | null = null;
 
     if (mode === "Region") {
-      if (!findPort(start) || !findPort(end)) { alert("Please select valid Start/End from the suggestions."); return; }
+      if (!findPort(start) || !findPort(end)) { alert("Επίλεξε έγκυρο Start/End από τη λίστα."); return; }
       namesSeq = buildRouteRegion(start, end, days, region, effectiveVias, findPort);
     } else {
-      if (!findPort(customStart)) { alert("Please select a valid Start (custom)."); return; }
+      if (!findPort(customStart)) { alert("Επίλεξε έγκυρο Start (custom)."); return; }
       const seq = buildRouteCustomByDays(customStart, customDayStops, findPort);
-      if (!seq) { alert("Please fill valid ports for each day (use suggestions)."); return; }
+      if (!seq) { alert("Συμπλήρωσε έγκυρο προορισμό για ΚΑΘΕ ημέρα (χρησιμοποίησε τις προτάσεις)."); return; }
       namesSeq = seq;
     }
 
@@ -493,22 +484,22 @@ function AIPlannerInner() {
       const date = startDate ? addDaysISO(startDate, d) : "";
       const leg = legs[d];
       const notes = [
-        mode === "Region" && region === "Cyclades"   ? "Meltemi possible; prefer morning hops." : "",
-        mode === "Region" && region === "Saronic"    ? "Sheltered waters; ideal for families." : "",
-        mode === "Region" && region === "Ionian"     ? "Green shores & calm channels; great anchorages." : "",
-        mode === "Region" && region === "Dodecanese" ? "Historic harbors & culture; longer open-sea legs." : "",
-        mode === "Region" && region === "Sporades"   ? "Marine park & pine-clad islands; clear waters." : "",
-        mode === "Region" && region === "NorthAegean"? "Authentic ports incl. Halkidiki; larger gaps in places." : "",
-        mode === "Region" && region === "Crete"      ? "Longer hops; stunning coves, plan fuel & berths." : "",
-        prefs.includes("nightlife") ? "Consider later arrival for dining/nightlife." : "",
-        prefs.includes("family")    ? "Favor sandy coves & shorter hops." : "",
-        prefs.includes("gastronomy")? "Reserve seaside taverna early." : "",
+        mode === "Region" && region === "Cyclades"   ? "Meltemi possible; προτίμησε πρωινές μετακινήσεις." : "",
+        mode === "Region" && region === "Saronic"    ? "Προστατευμένα νερά· ιδανικό για οικογένειες." : "",
+        mode === "Region" && region === "Ionian"     ? "Ήρεμα κανάλια & πράσινες ακτές· εξαιρετικά αγκυροβόλια." : "",
+        mode === "Region" && region === "Dodecanese" ? "Ιστορικά λιμάνια· πιο μεγάλα ανοικτά σκέλη." : "",
+        mode === "Region" && region === "Sporades"   ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά· πολύ καθαρά νερά." : "",
+        mode === "Region" && region === "NorthAegean"? "Αυθεντικά λιμάνια (incl. Χαλκιδική)· μεγαλύτερα κενά ενδιάμεσα." : "",
+        mode === "Region" && region === "Crete"      ? "Μεγαλύτερα σκέλη· οργάνωσε καύσιμα & θέσεις." : "",
+        prefs.includes("nightlife") ? "Σκέψου άφιξη αργά για βραδινό/μπαρ." : "",
+        prefs.includes("family")    ? "Προτίμησε αμμουδιές & μικρότερα σκέλη." : "",
+        prefs.includes("gastronomy")? "Κράτηση σε παραθαλάσσια ταβέρνα." : "",
       ].filter(Boolean).join(" ");
       cards.push({ day: d + 1, date, leg, notes });
     }
     setPlan(cards);
 
-    // Update URL for share
+    // share URL
     const qs = buildQueryFromState({
       mode, startDate, yachtType, speed, lph,
       start, end, days, regionMode, vias, viaCanal,
@@ -556,9 +547,7 @@ function AIPlannerInner() {
     const first = plan[0]?.leg?.from;
     if (first) namesSeq.push(first);
     for (const d of plan) if (d.leg?.to) namesSeq.push(d.leg.to);
-    return namesSeq
-      .map((n) => findPort(n))
-      .filter(Boolean) as PortCoord[];
+    return namesSeq.map((n) => findPort(n)).filter(Boolean) as PortCoord[];
   }, [plan]);
 
   return (
@@ -566,7 +555,7 @@ function AIPlannerInner() {
       <section className="mx-auto max-w-7xl px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight text-brand-navy no-print">AI Itinerary Draft</h1>
         <p className="mt-2 max-w-2xl text-slate-600 no-print">
-          Region-guided or fully Custom itineraries. Enter dates & yacht specs, add stops, and generate.
+          Region-guided ή πλήρως Custom. Βάλε ημερομηνία & στοιχεία σκάφους, πρόσθεσε στάσεις και κάνε generate.
         </p>
 
         {/* FORM */}
@@ -578,7 +567,8 @@ function AIPlannerInner() {
               <option value="Region">Region-guided</option>
               <option value="Custom">Custom (day-by-day)</option>
             </select>
-            {!ready && <span className="text-xs text-slate-500">Loading ports…</span>}
+            {!ready && <span className="text-xs text-slate-500">Φορτώνω ports…</span>}
+            {error && <span className="text-xs text-red-600">Σφάλμα dataset</span>}
           </div>
 
           {/* Common controls */}
@@ -597,8 +587,8 @@ function AIPlannerInner() {
           {mode === "Region" && (
             <>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <AutoCompleteInput value={start} onChange={setStart} placeholder="Start port (e.g. Alimos / Αλιμος)" options={PORT_OPTIONS} />
-                <AutoCompleteInput value={end} onChange={setEnd} placeholder="End port (default: same as start)" options={PORT_OPTIONS} />
+                <AutoCompleteInput value={start} onChange={setStart} placeholder="Start port (π.χ. Alimos / Άλιμος)" options={PORT_OPTIONS} />
+                <AutoCompleteInput value={end} onChange={setEnd} placeholder="End port (default: ίδιο με start)" options={PORT_OPTIONS} />
                 <select value={regionMode} onChange={(e) => setRegionMode(e.target.value as any)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold">
                   <option value="Auto">Region: Auto</option>
                   <option value="Saronic">Region: Saronic</option>
@@ -614,7 +604,7 @@ function AIPlannerInner() {
 
               <div className="rounded-2xl border border-slate-200 p-4">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium text-brand-navy">Optional passages / stops (in order)</div>
+                  <div className="text-sm font-medium text-brand-navy">Προαιρετικές διελεύσεις/στάσεις (σειρά)</div>
                   <button type="button" onClick={addVia} className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50">+ Add Stop</button>
                 </div>
                 <label className="mt-3 inline-flex items-center gap-2 text-sm">
@@ -641,8 +631,8 @@ function AIPlannerInner() {
                 <input type="number" min={1} max={30} value={customDays} onChange={(e) => setCustomDays(parseInt(e.target.value || "7", 10))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Number of days" />
               </div>
               <div className="mt-4">
-                <div className="text-sm font-medium text-brand-navy">Destinations by day</div>
-                <p className="mt-1 text-xs text-slate-500">Συμπλήρωσε τον προορισμό <b>κάθε ημέρας</b> (τέλος ημέρας). Θα υπολογιστούν αυτόματα τα legs.</p>
+                <div className="text-sm font-medium text-brand-navy">Προορισμοί ανά ημέρα</div>
+                <p className="mt-1 text-xs text-slate-500">Συμπλήρωσε τον προορισμό <b>κάθε ημέρας</b> (τέλος ημέρας). Τα legs υπολογίζονται αυτόματα.</p>
                 <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {customDayStops.map((stop, i) => (
                     <div key={i} className="flex items-center gap-2">
@@ -691,7 +681,7 @@ function AIPlannerInner() {
               <div className="no-print mb-6">
                 <MapAdapter points={mapPoints} />
                 <div className="mt-2 text-xs text-slate-500">
-                  * Map preview for planning. The dashed line is an estimate, not nautical routing.
+                  * Map preview για σχεδιασμό. Η διακεκομμένη γραμμή είναι εκτίμηση, όχι ναυτικός διάδρομος.
                 </div>
               </div>
             )}
@@ -744,7 +734,7 @@ function AIPlannerInner() {
   );
 }
 
-/* ========= Page wrapper: Suspense γύρω από useSearchParams ========= */
+/* ========= Page wrapper ========= */
 export default function AIPlannerPage() {
   return (
     <Suspense fallback={null}>
