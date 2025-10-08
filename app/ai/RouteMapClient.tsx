@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import L from "leaflet";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
 /* ---- react-leaflet dynamic (no SSR) ---- */
@@ -17,7 +16,7 @@ const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle
 const Marker       = dynamic(() => import("react-leaflet").then(m => m.Marker),       { ssr: false });
 const Popup        = dynamic(() => import("react-leaflet").then(m => m.Popup),        { ssr: false });
 
-/* auto fit-bounds */
+/* auto fit-bounds (χωρίς Leaflet αντικείμενα) */
 const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -222,7 +221,7 @@ function aStarWater(grid: GridNode[][], start: GridNode, goal: GridNode) {
   return null;
 }
 
-/* ---- Ramer–Douglas–Peucker (κρατά πρώτη/τελευταία) ---- */
+/* ---- Ramer–Douglas–Peucker ---- */
 function perpendicularDistance(p: [number, number], a: [number, number], b: [number, number]) {
   const x0 = p[1], y0 = p[0], x1 = a[1], y1 = a[0], x2 = b[1], y2 = b[0];
   const num = Math.abs((y2 - y1)*x0 - (x2 - x1)*y0 + x2*y1 - y2*x1);
@@ -246,19 +245,17 @@ function simplifyRDP(path: [number, number][], epsilonDeg = SIMPLIFY_EPS): [numb
   }
 }
 
-/* ======= Icons για dataset markers ======= */
-const makeIcon = (active: boolean) =>
-  L.divIcon({
-    className: "np-marker",
-    html: `<div style="
-      width:12px;height:12px;border-radius:50%;
-      border:2px solid ${active ? '#0f172a' : '#64748b'};
-      background:${active ? '#facc15' : 'white'};
-      box-shadow:0 1px 3px rgba(0,0,0,.3);
-    "></div>`,
-    iconSize: [12, 12],
-    iconAnchor: [6, 6],
-  });
+/* ======= Icons για dataset markers (divIcon-like χωρίς leaflet import) ======= */
+function markerHtml(active: boolean) {
+  return `<div style="
+    width:12px;height:12px;border-radius:50%;
+    border:2px solid ${active ? '#0f172a' : '#64748b'};
+    background:${active ? '#facc15' : 'white'};
+    box-shadow:0 1px 3px rgba(0,0,0,.3);
+  "></div>`;
+}
+// Θα χρησιμοποιηθεί από react-leaflet Marker μέσω L.divIcon, αλλά ΔΕΝ κάνουμε import L εδώ.
+// Αν χρειαστεί, react-leaflet θα το χειριστεί client-side.
 
 /* ===================================================== */
 export default function RouteMapClient({
@@ -297,15 +294,12 @@ export default function RouteMapClient({
       const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
       const path = aStarWater(grid, start, goal);
 
-      // αν δεν βρεθεί, έστω ευθεία μεταξύ ακριβών
       if (!path) { out.push([[a.lat, a.lon], [b.lat, b.lon]]); continue; }
 
       const middle = path.map(n => [n.lat, n.lon] as [number, number]);
       const middleS = simplifyRDP(middle, SIMPLIFY_EPS);
 
-      // ΣΥΝΘΕΣΗ: [A_ΑΚΡΙΒΕΣ] + middleS + [B_ΑΚΡΙΒΕΣ]
       const seg: [number, number][] = [[a.lat, a.lon], ...middleS, [b.lat, b.lon]];
-      // αφαίρεση τυχόν διπλότυπων γειτονικών
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -317,7 +311,6 @@ export default function RouteMapClient({
       out.push(cleaned);
     }
 
-    // ένωση όλων των legs, χωρίς να διπλασιάζουμε τα σημεία-ένωσης
     const joined: [number, number][] = [];
     for (const leg of out) {
       if (!joined.length) joined.push(...leg);
@@ -326,20 +319,29 @@ export default function RouteMapClient({
     return joined as LatLngExpression[];
   }, [points, coastPolys]);
 
-  /* markers: ακριβώς στα input points (start/mid/end) */
+  /* markers: στα input points */
   const markerStart = points[0] ?? null;
   const markerMids  = points.slice(1, -1);
   const markerEnd   = points.at(-1) ?? null;
 
-  /* bounds/center */
+  /* bounds/center — ΥΠΟΛΟΓΙΣΜΟΣ ΧΩΡΙΣ Leaflet */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
-    if (waterLatLngs.length < 2) return null;
-    const Lm = require("leaflet") as typeof import("leaflet");
-    return Lm.latLngBounds(waterLatLngs as any).pad(0.08);
+    const arr = (waterLatLngs as [number, number][]);
+    if (arr.length < 2) return null;
+    let minLat = +Infinity, maxLat = -Infinity, minLon = +Infinity, maxLon = -Infinity;
+    for (const [lat, lon] of arr) {
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+    }
+    // padding ~0.08 deg
+    const padLat = (maxLat - minLat) * 0.08 || 0.05;
+    const padLon = (maxLon - minLon) * 0.08 || 0.05;
+    return [[minLat - padLat, minLon - padLon], [maxLat + padLat, maxLon + padLon]] as LatLngBoundsExpression;
   }, [waterLatLngs]);
 
   const center: LatLngExpression = (waterLatLngs[0] as LatLngExpression) ?? ([37.97, 23.72] as LatLngExpression);
-
   const activeSet = useMemo(() => new Set((activeNames ?? []).map(s => s.toLowerCase())), [activeNames]);
 
   return (
@@ -489,17 +491,20 @@ export default function RouteMapClient({
         <Pane name="pane-ports" style={{ zIndex: 470 }}>
           {(markers ?? []).map((m) => {
             const active = activeSet.has(m.name.toLowerCase());
+            // Δημιουργία divIcon *client-side* (react-leaflet/leaflet έχουν ήδη φορτωθεί)
+            // Αποφεύγουμε import L στο module scope.
+            const icon = (typeof window !== "undefined")
+              ? (window as any).L?.divIcon?.({ className: "np-marker", html: markerHtml(active), iconSize: [12,12], iconAnchor: [6,6] })
+              : undefined;
+
             return (
               <Marker
                 key={`${m.name}-${m.lat.toFixed(4)}-${m.lon.toFixed(4)}`}
                 position={[m.lat, m.lon]}
                 pane="pane-ports"
-                icon={makeIcon(active)}
-                eventHandlers={
-                  onMarkerClick
-                    ? { click: () => onMarkerClick(m.name) }
-                    : undefined
-                }
+                // @ts-ignore - icon μπορεί να είναι undefined στην αρχή, είναι ΟΚ
+                icon={icon}
+                eventHandlers={ onMarkerClick ? { click: () => onMarkerClick(m.name) } : undefined }
               >
                 <Popup>
                   <div className="text-sm">
