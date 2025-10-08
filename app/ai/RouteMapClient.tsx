@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import * as L from "leaflet";
-import type { LatLngExpression, LatLngBoundsExpression, Map as LeafletMap, LeafletEvent } from "leaflet";
+import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
 /* ---- react-leaflet dynamic (no SSR) ---- */
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
@@ -14,6 +13,18 @@ const Tooltip      = dynamic(() => import("react-leaflet").then(m => m.Tooltip),
 const GeoJSON      = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),      { ssr: false });
 const Pane         = dynamic(() => import("react-leaflet").then(m => m.Pane),         { ssr: false });
 const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle),    { ssr: false });
+
+/* Child που μας δίνει το map instance */
+const CaptureMap = dynamic(async () => {
+  const RL = await import("react-leaflet");
+  const { useEffect } = await import("react");
+  function Cmp({ onReady }: { onReady: (map: import("leaflet").Map) => void }) {
+    const map = RL.useMap();
+    useEffect(() => { onReady(map); }, [map, onReady]);
+    return null;
+  }
+  return Cmp;
+}, { ssr: false });
 
 /* FitBounds helper */
 const FitBounds = dynamic(async () => {
@@ -33,7 +44,7 @@ const FitBounds = dynamic(async () => {
 }, { ssr: false });
 
 /* ---- types ---- */
-export type Point  = { name: string; lat: number; lon: number };
+export type Point = { name: string; lat: number; lon: number };
 export type Marker = { name: string; lat: number; lon: number };
 
 type Ring = [number, number][];
@@ -50,7 +61,7 @@ const GRID_MARGIN_DEG = 0.30;
 const NEAR_LAND_PENALTY = 0.25;
 const CLEARANCE_CELLS = 1;
 const SIMPLIFY_EPS = 0.008;
-const DRAW_INTERVAL_MS = 160; // <-- ρύθμισε ταχύτητα animation
+const DRAW_INTERVAL_MS = 90;   // πιο αργή προοδευτική σχεδίαση
 
 /* ---- geo helpers ---- */
 const toRad = (x: number) => (x * Math.PI) / 180;
@@ -251,8 +262,8 @@ export default function RouteMapClient({
   activeNames?: string[];
   onMarkerClick?: (portName: string) => void;
 }) {
-  /* map ref για flyTo */
-  const [map, setMap] = useState<LeafletMap | null>(null);
+  /* ---- κρατάμε ref του leaflet map ---- */
+  const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
   /* ---- load coast ---- */
   const [coast, setCoast] = useState<any | null>(null);
@@ -286,7 +297,6 @@ export default function RouteMapClient({
       }
       if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
 
-      // remove consecutive duplicates
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -323,7 +333,7 @@ export default function RouteMapClient({
     return (waterLatLngs as [number, number][]).slice(0, Math.max(2, drawCount)) as LatLngExpression[];
   }, [waterLatLngs, drawCount]);
 
-  /* markers από τα input points (start/mids/end) */
+  /* markers */
   const markerStart = points[0] ?? null;
   const markerMids  = points.slice(1, -1);
   const markerEnd   = points.at(-1) ?? null;
@@ -331,21 +341,25 @@ export default function RouteMapClient({
   /* bounds/center */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if ((waterLatLngs?.length ?? 0) < 2) return null;
+    const L = require("leaflet") as typeof import("leaflet");
     return L.latLngBounds(waterLatLngs as any).pad(0.08);
   }, [waterLatLngs]);
 
   const center: LatLngExpression =
     (points[0] ? [points[0].lat, points[0].lon] : [37.97, 23.72]) as LatLngExpression;
 
-  /* helpers */
+  /* helper: active name set */
   const isActive = (name: string) =>
     (activeNames ?? []).some(n => n.toLowerCase() === name.toLowerCase());
 
-  const flyToPoint = (lat: number, lon: number) => {
-    if (!map) return;
-    const targetZoom = Math.max(map.getZoom(), 9);
-    map.flyTo([lat, lon], targetZoom, { duration: 1.2 });
-  };
+  /* flyTo helper σε click */
+  function flyTo(name: string, lat: number, lon: number) {
+    if (map) {
+      const targetZoom = Math.max(map.getZoom(), 9);
+      map.flyTo([lat, lon], targetZoom, { duration: 0.8 });
+    }
+    onMarkerClick?.(name);
+  }
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
@@ -364,14 +378,16 @@ export default function RouteMapClient({
       `}</style>
 
       <MapContainer
-        whenReady={(e: LeafletEvent) => setMap(e.target as LeafletMap)}  // κρατάμε ref στο map
         center={center}
         zoom={7}
         minZoom={3}
         maxZoom={14}
-        scrollWheelZoom={true}                                           // wheel zoom ενεργό
+        scrollWheelZoom={true}
         style={{ height: "100%", width: "100%" }}
       >
+        {/* παίρνουμε το map instance */}
+        <CaptureMap onReady={setMap} />
+
         {/* GEBCO */}
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
           <TileLayer attribution="&copy; GEBCO" url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png" opacity={0.9} />
@@ -439,7 +455,13 @@ export default function RouteMapClient({
             <Polyline
               pane="pane-route-shadow"
               positions={waterLatLngs}
-              pathOptions={{ color: "#9aa3b2", weight: 2, opacity: 0.6, lineJoin: "round", lineCap: "round" }}
+              pathOptions={{
+                color: "#9aa3b2",
+                weight: 2,
+                opacity: 0.6,
+                lineJoin: "round",
+                lineCap: "round",
+              }}
             />
           )}
         </Pane>
@@ -450,7 +472,14 @@ export default function RouteMapClient({
             <Polyline
               pane="pane-route"
               positions={animatedLatLngs}
-              pathOptions={{ color: "#0b1220", weight: 3, opacity: 0.95, dashArray: "6 8", lineJoin: "round", lineCap: "round" }}
+              pathOptions={{
+                color: "#0b1220",
+                weight: 3,
+                opacity: 0.95,
+                dashArray: "6 8",
+                lineJoin: "round",
+                lineCap: "round",
+              }}
             />
           )}
 
@@ -460,7 +489,6 @@ export default function RouteMapClient({
               pane="pane-route"
               center={[markerStart.lat, markerStart.lon] as LatLngExpression}
               radius={8}
-              eventHandlers={{ click: () => flyToPoint(markerStart.lat, markerStart.lon) }}
               pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
@@ -476,7 +504,7 @@ export default function RouteMapClient({
               pane="pane-route"
               center={[p.lat, p.lon] as LatLngExpression}
               radius={5}
-              eventHandlers={{ click: () => { onMarkerClick?.(p.name); flyToPoint(p.lat, p.lon); } }}
+              eventHandlers={{ click: () => flyTo(p.name, p.lat, p.lon) }}
               pathOptions={{
                 color: isActive(p.name) ? "#c4a962" : "#0b1220",
                 fillColor: isActive(p.name) ? "#c4a962" : "#0b1220",
@@ -495,7 +523,7 @@ export default function RouteMapClient({
               pane="pane-route"
               center={[markerEnd.lat, markerEnd.lon] as LatLngExpression}
               radius={8}
-              eventHandlers={{ click: () => flyToPoint(markerEnd.lat, markerEnd.lon) }}
+              eventHandlers={{ click: () => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon) }}
               pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
@@ -514,7 +542,7 @@ export default function RouteMapClient({
                 pane="pane-dataset"
                 center={[m.lat, m.lon] as LatLngExpression}
                 radius={3.5}
-                eventHandlers={{ click: () => { onMarkerClick?.(m.name); flyToPoint(m.lat, m.lon); } }}
+                eventHandlers={{ click: () => flyTo(m.name, m.lat, m.lon) }}
                 pathOptions={{
                   color: isActive(m.name) ? "#c4a962" : "#0b122033",
                   fillColor: isActive(m.name) ? "#c4a962" : "#0b122033",
