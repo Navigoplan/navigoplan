@@ -354,7 +354,6 @@ function AIPlannerInner() {
     if (!input) return null;
     const p = findPortRaw(input);
     return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
-    // NOTE: αν έχεις ιδιότητες island/region/category στο dataset, μπορείς να τις περάσεις επίσης.
   };
 
   const PORT_OPTIONS = useMemo(() => {
@@ -531,13 +530,17 @@ function AIPlannerInner() {
     return namesSeq.map((n) => findPort(n)).filter(Boolean) as PortCoord[];
   }, [plan]);
 
-  // 🔵 Markers από το dataset (μπορείς να προσθέσεις island/region/category αν υπάρχουν στο JSON)
-  const markers: { name: string; lat: number; lon: number }[] = useMemo(() => {
-    if (!ready || !ports?.length) return [];
-    return ports.map((p: any) => ({ name: p.name, lat: p.lat, lon: p.lon }));
-  }, [ready, ports]);
+  // 🔵 Markers από το dataset (περνάμε island/region/category αν υπάρχουν)
+  const markers: { name: string; lat: number; lon: number; island?: string; region?: string; category?: "harbor"|"marina"|"anchorage"|"spot" }[] =
+    useMemo(() => {
+      if (!ready || !ports?.length) return [];
+      return ports.map((p: any) => ({
+        name: p.name, lat: p.lat, lon: p.lon,
+        island: p.island, region: p.region, category: p.category,
+      }));
+    }, [ready, ports]);
 
-  // ⭐ Active (για highlight)
+  // ⭐ Active names (για basic highlight/back-compat)
   const activeNames = useMemo(() => {
     const set = new Set<string>();
     if (mode === "Region") {
@@ -549,6 +552,20 @@ function AIPlannerInner() {
       customDayStops.forEach(v => v && set.add(v));
     }
     return Array.from(set);
+  }, [mode, start, end, effectiveVias, customStart, customDayStops]);
+
+  // 🏷️ ΝΕΟ: ρόλος ανά όνομα (start / via / end / custom) για χρωματισμό
+  const activeMeta = useMemo(() => {
+    const map: Record<string, "start"|"via"|"end"|"custom"> = {};
+    if (mode === "Region") {
+      if (start) map[start] = "start";
+      effectiveVias.forEach(v => { if (v) map[v] = "via"; });
+      if (end) map[end] = "end";
+    } else {
+      if (customStart) map[customStart] = "start";
+      customDayStops.forEach(v => { if (v) map[v] = "custom"; });
+    }
+    return map;
   }, [mode, start, end, effectiveVias, customStart, customDayStops]);
 
   // 🖱️ Click σε marker → γεμίζει Start / End / Via / Custom Day
@@ -578,13 +595,11 @@ function AIPlannerInner() {
         return;
       }
       if (mapPickMode === "End") {
-        // για Custom δεν υπάρχει "end" ξεχωριστά — οπότε το βάζουμε στην τελευταία ημέρα
         const i = customDays - 1;
         setCustomStopAt(i, portName);
         return;
       }
       if (mapPickMode === "Via") {
-        // βρες πρώτο κενό day stop
         const i = customDayStops.findIndex(x => !x);
         setCustomStopAt(i >= 0 ? i : customDayStops.length - 1, portName);
         return;
@@ -758,7 +773,8 @@ function AIPlannerInner() {
                   <RouteMapClient
                     points={mapPoints}
                     markers={markers}
-                    activeNames={activeNames}
+                    activeNames={activeNames}     // back-compat
+                    activeMeta={activeMeta}       // 🎯 ρόλοι για χρώματα
                     onMarkerClick={handleMarkerClick}
                   />
                 </div>
