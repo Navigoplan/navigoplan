@@ -343,11 +343,6 @@ function formatHoursHM(hours: number) {
   return `${h}h ${m}m`;
 }
 
-/* ========= Map helpers ========= */
-function hashPoints(points: { lat: number; lon: number }[]) {
-  return points.map((p) => `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`).join("|");
-}
-
 /* ========= Main ========= */
 function AIPlannerInner() {
   const router = useRouter();
@@ -359,6 +354,7 @@ function AIPlannerInner() {
     if (!input) return null;
     const p = findPortRaw(input);
     return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
+    // NOTE: αν έχεις ιδιότητες island/region/category στο dataset, μπορείς να τις περάσεις επίσης.
   };
 
   const PORT_OPTIONS = useMemo(() => {
@@ -535,7 +531,7 @@ function AIPlannerInner() {
     return namesSeq.map((n) => findPort(n)).filter(Boolean) as PortCoord[];
   }, [plan]);
 
-  // 🔵 Markers από το dataset
+  // 🔵 Markers από το dataset (μπορείς να προσθέσεις island/region/category αν υπάρχουν στο JSON)
   const markers: { name: string; lat: number; lon: number }[] = useMemo(() => {
     if (!ready || !ports?.length) return [];
     return ports.map((p: any) => ({ name: p.name, lat: p.lat, lon: p.lon }));
@@ -820,6 +816,7 @@ function AIPlannerInner() {
   );
 }
 
+/* ========= Page wrapper ========= */
 export default function AIPlannerPage() {
   return (
     <Suspense fallback={null}>

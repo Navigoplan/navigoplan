@@ -33,8 +33,24 @@ const FitBounds = dynamic(async () => {
   return Cmp;
 }, { ssr: false });
 
+/* μικρό helper για flyTo */
+const FlyTo = dynamic(async () => {
+  const RL = await import("react-leaflet");
+  const { useEffect } = await import("react");
+  function Cmp({ target, zoom }: { target: LatLngExpression | null; zoom: number }) {
+    const map = RL.useMap();
+    useEffect(() => {
+      if (!target) return;
+      map.flyTo(target as any, zoom, { duration: 0.8 });
+    }, [map, target, zoom]);
+    return null;
+  }
+  return Cmp;
+}, { ssr: false });
+
 /* ---- types & consts ---- */
 export type Point = { name: string; lat: number; lon: number };
+type PortExtra = { island?: string; region?: string; category?: "harbor" | "marina" | "anchorage" | "spot" };
 
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 const TRANSPARENT_1PX =
@@ -76,7 +92,6 @@ function pointInPoly(pt: [number, number], poly: Poly): boolean {
   for (const ring of poly) if (pointInRing(pt, ring)) inside = !inside;
   return inside;
 }
-/* συλλογή όλων των land πολυγώνων ως Poly[] */
 function collectPolys(geo: any): Poly[] {
   const polys: Poly[] = [];
   if (!geo) return polys;
@@ -254,8 +269,6 @@ function markerHtml(active: boolean) {
     box-shadow:0 1px 3px rgba(0,0,0,.3);
   "></div>`;
 }
-// Θα χρησιμοποιηθεί από react-leaflet Marker μέσω L.divIcon, αλλά ΔΕΝ κάνουμε import L εδώ.
-// Αν χρειαστεί, react-leaflet θα το χειριστεί client-side.
 
 /* ===================================================== */
 export default function RouteMapClient({
@@ -265,11 +278,12 @@ export default function RouteMapClient({
   onMarkerClick,
 }: {
   points: Point[];
-  markers?: Point[];
+  markers?: (Point & PortExtra)[];
   activeNames?: string[];
   onMarkerClick?: (name: string) => void;
 }) {
   const [coast, setCoast] = useState<any | null>(null);
+  const [focus, setFocus] = useState<LatLngExpression | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -335,7 +349,6 @@ export default function RouteMapClient({
       if (lon < minLon) minLon = lon;
       if (lon > maxLon) maxLon = lon;
     }
-    // padding ~0.08 deg
     const padLat = (maxLat - minLat) * 0.08 || 0.05;
     const padLon = (maxLon - minLon) * 0.08 || 0.05;
     return [[minLat - padLat, minLon - padLon], [maxLat + padLat, maxLon + padLon]] as LatLngBoundsExpression;
@@ -487,12 +500,10 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* 🔵 DATASET PORT MARKERS (click → planner) */}
+        {/* 🔵 DATASET PORT MARKERS (click → focus + planner) */}
         <Pane name="pane-ports" style={{ zIndex: 470 }}>
           {(markers ?? []).map((m) => {
             const active = activeSet.has(m.name.toLowerCase());
-            // Δημιουργία divIcon *client-side* (react-leaflet/leaflet έχουν ήδη φορτωθεί)
-            // Αποφεύγουμε import L στο module scope.
             const icon = (typeof window !== "undefined")
               ? (window as any).L?.divIcon?.({ className: "np-marker", html: markerHtml(active), iconSize: [12,12], iconAnchor: [6,6] })
               : undefined;
@@ -502,18 +513,23 @@ export default function RouteMapClient({
                 key={`${m.name}-${m.lat.toFixed(4)}-${m.lon.toFixed(4)}`}
                 position={[m.lat, m.lon]}
                 pane="pane-ports"
-                // @ts-ignore - icon μπορεί να είναι undefined στην αρχή, είναι ΟΚ
+                // @ts-ignore icon μπορεί να είναι undefined μέχρι να φορτώσει leaflet client-side
                 icon={icon}
-                eventHandlers={ onMarkerClick ? { click: () => onMarkerClick(m.name) } : undefined }
+                eventHandlers={{
+                  click: () => {
+                    setFocus([m.lat, m.lon]);       // zoom/pan στον χάρτη
+                    onMarkerClick?.(m.name);        // ενημέρωση planner
+                  }
+                }}
               >
                 <Popup>
                   <div className="text-sm">
                     <div className="font-semibold text-brand-navy">{m.name}</div>
-                    {onMarkerClick && (
-                      <div className="mt-1 text-xs text-slate-600">
-                        Click = επιλογή στον planner
-                      </div>
-                    )}
+                    <div className="text-xs text-slate-600">
+                      {m.island ? <>Island: <b>{m.island}</b><br/></> : null}
+                      {m.region ? <>Region: <b>{m.region}</b><br/></> : null}
+                      {m.category ? <>Type: <b>{m.category}</b></> : null}
+                    </div>
                   </div>
                 </Popup>
               </Marker>
@@ -522,6 +538,7 @@ export default function RouteMapClient({
         </Pane>
 
         {bounds && <FitBounds bounds={bounds} />}
+        {focus && <FlyTo target={focus} zoom={10} />}
       </MapContainer>
     </div>
   );
