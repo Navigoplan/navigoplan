@@ -2,16 +2,18 @@
 
 import RouteMapClient from "./RouteMapClient";
 import { Suspense, useMemo, useState, useEffect, useId } from "react";
+import type React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import NextDynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
+
+// ✅ canonical ports hook (dataset + aliases + search)
+import { usePorts } from "../../lib/ports";
 
 // αποτρέπει prerender/SSG της σελίδας /ai (απαιτείται στο Vercel)
 export const dynamic = "force-dynamic";
 
 /* ========= Types ========= */
-type Coord = { name: string; lat: number; lon: number };
 type YachtType = "Motor" | "Sailing";
 type Yacht = { type: YachtType; speed: number; lph: number };
 type Leg = { from: string; to: string; nm: number; hours: number; fuelL: number };
@@ -26,171 +28,15 @@ type RegionKey =
   | "Crete";
 type PlannerMode = "Region" | "Custom";
 
-/* ========= Ports (incl. Halkidiki & aliases) ========= */
-const PORTS: Coord[] = [
-  // Attica / Mainland hubs
-  { name: "Alimos", lat: 37.918, lon: 23.695 },
-  { name: "Lavrio", lat: 37.713, lon: 24.058 },
-  { name: "Piraeus", lat: 37.939, lon: 23.646 },
-  { name: "Glyfada", lat: 37.862, lon: 23.752 },
-  { name: "Vouliagmeni", lat: 37.809, lon: 23.787 },
-  { name: "Rafina", lat: 38.022, lon: 24.006 },
-  { name: "Corinth Canal (Isthmia)", lat: 37.932, lon: 22.993 },
+// minimal Port type expected from lib/ports.ts
+type PortCoord = { id?: string; name: string; lat: number; lon: number; aliases?: string[] };
 
-  // Saronic
-  { name: "Aegina", lat: 37.746, lon: 23.428 },
-  { name: "Agistri", lat: 37.701, lon: 23.347 },
-  { name: "Poros", lat: 37.499, lon: 23.452 },
-  { name: "Hydra", lat: 37.347, lon: 23.465 },
-  { name: "Spetses", lat: 37.262, lon: 23.156 },
-  { name: "Ermioni", lat: 37.386, lon: 23.246 },
-  { name: "Porto Cheli", lat: 37.325, lon: 23.146 },
-  { name: "Nafplio", lat: 37.568, lon: 22.798 },
-
-  // Cyclades (subset)
-  { name: "Kea", lat: 37.666, lon: 24.333 },
-  { name: "Kythnos", lat: 37.393, lon: 24.417 },
-  { name: "Syros", lat: 37.444, lon: 24.943 },
-  { name: "Tinos", lat: 37.539, lon: 25.163 },
-  { name: "Mykonos", lat: 37.446, lon: 25.328 },
-  { name: "Naxos", lat: 37.105, lon: 25.376 },
-  { name: "Paros", lat: 37.085, lon: 25.148 },
-  { name: "Antiparos", lat: 36.994, lon: 25.082 },
-  { name: "Ios", lat: 36.721, lon: 25.283 },
-  { name: "Santorini", lat: 36.407, lon: 25.456 },
-  { name: "Milos", lat: 36.748, lon: 24.444 },
-  { name: "Sifnos", lat: 36.985, lon: 24.674 },
-  { name: "Serifos", lat: 37.143, lon: 24.515 },
-
-  // Ionian (subset)
-  { name: "Corfu", lat: 39.619, lon: 19.92 },
-  { name: "Paxos", lat: 39.198, lon: 20.182 },
-  { name: "Antipaxos", lat: 39.134, lon: 20.23 },
-  { name: "Preveza", lat: 38.958, lon: 20.751 },
-  { name: "Lefkada", lat: 38.828, lon: 20.706 },
-  { name: "Meganisi", lat: 38.658, lon: 20.787 },
-  { name: "Kalamos", lat: 38.62, lon: 20.942 },
-  { name: "Kastos", lat: 38.569, lon: 20.975 },
-  { name: "Ithaca", lat: 38.373, lon: 20.718 },
-  { name: "Kefalonia", lat: 38.18, lon: 20.489 },
-  { name: "Zakynthos", lat: 37.789, lon: 20.898 },
-
-  // Dodecanese (subset)
-  { name: "Rhodes", lat: 36.435, lon: 28.222 },
-  { name: "Symi", lat: 36.616, lon: 27.839 },
-  { name: "Kos", lat: 36.892, lon: 27.287 },
-  { name: "Kalymnos", lat: 36.955, lon: 26.98 },
-  { name: "Patmos", lat: 37.313, lon: 26.548 },
-
-  // Sporades
-  { name: "Volos", lat: 39.365, lon: 22.942 },
-  { name: "Skiathos", lat: 39.162, lon: 23.49 },
-  { name: "Skopelos", lat: 39.121, lon: 23.725 },
-  { name: "Alonissos", lat: 39.146, lon: 23.864 },
-
-  // North Aegean (incl. Halkidiki)
-  { name: "Thessaloniki", lat: 40.64, lon: 22.944 },
-  { name: "Kavala", lat: 40.937, lon: 24.405 },
-  { name: "Thassos", lat: 40.778, lon: 24.709 },
-  { name: "Samothraki", lat: 40.473, lon: 25.528 },
-  { name: "Lemnos", lat: 39.915, lon: 25.063 },
-  { name: "Lesvos", lat: 39.105, lon: 26.555 },
-  { name: "Chios", lat: 38.37, lon: 26.133 },
-  { name: "Samos", lat: 37.754, lon: 26.977 },
-  { name: "Ikaria", lat: 37.612, lon: 26.293 },
-
-  // Halkidiki (Kassandra & Sithonia)
-  { name: "Nea Moudania", lat: 40.241, lon: 23.287 },
-  { name: "Sani Marina", lat: 40.097, lon: 23.312 },
-  { name: "Nikiti", lat: 40.221, lon: 23.667 },
-  { name: "Vourvourou", lat: 40.203, lon: 23.768 },
-  { name: "Ormos Panagias", lat: 40.25, lon: 23.716 },
-  { name: "Ouranoupoli", lat: 40.324, lon: 23.983 },
-  { name: "Neos Marmaras", lat: 40.096, lon: 23.784 },
-  { name: "Porto Carras Marina", lat: 40.101, lon: 23.793 },
-  { name: "Porto Koufo", lat: 39.981, lon: 23.916 },
-
-  // Crete (subset)
-  { name: "Chania", lat: 35.515, lon: 24.018 },
-  { name: "Rethymno", lat: 35.369, lon: 24.473 },
-  { name: "Heraklion", lat: 35.34, lon: 25.137 },
-  { name: "Agios Nikolaos", lat: 35.19, lon: 25.716 },
-];
-
-/* ========= Aliases (el/en) ========= */
-const ALIASES: Record<string, string> = {
-  // Ionian
-  kerkyra: "Corfu",
-  "κερκυρα": "Corfu",
-  corfu: "Corfu",
-  "ζακυνθος": "Zakynthos",
-  zakinthos: "Zakynthos",
-  "κεφαλονια": "Kefalonia",
-  "παξοι": "Paxos",
-  "αντιπαξοι": "Antipaxos",
-  "λευκαδα": "Lefkada",
-  "μεγανησι": "Meganisi",
-  "καλαμος": "Kalamos",
-  "καστος": "Kastos",
-  "ιθακη": "Ithaca",
-
-  // Saronic
-  "αιγινα": "Aegina",
-  "αγκιστρι": "Agistri",
-  "πορος": "Poros",
-  "υδρα": "Hydra",
-  "σπετσες": "Spetses",
-  "ερμιονη": "Ermioni",
-  "πορτο χελι": "Porto Cheli",
-
-  // Cyclades
-  "κεα": "Kea",
-  "κυθνος": "Kythnos",
-  "συρος": "Syros",
-  "μυκονος": "Mykonos",
-  "ναξος": "Naxos",
-  "παρος": "Paros",
-  "αντιπαρος": "Antiparos",
-  "ιος": "Ios",
-  "σαντορινη": "Santorini",
-  "μηλος": "Milos",
-  "σιφνος": "Sifnos",
-  "σεριφος": "Serifos",
-
-  // Dodecanese / Sporades / N. Aegean / Crete (ενδεικτικά)
-  "ροδος": "Rhodes",
-  "συμη": "Symi",
-  "κος": "Kos",
-  "βολος": "Volos",
-  "σκιαθος": "Skiathos",
-  "σκοπελος": "Skopelos",
-  "αλοννησος": "Alonissos",
-  "χανια": "Chania",
-  "ηρακλειο": "Heraklion",
-
-  // Attica aliases
-  "αλιμος": "Alimos",
-  "λαυριο": "Lavrio",
-  "πειραιας": "Piraeus",
-  "γλυφαδα": "Glyfada",
-  "ραφινα": "Rafina",
-
-  // Διώρυγα
-  "διορυγα κορινθου": "Corinth Canal (Isthmia)",
-  "ισθμια": "Corinth Canal (Isthmia)",
-};
-
-/* ========= Helpers ========= */
+/* ========= Helpers (dataset-aware) ========= */
 function normalize(s: string) {
   return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
-function findPort(name: string): Coord | null {
-  const n = normalize(name);
-  const canonical = ALIASES[n] || null;
-  const target = canonical ? canonical.toLowerCase() : n;
-  return PORTS.find((p) => normalize(p.name) === target) || null;
-}
-function haversineNM(a: Coord, b: Coord) {
+
+function haversineNM(a: PortCoord, b: PortCoord) {
   const R = 3440.065; // nm
   const toRad = (x: number) => (x * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -211,16 +57,32 @@ function addDaysISO(iso: string, plus: number) {
   return d.toISOString().slice(0, 10);
 }
 
-/* ========= Region rings ========= */
+/* ========= Region rings (by canonical names from dataset) ========= */
 type RegionRing = Record<RegionKey, string[]>;
 const BANK: RegionRing = {
-  Saronic: ["Alimos","Aegina","Agistri","Poros","Hydra","Spetses","Ermioni","Porto Cheli","Alimos"],
-  Cyclades: ["Lavrio","Kea","Kythnos","Syros","Mykonos","Paros","Naxos","Ios","Santorini","Milos","Sifnos","Serifos","Lavrio"],
-  Ionian: ["Corfu","Paxos","Antipaxos","Lefkada","Meganisi","Kalamos","Kastos","Ithaca","Kefalonia","Zakynthos","Lefkada"],
-  Dodecanese: ["Rhodes","Symi","Kos","Kalymnos","Patmos","Rhodes"],
-  Sporades: ["Volos","Skiathos","Skopelos","Alonissos","Volos"],
-  NorthAegean: ["Thessaloniki","Nea Moudania","Sani Marina","Nikiti","Vourvourou","Ormos Panagias","Ouranoupoli","Kavala","Thassos","Samothraki","Lemnos","Lesvos","Chios","Samos","Ikaria"],
-  Crete: ["Chania","Rethymno","Heraklion","Agios Nikolaos","Chania"],
+  Saronic: [
+    "Alimos", "Aegina", "Agistri", "Poros", "Hydra",
+    "Spetses", "Ermioni", "Porto Cheli", "Alimos",
+  ],
+  Cyclades: [
+    "Lavrio", "Kea", "Kythnos", "Syros", "Mykonos",
+    "Paros", "Naxos", "Ios", "Santorini", "Milos",
+    "Sifnos", "Serifos", "Lavrio",
+  ],
+  Ionian: [
+    "Corfu", "Paxos", "Antipaxos", "Lefkada", "Meganisi",
+    "Kalamos", "Kastos", "Ithaca", "Kefalonia", "Zakynthos",
+    "Lefkada",
+  ],
+  Dodecanese: ["Rhodes", "Symi", "Kos", "Kalymnos", "Patmos", "Rhodes"],
+  Sporades: ["Volos", "Skiathos", "Skopelos", "Alonissos", "Volos"],
+  NorthAegean: [
+    // incl. Halkidiki ring entries (dataset should include these)
+    "Thessaloniki", "Nea Moudania", "Sani Marina", "Nikiti", "Vourvourou",
+    "Ormos Panagias", "Ouranoupoli", "Kavala", "Thassos", "Samothraki",
+    "Lemnos", "Lesvos", "Chios", "Samos", "Ikaria",
+  ],
+  Crete: ["Chania", "Rethymno", "Heraklion", "Agios Nikolaos", "Chania"],
 };
 
 function autoPickRegion(start: string, end: string): RegionKey {
@@ -233,78 +95,8 @@ function autoPickRegion(start: string, end: string): RegionKey {
   if (s.includes("chania") || s.includes("heraklion") || s.includes("crete")) return "Crete";
   return "Cyclades";
 }
-function nearestIndexInRing(ring: string[], target: Coord): number {
-  let best = 0, bestD = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < ring.length; i++) {
-    const p = findPort(ring[i]); if (!p) continue;
-    const d = haversineNM(target, p);
-    if (d < bestD) { bestD = d; best = i; }
-  }
-  return best;
-}
-function buildRouteRegion(start: string, end: string, days: number, region: RegionKey, vias: string[]) {
-  const ring = BANK[region] ?? [];
-  const startCoord = findPort(start);
-  const endName = (end && end.trim()) ? end : start;
 
-  if (!ring.length || !startCoord) {
-    const seq = [start, ...vias.filter(Boolean), endName];
-    while (seq.length < days + 1) seq.splice(seq.length - 1, 0, endName);
-    return seq.slice(0, days + 1);
-  }
-
-  const path: string[] = [start];
-  let remainingLegs = days;
-
-  // VIA chain
-  for (const raw of vias) {
-    const v = (raw || "").trim();
-    if (!v || !findPort(v) || remainingLegs <= 0) continue;
-    if (path[path.length - 1].toLowerCase() === v.toLowerCase()) continue;
-    path.push(v); remainingLegs--;
-  }
-
-  // Enter ring from closest
-  const current = findPort(path[path.length - 1]) || startCoord;
-  const entryIdx = nearestIndexInRing(ring, current);
-  const rotated = [...ring.slice(entryIdx), ...ring.slice(0, entryIdx)];
-  const extended: string[] = [];
-  while (extended.length < days + 20) extended.push(...rotated);
-
-  let k = 0;
-  if (extended[0] && extended[0].toLowerCase() === path[path.length - 1].toLowerCase()) k = 1;
-
-  while (remainingLegs > 1 && k < extended.length) {
-    const c = extended[k++]; if (!c) continue;
-    if (c.toLowerCase() === path[path.length - 1].toLowerCase()) continue;
-    path.push(c); remainingLegs--;
-  }
-
-  const last = endName;
-  if (path.length >= 1 && path[path.length - 1].toLowerCase() === last.toLowerCase()) {
-    const tailMinus1 = path.length >= 2 ? path[path.length - 2].toLowerCase() : "";
-    const alt = extended.find(x => x && x.toLowerCase() !== last.toLowerCase() && x.toLowerCase() !== tailMinus1);
-    if (alt) path[path.length - 1] = alt;
-  }
-  if (remainingLegs >= 1) path.push(last);
-
-  if (path.length > days + 1) path.length = days + 1;
-  while (path.length < days + 1) path.push(last);
-  return path;
-}
-function buildRouteCustomByDays(start: string, dayStops: string[]) {
-  const seq = [start, ...dayStops].map(s => s.trim()).filter(Boolean);
-  const allValid = seq.every(s => !!findPort(s));
-  if (!allValid || seq.length < 2) return null;
-  return seq;
-}
-function formatHoursHM(hours: number) {
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
-  return `${h}h ${m}m`;
-}
-
-/* ========= Autocomplete ========= */
+/* ========= Autocomplete (generic) ========= */
 function AutoCompleteInput({
   value, onChange, placeholder, options,
 }: { value: string; onChange: (v: string) => void; placeholder: string; options: string[] }) {
@@ -377,7 +169,7 @@ function AutoCompleteInput({
           {filtered.map((o, i) => (
             <button
               type="button"
-              key={o}
+              key={`${o}-${i}`}
               onClick={() => pick(o)}
               className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${i === highlight ? "bg-slate-100" : ""}`}
             >
@@ -390,27 +182,23 @@ function AutoCompleteInput({
   );
 }
 
-/* ========= Map Adapter (uses your RouteMapClient, coastlines + seamarks) ========= */
+/* ========= Map Adapter (keeps your RouteMapClient integration) ========= */
 function hashPoints(points: { lat: number; lon: number }[]) {
   return points.map((p) => `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`).join("|");
 }
-
 function MapAdapter({ points }: { points: { name: string; lat: number; lon: number }[] }) {
   if (!points.length) return null;
   const key = useMemo(() => hashPoints(points), [points]);
-
   return (
     <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
       <RouteMapClient
         key={key}
         points={points}
-        // Αν στο RouteMapClient χρησιμοποιείς το viaCanal, ξεσχόλιασε την επόμενη γραμμή:
-        // viaCanal={viaCanal}
+        // viaCanal={viaCanal} // hook up if your RouteMapClient supports it
       />
     </div>
   );
 }
-
 
 /* ========= Query helpers (Share/Load) ========= */
 function encodeArr(arr: string[]) { return arr.map((s) => encodeURIComponent(s)).join(","); }
@@ -491,10 +279,119 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
   return { mode, autogen };
 }
 
-/* ========= Inner (uses useSearchParams) ========= */
+/* ========= Dataset-aware builders ========= */
+function nearestIndexInRing(
+  ring: string[],
+  target: PortCoord,
+  findPortStrict: (name: string) => PortCoord | null
+) {
+  let best = 0, bestD = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < ring.length; i++) {
+    const p = findPortStrict(ring[i]); if (!p) continue;
+    const d = haversineNM(target, p);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+function buildRouteRegion(
+  start: string,
+  end: string,
+  days: number,
+  region: RegionKey,
+  vias: string[],
+  findPortStrict: (name: string) => PortCoord | null
+) {
+  const ring = BANK[region] ?? [];
+  const startCoord = findPortStrict(start);
+  const endName = (end && end.trim()) ? end : start;
+
+  // Fallback: just chain what we have if ring/ports missing
+  if (!ring.length || !startCoord) {
+    const seq = [start, ...vias.filter(Boolean), endName];
+    while (seq.length < days + 1) seq.splice(seq.length - 1, 0, endName);
+    return seq.slice(0, days + 1);
+  }
+
+  const path: string[] = [start];
+  let remainingLegs = days;
+
+  // VIA chain
+  for (const raw of vias) {
+    const v = (raw || "").trim();
+    if (!v || !findPortStrict(v) || remainingLegs <= 0) continue;
+    if (path[path.length - 1].toLowerCase() === v.toLowerCase()) continue;
+    path.push(v); remainingLegs--;
+  }
+
+  // Enter ring from closest
+  const current = findPortStrict(path[path.length - 1]) || startCoord;
+  const entryIdx = nearestIndexInRing(ring, current, findPortStrict);
+  const rotated = [...ring.slice(entryIdx), ...ring.slice(0, entryIdx)];
+  const extended: string[] = [];
+  while (extended.length < days + 20) extended.push(...rotated);
+
+  let k = 0;
+  if (extended[0] && extended[0].toLowerCase() === path[path.length - 1].toLowerCase()) k = 1;
+
+  while (remainingLegs > 1 && k < extended.length) {
+    const c = extended[k++]; if (!c) continue;
+    if (c.toLowerCase() === path[path.length - 1].toLowerCase()) continue;
+    path.push(c); remainingLegs--;
+  }
+
+  const last = endName;
+  if (path.length >= 1 && path[path.length - 1].toLowerCase() === last.toLowerCase()) {
+    const tailMinus1 = path.length >= 2 ? path[path.length - 2].toLowerCase() : "";
+    const alt = extended.find(x => x && x.toLowerCase() !== last.toLowerCase() && x.toLowerCase() !== tailMinus1);
+    if (alt) path[path.length - 1] = alt;
+  }
+  if (remainingLegs >= 1) path.push(last);
+
+  if (path.length > days + 1) path.length = days + 1;
+  while (path.length < days + 1) path.push(last);
+  return path;
+}
+
+function buildRouteCustomByDays(
+  start: string,
+  dayStops: string[],
+  findPortStrict: (name: string) => PortCoord | null
+) {
+  const seq = [start, ...dayStops].map(s => s.trim()).filter(Boolean);
+  const allValid = seq.every(s => !!findPortStrict(s));
+  if (!allValid || seq.length < 2) return null;
+  return seq;
+}
+
+function formatHoursHM(hours: number) {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}h ${m}m`;
+}
+
+/* ========= Inner (uses useSearchParams + usePorts) ========= */
 function AIPlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // 🔗 load canonical dataset
+  const { ready, names, aliasNames, findByName, search } = usePorts();
+
+  // helper to resolve any user input (aliases included)
+  const findPort = (input: string): PortCoord | null => {
+    if (!input) return null;
+    const p = findByName(input); // should resolve aliases internally
+    return p ?? null;
+  };
+
+  // Options for inputs (canonical names + aliases for discoverability)
+  const PORT_OPTIONS = useMemo(() => {
+    const all = new Set<string>();
+    names.forEach(n => all.add(n));
+    aliasNames.forEach(a => all.add(a));
+    return Array.from(all).sort((a, b) => a.localeCompare(b));
+  }, [names, aliasNames]);
 
   const [mode, setMode] = useState<PlannerMode>("Region");
 
@@ -520,7 +417,11 @@ function AIPlannerInner() {
   const [viaCanal, setViaCanal] = useState<boolean>(false);
   const effectiveVias = useMemo(() => {
     const list = [...vias].filter(Boolean);
-    if (viaCanal && !list.some(v => normalize(v) === normalize("Corinth Canal (Isthmia)"))) list.unshift("Corinth Canal (Isthmia)");
+    // Ensure canal prepends if toggled and exists in dataset
+    if (viaCanal && !list.some(v => normalize(v) === normalize("Corinth Canal (Isthmia)"))) {
+      list.unshift("Corinth Canal (Isthmia)");
+    }
+    // Avoid duplicating start/end
     return list.filter(v => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
   }, [vias, viaCanal, start, end]);
 
@@ -537,9 +438,9 @@ function AIPlannerInner() {
     });
   }, [customDays]);
 
-  // Load from URL once
+  // Load from URL once (after dataset is ready so aliases resolve)
   useEffect(() => {
-    if (!searchParams) return;
+    if (!searchParams || !ready) return;
     const { autogen } = loadStateFromQuery(searchParams, {
       setMode, setStartDate, setYachtType, setSpeed, setLph,
       setStart, setEnd, setDays, setRegionMode, setVias, setViaCanal,
@@ -547,12 +448,10 @@ function AIPlannerInner() {
     });
     const hasParams = Array.from(searchParams.keys()).length > 0;
     if (hasParams && autogen) {
-      setTimeout(() => {
-        try { document.getElementById("generate-btn")?.dispatchEvent(new Event("click", { bubbles: true })); } catch {}
-      }, 0);
+      try { document.getElementById("generate-btn")?.dispatchEvent(new Event("click", { bubbles: true })); } catch {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   function onTogglePref(value: string) {
     setPrefs((prev) => (prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]));
@@ -564,29 +463,31 @@ function AIPlannerInner() {
 
   function handleGenerate(e?: React.FormEvent) {
     e?.preventDefault?.();
-    let names: string[] | null = null;
+    if (!ready) { alert("Ports still loading—try again in a moment."); return; }
+
+    let namesSeq: string[] | null = null;
 
     if (mode === "Region") {
       if (!findPort(start) || !findPort(end)) { alert("Please select valid Start/End from the suggestions."); return; }
-      names = buildRouteRegion(start, end, days, region, effectiveVias);
+      namesSeq = buildRouteRegion(start, end, days, region, effectiveVias, findPort);
     } else {
       if (!findPort(customStart)) { alert("Please select a valid Start (custom)."); return; }
-      const seq = buildRouteCustomByDays(customStart, customDayStops);
+      const seq = buildRouteCustomByDays(customStart, customDayStops, findPort);
       if (!seq) { alert("Please fill valid ports for each day (use suggestions)."); return; }
-      names = seq;
+      namesSeq = seq;
     }
 
-    const coords = names.map((n) => findPort(n)).filter(Boolean) as Coord[];
+    const coords = (namesSeq ?? []).map((n) => findPort(n)).filter(Boolean) as PortCoord[];
     if (coords.length < 2) { setPlan([]); return; }
 
     const legs: Leg[] = [];
     for (let i = 0; i < coords.length - 1; i++) {
       const nm = Math.max(1, Math.round(haversineNM(coords[i], coords[i + 1])));
       const { hours, fuelL } = legStats(nm, yacht);
-      legs.push({ from: names[i], to: names[i + 1], nm, hours, fuelL });
+      legs.push({ from: namesSeq![i], to: namesSeq![i + 1], nm, hours, fuelL });
     }
 
-    const totalDays = names.length - 1;
+    const totalDays = (namesSeq?.length ?? 1) - 1;
     const cards: DayCard[] = [];
     for (let d = 0; d < totalDays; d++) {
       const date = startDate ? addDaysISO(startDate, d) : "";
@@ -650,18 +551,15 @@ function AIPlannerInner() {
   }, [plan]);
 
   const mapPoints = useMemo(() => {
-    if (!plan?.length) return [] as Coord[];
-    const names: string[] = [];
+    if (!plan?.length) return [] as PortCoord[];
+    const namesSeq: string[] = [];
     const first = plan[0]?.leg?.from;
-    if (first) names.push(first);
-    for (const d of plan) if (d.leg?.to) names.push(d.leg.to);
-    return names.map((n) => findPort(n)).filter(Boolean) as Coord[];
+    if (first) namesSeq.push(first);
+    for (const d of plan) if (d.leg?.to) namesSeq.push(d.leg.to);
+    return namesSeq
+      .map((n) => findPort(n))
+      .filter(Boolean) as PortCoord[];
   }, [plan]);
-
-  const PORT_OPTIONS = useMemo(
-    () => Array.from(new Set([...PORTS.map(p => p.name), ...Object.keys(ALIASES)])).sort(),
-    []
-  );
 
   return (
     <div className="bg-white text-slate-900">
@@ -680,6 +578,7 @@ function AIPlannerInner() {
               <option value="Region">Region-guided</option>
               <option value="Custom">Custom (day-by-day)</option>
             </select>
+            {!ready && <span className="text-xs text-slate-500">Loading ports…</span>}
           </div>
 
           {/* Common controls */}
@@ -763,7 +662,7 @@ function AIPlannerInner() {
             ))}
           </div>
 
-          <button id="generate-btn" type="submit" className="rounded-xl bg-brand-navy px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-navy">
+          <button id="generate-btn" type="submit" disabled={!ready} className="rounded-xl bg-brand-navy px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-navy disabled:opacity-50">
             Generate Itinerary
           </button>
         </form>
