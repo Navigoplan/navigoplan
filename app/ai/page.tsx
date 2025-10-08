@@ -9,7 +9,6 @@ import "leaflet/dist/leaflet.css";
 import { usePorts } from "../../lib/ports";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 /* ========= Types ========= */
 type YachtType = "Motor" | "Sailing";
