@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import type { LatLngExpression, LatLngBoundsExpression, Map as LeafletMap } from "leaflet";
+import * as L from "leaflet";
+import type { LatLngExpression, LatLngBoundsExpression, Map as LeafletMap, LeafletEvent } from "leaflet";
 
 /* ---- react-leaflet dynamic (no SSR) ---- */
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
@@ -32,7 +33,7 @@ const FitBounds = dynamic(async () => {
 }, { ssr: false });
 
 /* ---- types ---- */
-export type Point = { name: string; lat: number; lon: number };
+export type Point  = { name: string; lat: number; lon: number };
 export type Marker = { name: string; lat: number; lon: number };
 
 type Ring = [number, number][];
@@ -43,15 +44,13 @@ const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 const TRANSPARENT_1PX =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-/* Tunables (A* + simplify) */
+/* Tunables (A* + simplify + animation) */
 const CELL_DEG = 0.05;
 const GRID_MARGIN_DEG = 0.30;
 const NEAR_LAND_PENALTY = 0.25;
 const CLEARANCE_CELLS = 1;
 const SIMPLIFY_EPS = 0.008;
-
-/* Animation speed (ms ανά σημείο) */
-const DRAW_INTERVAL_MS = 140; // <- κάν' το μεγαλύτερο για πιο αργά, μικρότερο για πιο γρήγορα
+const DRAW_INTERVAL_MS = 160; // <-- ρύθμισε ταχύτητα animation
 
 /* ---- geo helpers ---- */
 const toRad = (x: number) => (x * Math.PI) / 180;
@@ -142,7 +141,7 @@ function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxL
   }
 
   function nodeFor(lat: number, lon: number) {
-    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows)))); 
+    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
     const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
     return grid[r][c];
   }
@@ -252,10 +251,8 @@ export default function RouteMapClient({
   activeNames?: string[];
   onMarkerClick?: (portName: string) => void;
 }) {
-  /* ---- keep map instance for flyTo ---- */
+  /* map ref για flyTo */
   const [map, setMap] = useState<LeafletMap | null>(null);
-  const flyTo = (lat: number, lon: number, z = 9) =>
-    map?.flyTo([lat, lon] as LatLngExpression, z, { duration: 1.15 });
 
   /* ---- load coast ---- */
   const [coast, setCoast] = useState<any | null>(null);
@@ -277,7 +274,6 @@ export default function RouteMapClient({
     for (let i = 0; i < points.length - 1; i++) {
       const a = points[i], b = points[i + 1];
 
-      // grid path αν έχουμε coast, αλλιώς ευθεία
       let seg: [number, number][] | null = null;
       if (coastPolys.length) {
         const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
@@ -290,7 +286,7 @@ export default function RouteMapClient({
       }
       if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
 
-      // καθάρισε διπλότυπα γειτονικά
+      // remove consecutive duplicates
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -302,7 +298,6 @@ export default function RouteMapClient({
       out.push(cleaned);
     }
 
-    // join χωρίς διπλές ενώσεις
     const joined: [number, number][] = [];
     for (const leg of out) {
       if (!joined.length) joined.push(...leg);
@@ -312,11 +307,8 @@ export default function RouteMapClient({
   }, [points, coastPolys]);
 
   /* ---- progressive draw (από το πρώτο σημείο) ---- */
-  const [drawCount, setDrawCount] = useState(0); // πόσα σημεία δείχνουμε
-  useEffect(() => {
-    // reset όταν αλλάζουν τα σημεία
-    setDrawCount(waterLatLngs.length ? 1 : 0);
-  }, [waterLatLngs]);
+  const [drawCount, setDrawCount] = useState(0);
+  useEffect(() => { setDrawCount(waterLatLngs.length ? 1 : 0); }, [waterLatLngs]);
 
   useEffect(() => {
     if (drawCount <= 0 || drawCount >= waterLatLngs.length) return;
@@ -328,8 +320,7 @@ export default function RouteMapClient({
 
   const animatedLatLngs = useMemo<LatLngExpression[]>(() => {
     if (!waterLatLngs.length) return [];
-    return (waterLatLngs as [number, number][])
-      .slice(0, Math.max(2, drawCount)) as LatLngExpression[];
+    return (waterLatLngs as [number, number][]).slice(0, Math.max(2, drawCount)) as LatLngExpression[];
   }, [waterLatLngs, drawCount]);
 
   /* markers από τα input points (start/mids/end) */
@@ -340,17 +331,21 @@ export default function RouteMapClient({
   /* bounds/center */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if ((waterLatLngs?.length ?? 0) < 2) return null;
-    // lazy import leaflet για bounds
-    const L = require("leaflet") as typeof import("leaflet");
     return L.latLngBounds(waterLatLngs as any).pad(0.08);
   }, [waterLatLngs]);
 
   const center: LatLngExpression =
     (points[0] ? [points[0].lat, points[0].lon] : [37.97, 23.72]) as LatLngExpression;
 
-  /* helper: active name set */
+  /* helpers */
   const isActive = (name: string) =>
     (activeNames ?? []).some(n => n.toLowerCase() === name.toLowerCase());
+
+  const flyToPoint = (lat: number, lon: number) => {
+    if (!map) return;
+    const targetZoom = Math.max(map.getZoom(), 9);
+    map.flyTo([lat, lon], targetZoom, { duration: 1.2 });
+  };
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
@@ -369,12 +364,12 @@ export default function RouteMapClient({
       `}</style>
 
       <MapContainer
-        whenCreated={(m) => setMap(m)}           // keep map ref για flyTo
+        whenReady={(e: LeafletEvent) => setMap(e.target as LeafletMap)}  // κρατάμε ref στο map
         center={center}
         zoom={7}
         minZoom={3}
         maxZoom={14}
-        scrollWheelZoom={true}                   // ✅ ενεργό zoom στο wheel
+        scrollWheelZoom={true}                                           // wheel zoom ενεργό
         style={{ height: "100%", width: "100%" }}
       >
         {/* GEBCO */}
@@ -438,19 +433,13 @@ export default function RouteMapClient({
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
-        {/* full route shadow */}
+        {/* full route (λεπτή γκρι για “σκιά”) */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline
               pane="pane-route-shadow"
               positions={waterLatLngs}
-              pathOptions={{
-                color: "#9aa3b2",
-                weight: 2,
-                opacity: 0.6,
-                lineJoin: "round",
-                lineCap: "round",
-              }}
+              pathOptions={{ color: "#9aa3b2", weight: 2, opacity: 0.6, lineJoin: "round", lineCap: "round" }}
             />
           )}
         </Pane>
@@ -461,14 +450,7 @@ export default function RouteMapClient({
             <Polyline
               pane="pane-route"
               positions={animatedLatLngs}
-              pathOptions={{
-                color: "#0b1220",
-                weight: 3,
-                opacity: 0.95,
-                dashArray: "6 8",
-                lineJoin: "round",
-                lineCap: "round",
-              }}
+              pathOptions={{ color: "#0b1220", weight: 3, opacity: 0.95, dashArray: "6 8", lineJoin: "round", lineCap: "round" }}
             />
           )}
 
@@ -478,7 +460,7 @@ export default function RouteMapClient({
               pane="pane-route"
               center={[markerStart.lat, markerStart.lon] as LatLngExpression}
               radius={8}
-              eventHandlers={{ click: () => flyTo(markerStart.lat, markerStart.lon, 9) }}
+              eventHandlers={{ click: () => flyToPoint(markerStart.lat, markerStart.lon) }}
               pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
@@ -494,9 +476,7 @@ export default function RouteMapClient({
               pane="pane-route"
               center={[p.lat, p.lon] as LatLngExpression}
               radius={5}
-              eventHandlers={{
-                click: () => { flyTo(p.lat, p.lon, 9); onMarkerClick?.(p.name); }
-              }}
+              eventHandlers={{ click: () => { onMarkerClick?.(p.name); flyToPoint(p.lat, p.lon); } }}
               pathOptions={{
                 color: isActive(p.name) ? "#c4a962" : "#0b1220",
                 fillColor: isActive(p.name) ? "#c4a962" : "#0b1220",
@@ -515,7 +495,7 @@ export default function RouteMapClient({
               pane="pane-route"
               center={[markerEnd.lat, markerEnd.lon] as LatLngExpression}
               radius={8}
-              eventHandlers={{ click: () => flyTo(markerEnd.lat, markerEnd.lon, 9) }}
+              eventHandlers={{ click: () => flyToPoint(markerEnd.lat, markerEnd.lon) }}
               pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
             >
               <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
@@ -534,9 +514,7 @@ export default function RouteMapClient({
                 pane="pane-dataset"
                 center={[m.lat, m.lon] as LatLngExpression}
                 radius={3.5}
-                eventHandlers={{
-                  click: () => { flyTo(m.lat, m.lon, 9); onMarkerClick?.(m.name); }
-                }}
+                eventHandlers={{ click: () => { onMarkerClick?.(m.name); flyToPoint(m.lat, m.lon); } }}
                 pathOptions={{
                   color: isActive(m.name) ? "#c4a962" : "#0b122033",
                   fillColor: isActive(m.name) ? "#c4a962" : "#0b122033",
