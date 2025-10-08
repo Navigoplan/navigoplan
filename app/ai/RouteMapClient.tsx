@@ -14,7 +14,7 @@ const GeoJSON      = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),
 const Pane         = dynamic(() => import("react-leaflet").then(m => m.Pane),         { ssr: false });
 const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle),    { ssr: false });
 
-/* auto fit-bounds */
+/* FitBounds helper */
 const FitBounds = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -31,26 +31,24 @@ const FitBounds = dynamic(async () => {
   return Cmp;
 }, { ssr: false });
 
-/* ---- types & consts ---- */
+/* ---- types ---- */
 export type Point = { name: string; lat: number; lon: number };
-export type Marker = { name: string; lat: number; lon: number; island?: string; region?: string; category?: "harbor" | "marina" | "anchorage" | "spot" };
-type ActiveMeta = {
-  start?: string | null;
-  end?: string | null;
-  vias?: string[];
-  custom?: string[];
-};
+export type Marker = { name: string; lat: number; lon: number };
 
+type Ring = [number, number][];
+type Poly = Ring[];
+
+/* ---- consts ---- */
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 const TRANSPARENT_1PX =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-/* Tunables */
-const CELL_DEG = 0.05;          // ~5–6km
-const GRID_MARGIN_DEG = 0.30;   // γύρω από bbox κάθε leg
-const NEAR_LAND_PENALTY = 0.25; // “κόστος” κοντά σε στεριά
-const CLEARANCE_CELLS = 1;      // buffer γύρω από στεριά
-const SIMPLIFY_EPS = 0.008;     // ~0.8km
+/* Tunables (A* + simplify) */
+const CELL_DEG = 0.05;
+const GRID_MARGIN_DEG = 0.30;
+const NEAR_LAND_PENALTY = 0.25;
+const CLEARANCE_CELLS = 1;
+const SIMPLIFY_EPS = 0.008;
 
 /* ---- geo helpers ---- */
 const toRad = (x: number) => (x * Math.PI) / 180;
@@ -62,10 +60,7 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/* ---- Point in Polygon (lon,lat) ---- */
-type Ring = [number, number][]; // [lon,lat]
-type Poly = Ring[];             // polygon with holes
-
+/* ---- PIP ---- */
 function pointInRing(pt: [number, number], ring: Ring): boolean {
   const [x, y] = pt;
   let inside = false;
@@ -84,39 +79,32 @@ function pointInPoly(pt: [number, number], poly: Poly): boolean {
 function collectPolys(geo: any): Poly[] {
   const polys: Poly[] = [];
   if (!geo) return polys;
-
   if (geo.type === "FeatureCollection") {
     for (const f of (geo.features ?? [])) {
       const g = f?.geometry;
       if (!g) continue;
-      if (g.type === "Polygon") {
-        polys.push(g.coordinates as Poly);
-      } else if (g.type === "MultiPolygon") {
-        for (const poly of g.coordinates as Poly[]) polys.push(poly);
-      }
+      if (g.type === "Polygon") polys.push(g.coordinates as Poly);
+      else if (g.type === "MultiPolygon") for (const p of g.coordinates as Poly[]) polys.push(p);
     }
-  } else if (geo.type === "Polygon") {
-    polys.push(geo.coordinates as Poly);
-  } else if (geo.type === "MultiPolygon") {
-    for (const poly of (geo.coordinates as Poly[])) polys.push(poly);
-  }
+  } else if (geo.type === "Polygon") polys.push(geo.coordinates as Poly);
+  else if (geo.type === "MultiPolygon") for (const p of (geo.coordinates as Poly[])) polys.push(p);
   return polys;
 }
 
-/* ---- Water-grid (A*) ---- */
+/* ---- Grid + A* ---- */
 type GridNode = { r: number; c: number; lat: number; lon: number; walkable: boolean; nearLand: boolean };
 
 function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxLon: number, coastPolys: Poly[]) {
   const rows = Math.max(8, Math.ceil((maxLat - minLat) / CELL_DEG));
   const cols = Math.max(8, Math.ceil((maxLon - minLon) / CELL_DEG));
-
   const grid: GridNode[][] = new Array(rows);
+
   for (let r = 0; r < rows; r++) {
     grid[r] = new Array(cols);
     const lat = minLat + (r + 0.5) * (maxLat - minLat) / rows;
     for (let c = 0; c < cols; c++) {
       const lon = minLon + (c + 0.5) * (maxLon - minLon) / cols;
-      const pt: [number, number] = [lon, lat]; // (lon,lat)
+      const pt: [number, number] = [lon, lat];
       let onLand = false;
       for (const poly of coastPolys) { if (pointInPoly(pt, poly)) { onLand = true; break; } }
       grid[r][c] = { r, c, lat, lon, walkable: !onLand, nearLand: false };
@@ -225,7 +213,7 @@ function aStarWater(grid: GridNode[][], start: GridNode, goal: GridNode) {
   return null;
 }
 
-/* ---- Ramer–Douglas–Peucker ---- */
+/* ---- Simplify ---- */
 function perpendicularDistance(p: [number, number], a: [number, number], b: [number, number]) {
   const x0 = p[1], y0 = p[0], x1 = a[1], y1 = a[0], x2 = b[1], y2 = b[0];
   const num = Math.abs((y2 - y1)*x0 - (x2 - x1)*y0 + x2*y1 - y2*x1);
@@ -252,19 +240,17 @@ function simplifyRDP(path: [number, number][], epsilonDeg = SIMPLIFY_EPS): [numb
 /* ===================================================== */
 export default function RouteMapClient({
   points,
-  markers = [],
-  activeNames = [],
+  markers,
+  activeNames,
   onMarkerClick,
-  activeMeta, // <-- optional, δεν χρησιμοποιείται – απλώς το αποδεχόμαστε για TS συμβατότητα
 }: {
   points: Point[];
   markers?: Marker[];
   activeNames?: string[];
   onMarkerClick?: (portName: string) => void;
-  activeMeta?: ActiveMeta;
 }) {
+  /* ---- load coast ---- */
   const [coast, setCoast] = useState<any | null>(null);
-
   useEffect(() => {
     let cancelled = false;
     fetch("/data/coastlines-gr.geojson")
@@ -273,27 +259,30 @@ export default function RouteMapClient({
       .catch(() => { if (!cancelled) setCoast(null); });
     return () => { cancelled = true; };
   }, []);
-
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* === route που ΠΕΡΝΑ ΑΠΟ ΑΚΡΙΒΩΣ τα input waypoints === */
+  /* ---- compute water path (join all legs) ---- */
   const waterLatLngs = useMemo<LatLngExpression[]>(() => {
-    if (!coastPolys.length || points.length < 2) {
-      return points.map(p => [p.lat, p.lon] as LatLngExpression);
-    }
-    const out: [number, number][][] = [];
+    if (points.length < 2) return points.map(p => [p.lat, p.lon] as LatLngExpression);
 
+    const out: [number, number][][] = [];
     for (let i = 0; i < points.length - 1; i++) {
       const a = points[i], b = points[i + 1];
-      const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
-      const path = aStarWater(grid, start, goal);
 
-      if (!path) { out.push([[a.lat, a.lon], [b.lat, b.lon]]); continue; }
+      // grid path αν έχουμε coast, αλλιώς ευθεία
+      let seg: [number, number][] | null = null;
+      if (coastPolys.length) {
+        const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
+        const path = aStarWater(grid, start, goal);
+        if (path) {
+          const mid = path.map(n => [n.lat, n.lon] as [number, number]);
+          const midS = simplifyRDP(mid, SIMPLIFY_EPS);
+          seg = [[a.lat, a.lon], ...midS, [b.lat, b.lon]];
+        }
+      }
+      if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
 
-      const middle = path.map(n => [n.lat, n.lon] as [number, number]);
-      const middleS = simplifyRDP(middle, SIMPLIFY_EPS);
-
-      const seg: [number, number][] = [[a.lat, a.lon], ...middleS, [b.lat, b.lon]];
+      // καθάρισε διπλότυπα γειτονικά
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -305,6 +294,7 @@ export default function RouteMapClient({
       out.push(cleaned);
     }
 
+    // join χωρίς διπλές ενώσεις
     const joined: [number, number][] = [];
     for (const leg of out) {
       if (!joined.length) joined.push(...leg);
@@ -313,21 +303,45 @@ export default function RouteMapClient({
     return joined as LatLngExpression[];
   }, [points, coastPolys]);
 
-  /* markers: ακριβώς στα input points */
+  /* ---- progressive draw (από το πρώτο σημείο) ---- */
+  const [drawCount, setDrawCount] = useState(0); // πόσα σημεία δείχνουμε
+  useEffect(() => {
+    // reset όταν αλλάζουν τα σημεία
+    setDrawCount(waterLatLngs.length ? 1 : 0);
+  }, [waterLatLngs]);
+
+  useEffect(() => {
+    if (drawCount <= 0 || drawCount >= waterLatLngs.length) return;
+    const id = window.setInterval(() => {
+      setDrawCount((c) => Math.min(c + 1, waterLatLngs.length));
+    }, 45); // ταχύτητα animation (ms ανά σημείο)
+    return () => window.clearInterval(id);
+  }, [drawCount, waterLatLngs.length]);
+
+  const animatedLatLngs = useMemo<LatLngExpression[]>(() => {
+    if (!waterLatLngs.length) return [];
+    return (waterLatLngs as [number, number][])
+      .slice(0, Math.max(2, drawCount)) as LatLngExpression[];
+  }, [waterLatLngs, drawCount]);
+
+  /* markers από τα input points (start/mids/end) */
   const markerStart = points[0] ?? null;
   const markerMids  = points.slice(1, -1);
   const markerEnd   = points.at(-1) ?? null;
 
   /* bounds/center */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
-    if (waterLatLngs.length < 2) return null;
+    if ((waterLatLngs?.length ?? 0) < 2) return null;
     const L = require("leaflet") as typeof import("leaflet");
     return L.latLngBounds(waterLatLngs as any).pad(0.08);
   }, [waterLatLngs]);
 
-  const center: LatLngExpression = (waterLatLngs[0] as LatLngExpression) ?? ([37.97, 23.72] as LatLngExpression);
+  const center: LatLngExpression =
+    (points[0] ? [points[0].lat, points[0].lon] : [37.97, 23.72]) as LatLngExpression;
 
-  const activeSet = useMemo(() => new Set((activeNames ?? []).map(n => n.toLowerCase())), [activeNames]);
+  /* helper: active name set */
+  const isActive = (name: string) =>
+    (activeNames ?? []).some(n => n.toLowerCase() === name.toLowerCase());
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
@@ -367,7 +381,7 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* στεριά από GeoJSON */}
+        {/* στεριά */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (
             <GeoJSON
@@ -414,16 +428,33 @@ export default function RouteMapClient({
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
-        {/* route + markers */}
-        <Pane name="pane-route" style={{ zIndex: 450 }}>
+        {/* full route (λεπτή γκρι για “σκιά”) */}
+        <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline
-              pane="pane-route"
+              pane="pane-route-shadow"
               positions={waterLatLngs}
+              pathOptions={{
+                color: "#9aa3b2",
+                weight: 2,
+                opacity: 0.6,
+                lineJoin: "round",
+                lineCap: "round",
+              }}
+            />
+          )}
+        </Pane>
+
+        {/* progressive dashed route */}
+        <Pane name="pane-route" style={{ zIndex: 450 }}>
+          {animatedLatLngs.length >= 2 && (
+            <Polyline
+              pane="pane-route"
+              positions={animatedLatLngs}
               pathOptions={{
                 color: "#0b1220",
                 weight: 3,
-                opacity: 0.9,
+                opacity: 0.95,
                 dashArray: "6 8",
                 lineJoin: "round",
                 lineCap: "round",
@@ -431,7 +462,7 @@ export default function RouteMapClient({
             />
           )}
 
-          {/* Start / mid / end από το plan */}
+          {/* start */}
           {markerStart && (
             <CircleMarker
               pane="pane-route"
@@ -445,13 +476,19 @@ export default function RouteMapClient({
             </CircleMarker>
           )}
 
+          {/* mids */}
           {markerMids.map((p, i) => (
             <CircleMarker
               key={`${p.name}-${i}`}
               pane="pane-route"
               center={[p.lat, p.lon] as LatLngExpression}
               radius={5}
-              pathOptions={{ color: "#0b1220", fillColor: "#0b1220", fillOpacity: 0.9 }}
+              eventHandlers={onMarkerClick ? { click: () => onMarkerClick(p.name) } : undefined}
+              pathOptions={{
+                color: isActive(p.name) ? "#c4a962" : "#0b1220",
+                fillColor: isActive(p.name) ? "#c4a962" : "#0b1220",
+                fillOpacity: 0.95,
+              }}
             >
               <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
                 {p.name}
@@ -459,6 +496,7 @@ export default function RouteMapClient({
             </CircleMarker>
           ))}
 
+          {/* end */}
           {markerEnd && (
             <CircleMarker
               pane="pane-route"
@@ -473,35 +511,32 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* Dataset markers (clickable) */}
-        <Pane name="pane-dataset" style={{ zIndex: 480 }}>
-          {markers.map((m, idx) => {
-            const isActive = activeSet.has((m.name || "").toLowerCase());
-            return (
+        {/* dataset markers (προαιρετικά) */}
+        {markers?.length ? (
+          <Pane name="pane-dataset" style={{ zIndex: 430 }}>
+            {markers.map((m, i) => (
               <CircleMarker
-                key={`${m.name}-${idx}`}
+                key={`${m.name}-${i}`}
                 pane="pane-dataset"
                 center={[m.lat, m.lon] as LatLngExpression}
-                radius={isActive ? 5.5 : 4}
+                radius={3.5}
+                eventHandlers={onMarkerClick ? { click: () => onMarkerClick(m.name) } : undefined}
                 pathOptions={{
-                  color: isActive ? "#c4a962" : "#0b1220",
-                  fillColor: isActive ? "#c4a962" : "#0b1220",
-                  fillOpacity: isActive ? 1 : 0.8,
-                  opacity: isActive ? 1 : 0.8,
+                  color: isActive(m.name) ? "#c4a962" : "#0b122033",
+                  fillColor: isActive(m.name) ? "#c4a962" : "#0b122033",
+                  fillOpacity: isActive(m.name) ? 0.95 : 0.5,
+                  weight: isActive(m.name) ? 2 : 1,
                 }}
-                eventHandlers={
-                  onMarkerClick
-                    ? { click: () => onMarkerClick(m.name) }
-                    : undefined
-                }
               >
-                <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-                  {m.name}
-                </Tooltip>
+                {isActive(m.name) && (
+                  <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
+                    {m.name}
+                  </Tooltip>
+                )}
               </CircleMarker>
-            );
-          })}
-        </Pane>
+            ))}
+          </Pane>
+        ) : null}
 
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>

@@ -52,31 +52,20 @@ function addDaysISO(iso: string, plus: number) {
   return d.toISOString().slice(0, 10);
 }
 
-/* ========= Regions (by canonical dataset names) ========= */
+/* ========= Regions ========= */
 type RegionRing = Record<RegionKey, string[]>;
 const BANK: RegionRing = {
-  Saronic: [
-    "Alimos", "Aegina", "Agistri", "Poros", "Hydra",
-    "Spetses", "Ermioni", "Porto Cheli", "Alimos",
-  ],
-  Cyclades: [
-    "Lavrio", "Kea", "Kythnos", "Syros", "Mykonos",
-    "Paros", "Naxos", "Ios", "Santorini", "Milos",
-    "Sifnos", "Serifos", "Lavrio",
-  ],
-  Ionian: [
-    "Corfu", "Paxos", "Antipaxos", "Lefkada", "Meganisi",
-    "Kalamos", "Kastos", "Ithaca", "Kefalonia", "Zakynthos",
-    "Lefkada",
-  ],
-  Dodecanese: ["Rhodes", "Symi", "Kos", "Kalymnos", "Patmos", "Rhodes"],
-  Sporades: ["Volos", "Skiathos", "Skopelos", "Alonissos", "Volos"],
+  Saronic: ["Alimos","Aegina","Agistri","Poros","Hydra","Spetses","Ermioni","Porto Cheli","Alimos"],
+  Cyclades: ["Lavrio","Kea","Kythnos","Syros","Mykonos","Paros","Naxos","Ios","Santorini","Milos","Sifnos","Serifos","Lavrio"],
+  Ionian: ["Corfu","Paxos","Antipaxos","Lefkada","Meganisi","Kalamos","Kastos","Ithaca","Kefalonia","Zakynthos","Lefkada"],
+  Dodecanese: ["Rhodes","Symi","Kos","Kalymnos","Patmos","Rhodes"],
+  Sporades: ["Volos","Skiathos","Skopelos","Alonissos","Volos"],
   NorthAegean: [
-    "Thessaloniki", "Nea Moudania", "Sani Marina", "Nikiti", "Vourvourou",
-    "Ormos Panagias", "Ouranoupoli", "Kavala", "Thassos", "Samothraki",
-    "Lemnos", "Lesvos", "Chios", "Samos", "Ikaria",
+    "Thessaloniki","Nea Moudania","Sani Marina","Nikiti","Vourvourou",
+    "Ormos Panagias","Ouranoupoli","Kavala","Thassos","Samothraki",
+    "Lemnos","Lesvos","Chios","Samos","Ikaria"
   ],
-  Crete: ["Chania", "Rethymno", "Heraklion", "Agios Nikolaos", "Chania"],
+  Crete: ["Chania","Rethymno","Heraklion","Agios Nikolaos","Chania"],
 };
 
 function autoPickRegion(start: string, end: string): RegionKey {
@@ -269,7 +258,6 @@ function nearestIndexInRing(
   }
   return best;
 }
-
 function buildRouteRegion(
   start: string,
   end: string,
@@ -325,7 +313,6 @@ function buildRouteRegion(
   while (path.length < days + 1) path.push(last);
   return path;
 }
-
 function buildRouteCustomByDays(
   start: string,
   dayStops: string[],
@@ -336,7 +323,6 @@ function buildRouteCustomByDays(
   if (!allValid || seq.length < 2) return null;
   return seq;
 }
-
 function formatHoursHM(hours: number) {
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
@@ -410,7 +396,7 @@ function AIPlannerInner() {
   const [mapPickMode, setMapPickMode] = useState<MapPick>("Via");
   const [customPickIndex, setCustomPickIndex] = useState<number>(1); // Day 1..customDays
 
-  // Load from URL (μετά το ready)
+  // Load from URL
   useEffect(() => {
     if (!searchParams || !ready) return;
     const { autogen } = loadStateFromQuery(searchParams, {
@@ -422,8 +408,7 @@ function AIPlannerInner() {
     if (hasParams && autogen) {
       try { document.getElementById("generate-btn")?.dispatchEvent(new Event("click", { bubbles: true })); } catch {}
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  }, [ready, searchParams]);
 
   function onTogglePref(value: string) {
     setPrefs((prev) => (prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]));
@@ -530,17 +515,13 @@ function AIPlannerInner() {
     return namesSeq.map((n) => findPort(n)).filter(Boolean) as PortCoord[];
   }, [plan]);
 
-  // 🔵 Markers από το dataset (περνάμε island/region/category αν υπάρχουν)
-  const markers: { name: string; lat: number; lon: number; island?: string; region?: string; category?: "harbor"|"marina"|"anchorage"|"spot" }[] =
-    useMemo(() => {
-      if (!ready || !ports?.length) return [];
-      return ports.map((p: any) => ({
-        name: p.name, lat: p.lat, lon: p.lon,
-        island: p.island, region: p.region, category: p.category,
-      }));
-    }, [ready, ports]);
+  // Markers από dataset
+  const markers: { name: string; lat: number; lon: number }[] = useMemo(() => {
+    if (!ready || !ports?.length) return [];
+    return ports.map((p: any) => ({ name: p.name, lat: p.lat, lon: p.lon }));
+  }, [ready, ports]);
 
-  // ⭐ Active names (για basic highlight/back-compat)
+  // Active names για highlight
   const activeNames = useMemo(() => {
     const set = new Set<string>();
     if (mode === "Region") {
@@ -554,32 +535,11 @@ function AIPlannerInner() {
     return Array.from(set);
   }, [mode, start, end, effectiveVias, customStart, customDayStops]);
 
-  // 🏷️ ΝΕΟ: ρόλος ανά όνομα (start / via / end / custom) για χρωματισμό
-  const activeMeta = useMemo(() => {
-    const map: Record<string, "start"|"via"|"end"|"custom"> = {};
-    if (mode === "Region") {
-      if (start) map[start] = "start";
-      effectiveVias.forEach(v => { if (v) map[v] = "via"; });
-      if (end) map[end] = "end";
-    } else {
-      if (customStart) map[customStart] = "start";
-      customDayStops.forEach(v => { if (v) map[v] = "custom"; });
-    }
-    return map;
-  }, [mode, start, end, effectiveVias, customStart, customDayStops]);
-
-  // 🖱️ Click σε marker → γεμίζει Start / End / Via / Custom Day
+  // Click σε marker
   function handleMarkerClick(portName: string) {
     if (mode === "Region") {
-      if (mapPickMode === "Start") {
-        setStart(portName);
-        return;
-      }
-      if (mapPickMode === "End") {
-        setEnd(portName);
-        return;
-      }
-      // Via: βάζουμε στο πρώτο κενό ή κάνουμε append
+      if (mapPickMode === "Start") { setStart(portName); return; }
+      if (mapPickMode === "End")   { setEnd(portName); return; }
       const idx = vias.findIndex(v => !v);
       if (mapPickMode === "Via") {
         if (idx >= 0) setViaAt(idx, portName);
@@ -587,10 +547,9 @@ function AIPlannerInner() {
         return;
       }
     } else {
-      // Custom
       if (mapPickMode === "Start") { setCustomStart(portName); return; }
       if (mapPickMode === "Custom") {
-        const i = Math.max(1, Math.min(customDays, customPickIndex)) - 1; // day index
+        const i = Math.max(1, Math.min(customDays, customPickIndex)) - 1;
         setCustomStopAt(i, portName);
         return;
       }
@@ -733,7 +692,7 @@ function AIPlannerInner() {
               </div>
             </div>
 
-            {/* MAP + Map Pick Mode */}
+            {/* MAP */}
             <div className="no-print mb-2 flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-brand-navy">Map Pick Mode:</span>
               <label className="text-sm flex items-center gap-1">
@@ -773,8 +732,7 @@ function AIPlannerInner() {
                   <RouteMapClient
                     points={mapPoints}
                     markers={markers}
-                    activeNames={activeNames}     // back-compat
-                    activeMeta={activeMeta}       // 🎯 ρόλοι για χρώματα
+                    activeNames={activeNames}
                     onMarkerClick={handleMarkerClick}
                   />
                 </div>
