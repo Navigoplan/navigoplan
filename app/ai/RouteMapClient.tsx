@@ -55,15 +55,17 @@ const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 const TRANSPARENT_1PX =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-/* Tunables (A* + simplify + animation/UI) — ADAPTIVE COAST-AVOIDING */
-const BASE_CELL_DEG = 0.05;        // upper bound για μεγάλα legs
-const DEFAULT_GRID_MARGIN_DEG = 0.45; // βασικό margin (θα δοκιμάζονται κι άλλα)
-const NEAR_LAND_PENALTY = 0.6;     // βαρύτερο κόστος κοντά σε ακτή
-const SIMPLIFY_EPS = 0.006;        // λίγο πιο “πυκνή” γραμμή (λιγότερο aggressive simplify)
+/* Tunables (A* + simplify + animation/UI) — ADAPTIVE COAST-AVOIDING
+   ΠΙΟ «ΣΦΙΧΤΕΣ» ΡΥΘΜΙΣΕΙΣ */
+const BASE_CELL_DEG = 0.03;        // μικρότερο κελί -> καλύτερη ακρίβεια
+const GRID_MARGIN_DEG = 0.80;      // μεγαλύτερο πλαίσιο γύρω από κάθε leg
+const NEAR_LAND_PENALTY = 1.0;     // βαρύτερο κόστος κοντά σε ακτή
+const SIMPLIFY_EPS = 0.004;        // πιο «πυκνή» γραμμή
 
-/* -------- Animation -------- */
+/* -------- Animation speed -------- */
 const DRAW_POINTS_PER_SEC = 3;
 const DRAW_INTERVAL_MS = Math.max(20, Math.round(1000 / DRAW_POINTS_PER_SEC));
+
 const FOLLOW_ZOOM_MIN = 9;
 const LEG_VIEW_ZOOM_MAX = 10;
 const MARKER_FADE_MS = 280;
@@ -110,15 +112,14 @@ function collectPolys(geo: any): Poly[] {
   return polys;
 }
 
-/* -------- Adaptive cell size -------- */
+/* -------- Adaptive cell size για κάθε leg -------- */
 function pickCellDegForLeg(a: Point, b: Point) {
   const dLat = Math.abs(a.lat - b.lat);
   const dLon = Math.abs(a.lon - b.lon);
   const span = Math.max(dLat, dLon);
-
   let cell = Math.min(BASE_CELL_DEG, Math.max(0.01, span / 180));
-  if (span < 1.20) cell = 0.020;
-  if (span < 0.60) cell = 0.015;
+  if (span < 1.20) cell = 0.018;
+  if (span < 0.60) cell = 0.014;
   if (span < 0.35) cell = 0.012;
   if (span < 0.22) cell = 0.010;
   if (span < 0.12) cell = 0.008;
@@ -134,11 +135,10 @@ function buildGridForBounds(
   minLon: number,
   maxLon: number,
   coastPolys: Poly[],
-  cellDeg: number,
-  clearanceDeg = 0.06
+  cellDeg: number
 ) {
-  const rows = Math.max(12, Math.ceil((maxLat - minLat) / cellDeg));
-  const cols = Math.max(12, Math.ceil((maxLon - minLon) / cellDeg));
+  const rows = Math.max(14, Math.ceil((maxLat - minLat) / cellDeg));
+  const cols = Math.max(14, Math.ceil((maxLon - minLon) / cellDeg));
   const grid: GridNode[][] = new Array(rows);
 
   for (let r = 0; r < rows; r++) {
@@ -146,7 +146,7 @@ function buildGridForBounds(
     const lat = minLat + (r + 0.5) * (maxLat - minLat) / rows;
     for (let c = 0; c < cols; c++) {
       const lon = minLon + (c + 0.5) * (maxLon - minLon) / cols;
-      const pt: [number, number] = [lon, lat]; // GeoJSON order (lon,lat)
+      const pt: [number, number] = [lon, lat];
       let onLand = false;
       for (const poly of coastPolys) { if (pointInPoly(pt, poly)) { onLand = true; break; } }
       grid[r][c] = { r, c, lat, lon, walkable: !onLand, nearLand: false };
@@ -162,8 +162,8 @@ function buildGridForBounds(
     }
   }
 
-  // clearance γύρω από στεριά — σε deg (όχι cells) για σταθερότητα
-  const clearanceCells = Math.max(1, Math.round(clearanceDeg / cellDeg));
+  // πιο «γερός» αποκλεισμός γύρω από τη στεριά
+  const clearanceCells = Math.max(1, Math.round(0.08 / cellDeg)); // ~0.08deg ≈ 9km buffer
   if (clearanceCells > 0) {
     const toBlock: [number, number][] = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
@@ -181,21 +181,20 @@ function buildGridForBounds(
   }
 
   function nodeFor(lat: number, lon: number) {
-    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
+    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows)))); 
     const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
     return grid[r][c];
   }
   return { grid, nodeFor };
 }
 
-function buildGridForLeg(a: Point, b: Point, coastPolys: Poly[], marginDeg: number, cellOverride?: number, clearanceDeg?: number) {
-  const minLat = Math.min(a.lat, b.lat) - marginDeg;
-  const maxLat = Math.max(a.lat, b.lat) + marginDeg;
-  const minLon = Math.min(a.lon, b.lon) - marginDeg;
-  const maxLon = Math.max(a.lon, b.lon) + marginDeg;
-
-  const cellDeg = cellOverride ?? pickCellDegForLeg(a, b);
-  const { grid, nodeFor } = buildGridForBounds(minLat, maxLat, minLon, maxLon, coastPolys, cellDeg, clearanceDeg ?? 0.06);
+function buildGridForLeg(a: Point, b: Point, coastPolys: Poly[]) {
+  const minLat = Math.min(a.lat, b.lat) - GRID_MARGIN_DEG;
+  const maxLat = Math.max(a.lat, b.lat) + GRID_MARGIN_DEG;
+  const minLon = Math.min(a.lon, b.lon) - GRID_MARGIN_DEG;
+  const maxLon = Math.max(a.lon, b.lon) + GRID_MARGIN_DEG;
+  const cellDeg = pickCellDegForLeg(a, b);
+  const { grid, nodeFor } = buildGridForBounds(minLat, maxLat, minLon, maxLon, coastPolys, cellDeg);
   return { grid, start: nodeFor(a.lat, a.lon), goal: nodeFor(b.lat, b.lon) };
 }
 
@@ -233,7 +232,6 @@ function aStarWater(grid: GridNode[][], start: GridNode, goal: GridNode) {
   while (open.length) {
     open.sort((a, b) => (fScore.get(key(a))! - fScore.get(key(b))!));
     const current = open.shift()!; inOpen.delete(key(current));
-
     if (current.r === goal.r && current.c === goal.c) {
       const path: GridNode[] = [current];
       let curKey = key(current);
@@ -284,44 +282,43 @@ function simplifyRDP(path: [number, number][], epsilonDeg = SIMPLIFY_EPS): [numb
   }
 }
 
-/* ---------- multi-attempt router per leg ---------- */
-function tryLegOnce(a: Point, b: Point, coastPolys: Poly[], marginDeg: number, cellOverride?: number, clearanceDeg?: number) {
-  const { grid, start, goal } = buildGridForLeg(a, b, coastPolys, marginDeg, cellOverride, clearanceDeg);
-  const path = aStarWater(grid, start, goal);
-  if (!path) return null;
-  const mid = path.map(n => [n.lat, n.lon] as [number, number]);
-  const midS = simplifyRDP(mid, SIMPLIFY_EPS);
-  return [[a.lat, a.lon], ...midS, [b.lat, b.lon]] as [number, number][];
+/* ---- Χρήσιμοι έλεγχοι  ------------------------------ */
+// Δειγματοληψία κατά μήκος ευθείας: αν «μπαίνει» σε στεριά, επιστρέφει true
+function segmentCrossesLand(a: Point, b: Point, coastPolys: Poly[], samples = 220): boolean {
+  if (!coastPolys.length) return false;
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const lat = a.lat + (b.lat - a.lat) * t;
+    const lon = a.lon + (b.lon - a.lon) * t;
+    const pt: [number, number] = [lon, lat];
+    for (const poly of coastPolys) if (pointInPoly(pt, poly)) return true;
+  }
+  return false;
 }
 
-function findWaterPathForLeg(a: Point, b: Point, coastPolys: Poly[], depth = 0): [number, number][] | null {
-  // Προοδευτικά μεγαλύτερο margin + πιο “ελαφρύ” clearance, + μικρότερο cell
-  const attempts: Array<{margin:number, clearance:number, cell?:number}> = [
-    { margin: DEFAULT_GRID_MARGIN_DEG, clearance: 0.06 },  // default
-    { margin: 0.80, clearance: 0.05 },
-    { margin: 1.20, clearance: 0.04 },
-    { margin: 1.50, clearance: 0.035, cell: 0.012 },
-    { margin: 2.00, clearance: 0.030, cell: 0.010 },
+// Πρόχειρη τοπική παράκαμψη: βρίσκει δύο μικρά waypoints λίγο ανοιχτά (offshore)
+function crudeDetour(a: Point, b: Point, coastPolys: Poly[]): [number, number][][] {
+  // offset ~0.12deg κάθετα στη διεύθυνση του leg (και προς τις δύο μεριές)
+  const dLat = b.lat - a.lat, dLon = b.lon - a.lon;
+  const L = Math.hypot(dLat, dLon) || 1e-6;
+  const nx = -dLon / L, ny = dLat / L;  // κάθετο μοναδιαίο
+  const OFF = 0.12;                      // ~13km
+  const candidates: [number, number][][] = [
+    [[a.lat, a.lon], [a.lat + ny*OFF, a.lon + nx*OFF], [b.lat, b.lon]],
+    [[a.lat, a.lon], [a.lat - ny*OFF, a.lon - nx*OFF], [b.lat, b.lon]],
   ];
-
-  for (const att of attempts) {
-    const seg = tryLegOnce(a, b, coastPolys, att.margin, att.cell, att.clearance);
-    if (seg) return seg;
-  }
-
-  // Τελευταίο “κόλπο”: σπάσε το leg στα 2 και προσπάθησε αναδρομικά
-  if (depth < 1) {
-    const mid: Point = { name: "_auto_", lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
-    const s1 = findWaterPathForLeg(a, mid, coastPolys, depth + 1);
-    const s2 = findWaterPathForLeg(mid, b, coastPolys, depth + 1);
-    if (s1 && s2) {
-      const join = s1.concat(s2.slice(1));
-      return simplifyRDP(join, SIMPLIFY_EPS);
+  // κράτα αυτό που δεν διασταυρώνεται με στεριά (με δειγματοληψία)
+  for (const c of candidates) {
+    let ok = true;
+    for (let i = 0; i < c.length - 1; i++) {
+      const p1 = { lat: c[i][0], lon: c[i][1], name: "" };
+      const p2 = { lat: c[i+1][0], lon: c[i+1][1], name: "" };
+      if (segmentCrossesLand(p1, p2, coastPolys)) { ok = false; break; }
     }
+    if (ok) return [c];
   }
-
-  // πραγματικά δεν βρέθηκε — άστο null (θα χειριστούμε πιο κάτω)
-  return null;
+  // αν όλα κόβουν στεριά, απλά γύρνα το απλό τρίγωνο (θα απαλυνθεί από simplify)
+  return [candidates[0]];
 }
 
 /* ---- Μικρό animated circle marker για fade-in ---- */
@@ -411,19 +408,33 @@ export default function RouteMapClient({
       result.waterLatLngs = points.map(p => [p.lat, p.lon] as LatLngExpression);
       return result;
     }
+
     const out: [number, number][][] = [];
     for (let i = 0; i < points.length - 1; i++) {
       const a = points[i], b = points[i + 1];
       let seg: [number, number][] | null = null;
 
-      if (coastPolys.length) {
-        seg = findWaterPathForLeg(a, b, coastPolys);
+      // 1) Αν έχουμε coastPolys, και η ευθεία περνάει στεριά → ΥΠΟΧΡΕΩΤΙΚΟ A*
+      const straightCrossesLand = coastPolys.length ? segmentCrossesLand(a, b, coastPolys) : false;
+
+      if (coastPolys.length && straightCrossesLand) {
+        const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
+        const path = aStarWater(grid, start, goal);
+        if (path) {
+          const mid = path.map(n => [n.lat, n.lon] as [number, number]);
+          const midS = simplifyRDP(mid, SIMPLIFY_EPS);
+          seg = [[a.lat, a.lon], ...midS, [b.lat, b.lon]];
+        } else {
+          // 2) Σε πλήρη αποτυχία A*, βάλε μικρή «παράκαμψη» (detour) offshore
+          const detours = crudeDetour(a, b, coastPolys);
+          seg = detours[0];
+        }
       }
 
-      // Αν ακόμα seg=null, κράτα “ευθεία” ΜΟΝΟ ως έσχατη λύση
+      // 3) fallback: αν δεν έχουμε coastPolys (ή δεν πέρασε από στεριά) κράτα ευθεία
       if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
 
-      // dedup consecutive equal points
+      // dedup
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -465,7 +476,7 @@ export default function RouteMapClient({
     return (waterLatLngs as [number, number][]).slice(0, Math.max(2, drawCount)) as LatLngExpression[];
   }, [waterLatLngs, drawCount]);
 
-  /* current leg */
+  /* current leg index */
   const currentLegIndex = useMemo(() => {
     if (!legEndIdx.length) return -1;
     for (let i = 0; i < legEndIdx.length; i++) {
@@ -478,7 +489,7 @@ export default function RouteMapClient({
   const [followShip, setFollowShip] = useState(false);
   const lastFollowedPointRef = useRef<string>("");
 
-  /* auto-zoom per leg */
+  /* per-leg auto zoom */
   const prevLegRef = useRef<number>(-999);
   useEffect(() => {
     if (!map) return;
@@ -500,14 +511,13 @@ export default function RouteMapClient({
     }
   }, [map, currentLegIndex, points, followShip]);
 
-  /* follow ship: fly to tip */
+  /* follow ship */
   useEffect(() => {
     if (!map || !followShip || animatedLatLngs.length < 2) return;
     const tip = animatedLatLngs[animatedLatLngs.length - 1] as [number, number];
     const key = `${tip[0].toFixed(5)},${tip[1].toFixed(5)}`;
     if (lastFollowedPointRef.current === key) return;
     lastFollowedPointRef.current = key;
-
     const targetZoom = Math.max(map.getZoom(), FOLLOW_ZOOM_MIN);
     map.flyTo(tip as any, targetZoom, { duration: 0.5 });
   }, [animatedLatLngs, followShip, map]);
@@ -527,11 +537,9 @@ export default function RouteMapClient({
   const center: LatLngExpression =
     (points[0] ? [points[0].lat, points[0].lon] : [37.97, 23.72]) as LatLngExpression;
 
-  /* helper: active name set */
   const isActive = (name: string) =>
     (activeNames ?? []).some(n => n.toLowerCase() === name.toLowerCase());
 
-  /* click → zoom & callback */
   function flyTo(name: string, lat: number, lon: number) {
     if (map) {
       const targetZoom = Math.max(map.getZoom(), 9);
@@ -544,7 +552,6 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* Follow ship toggle */}
       <div className="absolute right-3 top-3 z-[1000] no-print">
         <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
           <input
@@ -580,12 +587,10 @@ export default function RouteMapClient({
       >
         <CaptureMap onReady={setMap} />
 
-        {/* GEBCO */}
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
           <TileLayer attribution="&copy; GEBCO" url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png" opacity={0.9} />
         </Pane>
 
-        {/* light blue νερό */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
           <Rectangle
             bounds={WORLD_BOUNDS}
@@ -594,7 +599,6 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* στεριά */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (
             <GeoJSON
@@ -604,7 +608,6 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* labels */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
           <TileLayer
             attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
@@ -636,12 +639,10 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* seamarks */}
         <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
-        {/* full route (λεπτή γκρι “σκιά”) */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline
@@ -658,7 +659,6 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* progressive dashed route */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {animatedLatLngs.length >= 2 && (
             <Polyline
@@ -675,7 +675,6 @@ export default function RouteMapClient({
             />
           )}
 
-          {/* start */}
           {markerStart && (
             <AnimatedDot
               center={[markerStart.lat, markerStart.lon] as LatLngExpression}
@@ -686,7 +685,6 @@ export default function RouteMapClient({
             />
           )}
 
-          {/* mids */}
           {markerMids.map((p, i) => {
             const legIdx = i;
             const appearWhenIdx = legEndIdx[legIdx] ?? 0;
@@ -705,7 +703,6 @@ export default function RouteMapClient({
             );
           })}
 
-          {/* end */}
           {markerEnd && (
             <AnimatedDot
               center={[markerEnd.lat, markerEnd.lon] as LatLngExpression}
@@ -718,7 +715,6 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* dataset markers */}
         {markers?.length ? (
           <Pane name="pane-dataset" style={{ zIndex: 430 }}>
             {markers.map((m, i) => (
@@ -745,7 +741,6 @@ export default function RouteMapClient({
           </Pane>
         ) : null}
 
-        {/* αρχικό fit */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
