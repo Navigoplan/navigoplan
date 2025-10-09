@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
+import type { LatLngExpression, LatLngBoundsExpression, Map as LeafletMap } from "leaflet";
 
 /* ---- react-leaflet dynamic (no SSR) ---- */
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
@@ -14,30 +14,13 @@ const GeoJSON      = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),
 const Pane         = dynamic(() => import("react-leaflet").then(m => m.Pane),         { ssr: false });
 const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle),    { ssr: false });
 
-/* Child που μας δίνει το map instance */
+/* Παιδί που μας δίνει το map instance */
 const CaptureMap = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
-  function Cmp({ onReady }: { onReady: (map: import("leaflet").Map) => void }) {
+  function Cmp({ onReady }: { onReady: (map: LeafletMap) => void }) {
     const map = RL.useMap();
     useEffect(() => { onReady(map); }, [map, onReady]);
-    return null;
-  }
-  return Cmp;
-}, { ssr: false });
-
-/* FitBounds helper */
-const FitBounds = dynamic(async () => {
-  const RL = await import("react-leaflet");
-  const { useEffect } = await import("react");
-  function Cmp({ bounds }: { bounds: LatLngBoundsExpression }) {
-    const map = RL.useMap();
-    useEffect(() => {
-      map.fitBounds(bounds, { padding: [30, 30] });
-      const onResize = () => map.fitBounds(bounds, { padding: [30, 30] });
-      window.addEventListener("resize", onResize);
-      return () => window.removeEventListener("resize", onResize);
-    }, [map, bounds]);
     return null;
   }
   return Cmp;
@@ -55,13 +38,12 @@ const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 const TRANSPARENT_1PX =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-/* Tunables (A* + simplify + animation) */
+/* Tunables (A* + simplify) */
 const CELL_DEG = 0.05;
 const GRID_MARGIN_DEG = 0.30;
 const NEAR_LAND_PENALTY = 0.25;
 const CLEARANCE_CELLS = 1;
 const SIMPLIFY_EPS = 0.008;
-const DRAW_INTERVAL_MS = 90;   // πιο αργή προοδευτική σχεδίαση
 
 /* ---- geo helpers ---- */
 const toRad = (x: number) => (x * Math.PI) / 180;
@@ -152,7 +134,7 @@ function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxL
   }
 
   function nodeFor(lat: number, lon: number) {
-    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
+    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows)))); 
     const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
     return grid[r][c];
   }
@@ -262,10 +244,10 @@ export default function RouteMapClient({
   activeNames?: string[];
   onMarkerClick?: (portName: string) => void;
 }) {
-  /* ---- κρατάμε ref του leaflet map ---- */
-  const [map, setMap] = useState<import("leaflet").Map | null>(null);
+  /* map ref */
+  const [map, setMap] = useState<LeafletMap | null>(null);
 
-  /* ---- load coast ---- */
+  /* load coast */
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -277,7 +259,7 @@ export default function RouteMapClient({
   }, []);
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* ---- compute water path (join all legs) ---- */
+  /* compute water path (join all legs) */
   const waterLatLngs = useMemo<LatLngExpression[]>(() => {
     if (points.length < 2) return points.map(p => [p.lat, p.lon] as LatLngExpression);
 
@@ -316,34 +298,71 @@ export default function RouteMapClient({
     return joined as LatLngExpression[];
   }, [points, coastPolys]);
 
-  /* ---- progressive draw (από το πρώτο σημείο) ---- */
+  /* συνολικό μήκος διαδρομής */
+  const routeMeters = useMemo(() => {
+    const pts = waterLatLngs as [number, number][];
+    if (pts.length < 2) return 0;
+    let m = 0;
+    for (let i = 1; i < pts.length; i++) {
+      m += haversineMeters(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1]);
+    }
+    return m;
+  }, [waterLatLngs]);
+
+  /* progressive draw */
   const [drawCount, setDrawCount] = useState(0);
   useEffect(() => { setDrawCount(waterLatLngs.length ? 1 : 0); }, [waterLatLngs]);
+
+  // στόχος συνολικής διάρκειας animation (3.5s–9s ανάλογα με μήκος)
+  const targetDurationMs = useMemo(() => {
+    const km = routeMeters / 1000;
+    const min = 3500, max = 9000;
+    const t = 3500 + Math.max(0, Math.min(1, (km - 50) / (500 - 50))) * (max - 3500);
+    return Math.max(min, Math.min(max, t));
+  }, [routeMeters]);
+
+  // βήμα animation ανά σημείο
+  const stepMs = useMemo(() => {
+    const n = Math.max(2, waterLatLngs.length);
+    return Math.max(12, Math.round(targetDurationMs / n));
+  }, [targetDurationMs, waterLatLngs.length]);
 
   useEffect(() => {
     if (drawCount <= 0 || drawCount >= waterLatLngs.length) return;
     const id = window.setInterval(() => {
       setDrawCount((c) => Math.min(c + 1, waterLatLngs.length));
-    }, DRAW_INTERVAL_MS);
+    }, stepMs);
     return () => window.clearInterval(id);
-  }, [drawCount, waterLatLngs.length]);
+  }, [drawCount, waterLatLngs.length, stepMs]);
 
   const animatedLatLngs = useMemo<LatLngExpression[]>(() => {
     if (!waterLatLngs.length) return [];
     return (waterLatLngs as [number, number][]).slice(0, Math.max(2, drawCount)) as LatLngExpression[];
   }, [waterLatLngs, drawCount]);
 
+  // fade-in opacity καθώς “χτίζεται” η γραμμή
+  const animatedOpacity = useMemo(() => {
+    if (waterLatLngs.length < 2) return 0;
+    const frac = drawCount / waterLatLngs.length;
+    return Math.min(0.95, 0.25 + frac * 0.7);
+  }, [drawCount, waterLatLngs.length]);
+
   /* markers */
   const markerStart = points[0] ?? null;
   const markerMids  = points.slice(1, -1);
   const markerEnd   = points.at(-1) ?? null;
 
-  /* bounds/center */
+  /* bounds/center + auto-fit */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if ((waterLatLngs?.length ?? 0) < 2) return null;
     const L = require("leaflet") as typeof import("leaflet");
     return L.latLngBounds(waterLatLngs as any).pad(0.08);
   }, [waterLatLngs]);
+
+  useEffect(() => {
+    if (!map || !bounds) return;
+    map.fitBounds(bounds, { padding: [30, 30], animate: true } as any);
+  }, [map, bounds]);
 
   const center: LatLngExpression =
     (points[0] ? [points[0].lat, points[0].lon] : [37.97, 23.72]) as LatLngExpression;
@@ -356,7 +375,7 @@ export default function RouteMapClient({
   function flyTo(name: string, lat: number, lon: number) {
     if (map) {
       const targetZoom = Math.max(map.getZoom(), 9);
-      map.flyTo([lat, lon], targetZoom, { duration: 0.8 });
+      map.flyTo([lat, lon], targetZoom, { duration: 0.8 } as any);
     }
     onMarkerClick?.(name);
   }
@@ -449,7 +468,7 @@ export default function RouteMapClient({
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
-        {/* full route (λεπτή γκρι για “σκιά”) */}
+        {/* full route (λεπτή γκρι “σκιά”) */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline
@@ -475,7 +494,7 @@ export default function RouteMapClient({
               pathOptions={{
                 color: "#0b1220",
                 weight: 3,
-                opacity: 0.95,
+                opacity: animatedOpacity, // fade-in καθώς προχωράει
                 dashArray: "6 8",
                 lineJoin: "round",
                 lineCap: "round",
@@ -559,8 +578,6 @@ export default function RouteMapClient({
             ))}
           </Pane>
         ) : null}
-
-        {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
   );
