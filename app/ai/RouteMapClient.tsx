@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { LatLngExpression, LatLngBoundsExpression, Map as LeafletMap } from "leaflet";
+import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
 /* ---- react-leaflet dynamic (no SSR) ---- */
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
@@ -18,9 +18,26 @@ const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle
 const CaptureMap = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
-  function Cmp({ onReady }: { onReady: (map: LeafletMap) => void }) {
+  function Cmp({ onReady }: { onReady: (map: import("leaflet").Map) => void }) {
     const map = RL.useMap();
     useEffect(() => { onReady(map); }, [map, onReady]);
+    return null;
+  }
+  return Cmp;
+}, { ssr: false });
+
+/* FitBounds helper */
+const FitBounds = dynamic(async () => {
+  const RL = await import("react-leaflet");
+  const { useEffect } = await import("react");
+  function Cmp({ bounds }: { bounds: LatLngBoundsExpression }) {
+    const map = RL.useMap();
+    useEffect(() => {
+      map.fitBounds(bounds, { padding: [30, 30] });
+      const onResize = () => map.fitBounds(bounds, { padding: [30, 30] });
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, [map, bounds]);
     return null;
   }
   return Cmp;
@@ -38,12 +55,16 @@ const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 const TRANSPARENT_1PX =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-/* Tunables (A* + simplify) */
+/* Tunables (A* + simplify + animation) */
 const CELL_DEG = 0.05;
 const GRID_MARGIN_DEG = 0.30;
 const NEAR_LAND_PENALTY = 0.25;
 const CLEARANCE_CELLS = 1;
 const SIMPLIFY_EPS = 0.008;
+const DRAW_INTERVAL_MS = 90;      // ταχύτητα animation
+const FOLLOW_ZOOM_MIN = 9;        // zoom όταν ακολουθούμε το “πλοίο”
+const LEG_VIEW_ZOOM_MAX = 10;     // μέγιστο zoom όταν κάνουμε auto-zoom σε leg
+const MARKER_FADE_MS = 280;       // διάρκεια fade-in marker
 
 /* ---- geo helpers ---- */
 const toRad = (x: number) => (x * Math.PI) / 180;
@@ -134,7 +155,7 @@ function buildGridForBounds(minLat: number, maxLat: number, minLon: number, maxL
   }
 
   function nodeFor(lat: number, lon: number) {
-    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows)))); 
+    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
     const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
     return grid[r][c];
   }
@@ -232,6 +253,61 @@ function simplifyRDP(path: [number, number][], epsilonDeg = SIMPLIFY_EPS): [numb
   }
 }
 
+/* ---- Μικρό animated circle marker για fade-in ---- */
+function useNow() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => { setTick(t => t + 1); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+}
+function AnimatedDot({
+  center,
+  label,
+  active,
+  onClick,
+  appearAtMs,
+  baseRadius = 5,
+}: {
+  center: LatLngExpression;
+  label?: string;
+  active?: boolean;
+  onClick?: () => void;
+  appearAtMs: number;        // πότε “ενεργοποιείται” (ms από mount)
+  baseRadius?: number;
+}) {
+  // τρέχων χρόνος (για απλό tween)
+  useNow();
+  const [start] = useState<number>(() => performance.now());
+  const now = performance.now();
+  const t = Math.max(0, Math.min(1, (now - appearAtMs - start) / MARKER_FADE_MS));
+  const radius = (t <= 0 ? 0 : baseRadius * (0.66 + 0.34 * t));
+  const opacity = t <= 0 ? 0 : 0.25 + 0.75 * t;
+
+  return (
+    <CircleMarker
+      center={center}
+      radius={radius}
+      eventHandlers={onClick ? { click: onClick } : undefined}
+      pathOptions={{
+        color: active ? "#c4a962" : "#0b1220",
+        fillColor: active ? "#c4a962" : "#0b1220",
+        fillOpacity: opacity,
+        opacity,
+        weight: active ? 2 : 1.5,
+      }}
+    >
+      {!!label && (
+        <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
+          {label}
+        </Tooltip>
+      )}
+    </CircleMarker>
+  );
+}
+
 /* ===================================================== */
 export default function RouteMapClient({
   points,
@@ -244,10 +320,10 @@ export default function RouteMapClient({
   activeNames?: string[];
   onMarkerClick?: (portName: string) => void;
 }) {
-  /* map ref */
-  const [map, setMap] = useState<LeafletMap | null>(null);
+  /* leaflet map ref */
+  const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
-  /* load coast */
+  /* coast */
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -259,14 +335,16 @@ export default function RouteMapClient({
   }, []);
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* compute water path (join all legs) */
-  const waterLatLngs = useMemo<LatLngExpression[]>(() => {
-    if (points.length < 2) return points.map(p => [p.lat, p.lon] as LatLngExpression);
-
+  /* ---- compute water path + breakpoint indices ανά leg ---- */
+  const { waterLatLngs, legEndIdx } = useMemo(() => {
+    const result: { waterLatLngs: LatLngExpression[]; legEndIdx: number[] } = { waterLatLngs: [], legEndIdx: [] };
+    if (points.length < 2) {
+      result.waterLatLngs = points.map(p => [p.lat, p.lon] as LatLngExpression);
+      return result;
+    }
     const out: [number, number][][] = [];
     for (let i = 0; i < points.length - 1; i++) {
       const a = points[i], b = points[i + 1];
-
       let seg: [number, number][] | null = null;
       if (coastPolys.length) {
         const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
@@ -279,6 +357,7 @@ export default function RouteMapClient({
       }
       if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
 
+      // dedup consecutive equal points
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -289,80 +368,98 @@ export default function RouteMapClient({
       }
       out.push(cleaned);
     }
-
     const joined: [number, number][] = [];
-    for (const leg of out) {
+    const endIdx: number[] = [];
+    for (let i = 0; i < out.length; i++) {
+      const leg = out[i];
       if (!joined.length) joined.push(...leg);
       else joined.push(...leg.slice(1));
+      endIdx.push(joined.length - 1); // index του τελευταίου σημείου του leg i
     }
-    return joined as LatLngExpression[];
+    result.waterLatLngs = joined as LatLngExpression[];
+    result.legEndIdx = endIdx;
+    return result;
   }, [points, coastPolys]);
 
-  /* συνολικό μήκος διαδρομής */
-  const routeMeters = useMemo(() => {
-    const pts = waterLatLngs as [number, number][];
-    if (pts.length < 2) return 0;
-    let m = 0;
-    for (let i = 1; i < pts.length; i++) {
-      m += haversineMeters(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1]);
-    }
-    return m;
-  }, [waterLatLngs]);
-
-  /* progressive draw */
+  /* ---- progressive draw ---- */
   const [drawCount, setDrawCount] = useState(0);
   useEffect(() => { setDrawCount(waterLatLngs.length ? 1 : 0); }, [waterLatLngs]);
-
-  // στόχος συνολικής διάρκειας animation (3.5s–9s ανάλογα με μήκος)
-  const targetDurationMs = useMemo(() => {
-    const km = routeMeters / 1000;
-    const min = 3500, max = 9000;
-    const t = 3500 + Math.max(0, Math.min(1, (km - 50) / (500 - 50))) * (max - 3500);
-    return Math.max(min, Math.min(max, t));
-  }, [routeMeters]);
-
-  // βήμα animation ανά σημείο
-  const stepMs = useMemo(() => {
-    const n = Math.max(2, waterLatLngs.length);
-    return Math.max(12, Math.round(targetDurationMs / n));
-  }, [targetDurationMs, waterLatLngs.length]);
 
   useEffect(() => {
     if (drawCount <= 0 || drawCount >= waterLatLngs.length) return;
     const id = window.setInterval(() => {
       setDrawCount((c) => Math.min(c + 1, waterLatLngs.length));
-    }, stepMs);
+    }, DRAW_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [drawCount, waterLatLngs.length, stepMs]);
+  }, [drawCount, waterLatLngs.length]);
 
   const animatedLatLngs = useMemo<LatLngExpression[]>(() => {
     if (!waterLatLngs.length) return [];
     return (waterLatLngs as [number, number][]).slice(0, Math.max(2, drawCount)) as LatLngExpression[];
   }, [waterLatLngs, drawCount]);
 
-  // fade-in opacity καθώς “χτίζεται” η γραμμή
-  const animatedOpacity = useMemo(() => {
-    if (waterLatLngs.length < 2) return 0;
-    const frac = drawCount / waterLatLngs.length;
-    return Math.min(0.95, 0.25 + frac * 0.7);
-  }, [drawCount, waterLatLngs.length]);
+  /* τρέχον leg index με βάση drawCount */
+  const currentLegIndex = useMemo(() => {
+    if (!legEndIdx.length) return -1;
+    for (let i = 0; i < legEndIdx.length; i++) {
+      if (drawCount - 1 <= legEndIdx[i]) return i;
+    }
+    return legEndIdx.length - 1;
+  }, [drawCount, legEndIdx]);
+
+  /* follow ship toggle + UI */
+  const [followShip, setFollowShip] = useState(false);
+  const lastFollowedPointRef = useRef<string>("");
+
+  /* auto-zoom σε κάθε νέο leg boundary */
+  const prevLegRef = useRef<number>(-999);
+  useEffect(() => {
+    if (!map) return;
+    if (followShip) return; // όταν ακολουθούμε, δεν κάνουμε per-leg zoom
+    if (currentLegIndex < 0) return;
+    if (currentLegIndex === prevLegRef.current) return;
+    prevLegRef.current = currentLegIndex;
+
+    // bounds του τρέχοντος leg: points[i] -> points[i+1]
+    if (points[currentLegIndex] && points[currentLegIndex + 1]) {
+      const a = points[currentLegIndex];
+      const b = points[currentLegIndex + 1];
+      const L = require("leaflet") as typeof import("leaflet");
+      const bnds = L.latLngBounds([a.lat, a.lon], [b.lat, b.lon]).pad(0.18);
+      // fitBounds με max zoom
+      // (Leaflet δεν έχει απευθείας max zoom param εδώ — κάνουμε μικρό hack με flyToBounds + check)
+      map.flyToBounds(bnds, { padding: [28, 28] });
+      // αν κάνουμε υπερ-zoom, κατέβασέ το λίγο
+      setTimeout(() => {
+        if (!map) return;
+        if (map.getZoom() > LEG_VIEW_ZOOM_MAX) map.setZoom(LEG_VIEW_ZOOM_MAX);
+      }, 500);
+    }
+  }, [map, currentLegIndex, points, followShip]);
+
+  /* follow ship: κάθε βήμα του animation πετάμε την κάμερα στο άκρο της γραμμής */
+  useEffect(() => {
+    if (!map || !followShip || animatedLatLngs.length < 2) return;
+    const tip = animatedLatLngs[animatedLatLngs.length - 1] as [number, number];
+    const key = `${tip[0].toFixed(5)},${tip[1].toFixed(5)}`;
+    if (lastFollowedPointRef.current === key) return;
+    lastFollowedPointRef.current = key;
+
+    const targetZoom = Math.max(map.getZoom(), FOLLOW_ZOOM_MIN);
+    map.flyTo(tip as any, targetZoom, { duration: 0.5 });
+  }, [animatedLatLngs, followShip, map]);
 
   /* markers */
   const markerStart = points[0] ?? null;
   const markerMids  = points.slice(1, -1);
   const markerEnd   = points.at(-1) ?? null;
 
-  /* bounds/center + auto-fit */
+  /* bounds/center */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if ((waterLatLngs?.length ?? 0) < 2) return null;
     const L = require("leaflet") as typeof import("leaflet");
     return L.latLngBounds(waterLatLngs as any).pad(0.08);
   }, [waterLatLngs]);
-
-  useEffect(() => {
-    if (!map || !bounds) return;
-    map.fitBounds(bounds, { padding: [30, 30], animate: true } as any);
-  }, [map, bounds]);
 
   const center: LatLngExpression =
     (points[0] ? [points[0].lat, points[0].lon] : [37.97, 23.72]) as LatLngExpression;
@@ -371,17 +468,45 @@ export default function RouteMapClient({
   const isActive = (name: string) =>
     (activeNames ?? []).some(n => n.toLowerCase() === name.toLowerCase());
 
-  /* flyTo helper σε click */
+  /* click → zoom & callback */
   function flyTo(name: string, lat: number, lon: number) {
     if (map) {
       const targetZoom = Math.max(map.getZoom(), 9);
-      map.flyTo([lat, lon], targetZoom, { duration: 0.8 } as any);
+      map.flyTo([lat, lon], targetZoom, { duration: 0.8 });
     }
     onMarkerClick?.(name);
   }
 
+  /* πότε “εμφανίζεται” κάθε marker (για fade-in) */
+  // start: αμέσως, mids: όταν ολοκληρωθεί το leg που τα “φέρνει”, end: στο τέλος
+  const markerAppearIdx = useMemo(() => {
+    // index στο legEndIdx μετά το οποίο εμφανίζεται ο marker
+    // mid i (points[i+1] ως προορισμός του leg i): εμφανίζεται όταν drawCount περάσει legEndIdx[i]
+    // => το map είναι: mid[i] -> leg i
+    return {
+      startIdx: -1,
+      midsEndIdx: legEndIdx, // ίδια διάταξη
+      endIdx: legEndIdx[legEndIdx.length - 1] ?? 0,
+    };
+  }, [legEndIdx]);
+
+  // helper: drawCount σε ms (για ομαλό appearAt)
+  const drawMs = drawCount * DRAW_INTERVAL_MS;
+
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
+      {/* μικρό UI για Follow ship */}
+      <div className="absolute right-3 top-3 z-[1000] no-print">
+        <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
+          <input
+            type="checkbox"
+            checked={followShip}
+            onChange={(e) => setFollowShip(e.target.checked)}
+          />
+          Follow ship
+        </label>
+      </div>
+
       <style jsx global>{`
         .leaflet-tile[src*="tiles.gebco.net"] {
           filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
@@ -404,7 +529,6 @@ export default function RouteMapClient({
         scrollWheelZoom={true}
         style={{ height: "100%", width: "100%" }}
       >
-        {/* παίρνουμε το map instance */}
         <CaptureMap onReady={setMap} />
 
         {/* GEBCO */}
@@ -468,7 +592,7 @@ export default function RouteMapClient({
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
-        {/* full route (λεπτή γκρι “σκιά”) */}
+        {/* full route (λεπτή γκρι για “σκιά”) */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline
@@ -494,7 +618,7 @@ export default function RouteMapClient({
               pathOptions={{
                 color: "#0b1220",
                 weight: 3,
-                opacity: animatedOpacity, // fade-in καθώς προχωράει
+                opacity: 0.95,
                 dashArray: "6 8",
                 lineJoin: "round",
                 lineCap: "round",
@@ -502,57 +626,50 @@ export default function RouteMapClient({
             />
           )}
 
-          {/* start */}
+          {/* start (εμφανίζεται άμεσα) */}
           {markerStart && (
-            <CircleMarker
-              pane="pane-route"
+            <AnimatedDot
               center={[markerStart.lat, markerStart.lon] as LatLngExpression}
-              radius={8}
-              pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
-            >
-              <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
-                Start: {points[0]?.name}
-              </Tooltip>
-            </CircleMarker>
+              label={`Start: ${points[0]?.name}`}
+              active
+              appearAtMs={0}
+              baseRadius={8}
+            />
           )}
 
-          {/* mids */}
-          {markerMids.map((p, i) => (
-            <CircleMarker
-              key={`${p.name}-${i}`}
-              pane="pane-route"
-              center={[p.lat, p.lon] as LatLngExpression}
-              radius={5}
-              eventHandlers={{ click: () => flyTo(p.name, p.lat, p.lon) }}
-              pathOptions={{
-                color: isActive(p.name) ? "#c4a962" : "#0b1220",
-                fillColor: isActive(p.name) ? "#c4a962" : "#0b1220",
-                fillOpacity: 0.95,
-              }}
-            >
-              <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-                {p.name}
-              </Tooltip>
-            </CircleMarker>
-          ))}
+          {/* mids: fade-in όταν ολοκληρωθεί το αντίστοιχο leg */}
+          {markerMids.map((p, i) => {
+            const legIdx = i; // mid i είναι το τέλος του leg i (points[i] -> points[i+1])
+            const appearWhenIdx = legEndIdx[legIdx] ?? 0;
+            const appearAt = (appearWhenIdx + 1) * DRAW_INTERVAL_MS; // λίγο μετά το τελευταίο σημείο
+            const active = isActive(p.name);
+            return (
+              <AnimatedDot
+                key={`${p.name}-${i}`}
+                center={[p.lat, p.lon] as LatLngExpression}
+                label={p.name}
+                active={active}
+                appearAtMs={appearAt}
+                onClick={() => flyTo(p.name, p.lat, p.lon)}
+                baseRadius={5}
+              />
+            );
+          })}
 
-          {/* end */}
+          {/* end: fade-in στο τέλος όλων */}
           {markerEnd && (
-            <CircleMarker
-              pane="pane-route"
+            <AnimatedDot
               center={[markerEnd.lat, markerEnd.lon] as LatLngExpression}
-              radius={8}
-              eventHandlers={{ click: () => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon) }}
-              pathOptions={{ color: "#c4a962", fillColor: "#c4a962", fillOpacity: 1 }}
-            >
-              <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
-                End: {points.at(-1)?.name}
-              </Tooltip>
-            </CircleMarker>
+              label={`End: ${points.at(-1)?.name}`}
+              active
+              appearAtMs={(legEndIdx[legEndIdx.length - 1] ?? 0) * DRAW_INTERVAL_MS}
+              onClick={() => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon)}
+              baseRadius={8}
+            />
           )}
         </Pane>
 
-        {/* dataset markers (προαιρετικά) */}
+        {/* dataset markers (προαιρετικά, χωρίς fade σε αυτά) */}
         {markers?.length ? (
           <Pane name="pane-dataset" style={{ zIndex: 430 }}>
             {markers.map((m, i) => (
@@ -578,6 +695,9 @@ export default function RouteMapClient({
             ))}
           </Pane>
         ) : null}
+
+        {/* αρχικό fit σε όλη τη διαδρομή */}
+        {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
   );
