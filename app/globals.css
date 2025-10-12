@@ -41,63 +41,32 @@ body {
 @layer utilities {
   /* Τίτλος: ήπιο pop-in */
   @keyframes titlePop {
-    0% {
-      opacity: 0;
-      transform: translateY(12px) scale(0.98);
-    }
-    100% {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
+    0% { opacity: 0; transform: translateY(12px) scale(0.98); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
   }
-  .animate-title {
-    animation: titlePop 600ms cubic-bezier(.2, .9, .2, 1) both;
-  }
+  .animate-title { animation: titlePop 600ms cubic-bezier(.2,.9,.2,1) both; }
 
   /* Overlay: αργό “αναπνευστικό” float */
   @keyframes overlayFloat {
-    0% {
-      transform: translateY(0px);
-      opacity: 1;
-    }
-    50% {
-      transform: translateY(-3px);
-      opacity: 0.98;
-    }
-    100% {
-      transform: translateY(0px);
-      opacity: 1;
-    }
+    0% { transform: translateY(0px); opacity: 1; }
+    50% { transform: translateY(-3px); opacity: 0.98; }
+    100% { transform: translateY(0px); opacity: 1; }
   }
-  .animate-overlay {
-    animation: overlayFloat 8s ease-in-out infinite;
-  }
+  .animate-overlay { animation: overlayFloat 8s ease-in-out infinite; }
 
   /* Print-only helper */
-  .print\:block {
-    display: none;
-  }
+  .print\:block { display: none; }
 }
 
 /* =========================
    PRINT STYLES FOR PDF
    ========================= */
 @media print {
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  .no-print,
-  header,
-  footer {
-    display: none !important;
-  }
+  .no-print, header, footer { display: none !important; }
 
-  html,
-  body {
-    background: #ffffff !important;
-  }
+  html, body { background: #ffffff !important; }
 
   .print\:grid-cols-2 {
     display: grid !important;
@@ -113,76 +82,33 @@ body {
     background: #fff;
   }
 
-  @page {
-    size: A4;
-    margin: 14mm;
-  }
+  @page { size: A4; margin: 14mm; }
 
-  .print\:block {
-    display: block !important;
-  }
+  .print\:block { display: block !important; }
 }
 
 /* =========================
    Extra helpers που χρησιμοποιεί ο planner
    ========================= */
-
-.print-cover {
-  page-break-after: always;
-}
-
-.print-section {
-  page-break-before: always;
-}
-
-.print-subtle {
-  color: #64748b;
-}
-
+.print-cover { page-break-after: always; }
+.print-section { page-break-before: always; }
+.print-subtle { color: #64748b; } /* slate-500 */
 .print-mono {
   font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
 }
-
 .print-hr {
-  border: 0;
-  height: 1px;
-  background: #e2e8f0;
-  margin: 12px 0;
+  border: 0; height: 1px; background: #e2e8f0; margin: 12px 0;
 }
 
 /* =========================
    Animated ocean waves
    ========================= */
-@keyframes waveMoveLeft {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-@keyframes waveMoveRight {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(50%);
-  }
-}
+@keyframes waveMoveLeft   { 0% {transform:translateX(0)} 100% {transform:translateX(-50%)} }
+@keyframes waveMoveRight  { 0% {transform:translateX(0)} 100% {transform:translateX(50%)}  }
 
-.wave-1 {
-  animation: waveMoveLeft 22s linear infinite;
-  will-change: transform;
-}
-
-.wave-2 {
-  animation: waveMoveRight 30s linear infinite;
-  will-change: transform;
-}
+.wave-1 { animation: waveMoveLeft 22s linear infinite;  will-change: transform; }
+.wave-2 { animation: waveMoveRight 30s linear infinite; will-change: transform; }
 
 @media (prefers-reduced-motion: reduce) {
-  .wave-1,
-  .wave-2 {
-    animation: none;
-  }
+  .wave-1, .wave-2 { animation: none; }
 }
