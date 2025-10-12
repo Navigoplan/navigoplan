@@ -724,16 +724,12 @@ export default function RouteMapClient({
           <option value="sporades">Sporades</option>
         </select>
         <button
-  onClick={handleGenerate}
-  className='rounded-xl border px-4 py-2 text-sm font-semibold shadow-sm
-             border-[#c4a962] text-[#0b1220] bg-white/90
-             hover:bg-[#c4a962] hover:text-[#0b1220]
-             focus:outline-none focus:ring-2 focus:ring-[#c4a962]'
-  title='Generate suggestions'
->
-  Generate
-</button>
-
+          onClick={handleGenerate}
+          className="rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200"
+          title="Generate suggestions"
+        >
+          Generate
+        </button>
         <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
           <input type="checkbox" checked={weatherAware} onChange={(e)=>setWeatherAware(e.target.checked)} />
           Weather-aware routing
