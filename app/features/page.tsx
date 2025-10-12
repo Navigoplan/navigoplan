@@ -44,6 +44,23 @@ const IconMap = (
     <path d="M9 3v15M15 6v15" />
   </svg>
 );
+const IconShare = (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+    <path d="M8.6 11l6.8-4M8.6 13l6.8 4" />
+  </svg>
+);
+const IconLang = (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M3 5h12M9 3v2m6 0a8 8 0 1 1-15 7h15" />
+  </svg>
+);
+const IconShield = (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M12 3l7 4v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V7l7-4Z" />
+    <path d="M9.5 12.5l1.8 1.8 3.7-3.8" />
+  </svg>
+);
 
 const features: Feature[] = [
   {
@@ -90,6 +107,18 @@ const features: Feature[] = [
   },
 ];
 
+function Tick({ on }: { on?: boolean }) {
+  return (
+    <span
+      className={
+        on
+          ? "inline-block h-3 w-3 rounded-full bg-emerald-500"
+          : "inline-block h-3 w-3 rounded-full bg-slate-300"
+      }
+    />
+  );
+}
+
 export default function FeaturesPage() {
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -118,8 +147,27 @@ export default function FeaturesPage() {
         </div>
       </section>
 
+      {/* Social proof */}
+      <section className="border-y border-slate-100">
+        <div className="mx-auto max-w-7xl px-6 py-6">
+          <p className="mb-3 text-center text-xs uppercase tracking-widest text-slate-500">
+            Made for Greece — Saronic • Cyclades • Ionian • Dodecanese • Sporades • North Aegean • Crete
+          </p>
+          <div className="grid grid-cols-2 gap-3 opacity-80 sm:grid-cols-4 md:grid-cols-7">
+            {["Saronic", "Cyclades", "Ionian", "Dodecanese", "Sporades", "North Aegean", "Crete"].map((r) => (
+              <div
+                key={r}
+                className="flex h-9 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-500"
+              >
+                {r}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Features grid */}
-      <section className="pb-10">
+      <section className="py-12">
         <div className="mx-auto max-w-7xl px-6">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((f) => (
@@ -156,11 +204,7 @@ export default function FeaturesPage() {
           <h2 className="text-xl font-semibold text-brand-navy">How it works</h2>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             {[
-              {
-                n: "1",
-                t: "Add basics",
-                d: "Start/end, dates, speed & προαιρετικά vias.",
-              },
+              { n: "1", t: "Add basics", d: "Start/end, dates, speed & προαιρετικά vias." },
               { n: "2", t: "Tune itinerary", d: "Διόρθωσε μέρες/stops, πρόσθεσε σημειώσεις." },
               { n: "3", t: "Share/Export", d: "Στείλε link ή καθαρό branded PDF στον πελάτη." },
             ].map((s) => (
@@ -171,6 +215,90 @@ export default function FeaturesPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Pro / VIP comparison */}
+      <section className="py-12">
+        <div className="mx-auto max-w-7xl px-6">
+          <h2 className="text-xl font-semibold text-brand-navy">Pro &amp; VIP</h2>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600">
+            Level up with weather layers, Crew Mode, private notes και branding.
+          </p>
+
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="w-1/2 px-4 py-3 font-medium text-slate-600">Feature</th>
+                  <th className="w-1/6 px-4 py-3 font-medium text-slate-600">Free</th>
+                  <th className="w-1/6 px-4 py-3 font-medium text-slate-600">Pro</th>
+                  <th className="w-1/6 px-4 py-3 font-medium text-slate-600">VIP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["AI / Custom Planner", true, true, true],
+                  ["Greek Ports DB", true, true, true],
+                  ["Dashed Route (water-only)", true, true, true],
+                  ["Guest PDF (GR/EN)", true, true, true],
+                  ["Crew PDF", false, true, true],
+                  ["Weather badges", true, true, true],
+                  ["Weather layers (map)", false, true, true],
+                  ["Crew Mode (ops details)", false, true, true],
+                  ["Private notes / blacklist", false, true, true],
+                  ["Branding (logo/colors)", false, true, true],
+                  ["Share & versioning", false, true, true],
+                  ["VIP PDF pack", false, false, true],
+                ].map(([name, free, pro, vip]) => (
+                  <tr key={name as string} className="border-t border-slate-200">
+                    <td className="px-4 py-3 text-slate-800">{name as string}</td>
+                    <td className="px-4 py-3"><Tick on={free as boolean} /></td>
+                    <td className="px-4 py-3"><Tick on={pro as boolean} /></td>
+                    <td className="px-4 py-3"><Tick on={vip as boolean} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* PDF previews */}
+      <section className="border-t bg-slate-50 py-12">
+        <div className="mx-auto max-w-7xl px-6">
+          <h2 className="text-xl font-semibold text-brand-navy">PDF Gallery</h2>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600">
+            Guest vs Crew templates, bilingual, με το λογότυπό σου και τα brand colors.
+          </p>
+          <div className="mt-6 grid gap-6 sm:grid-cols-3">
+            {[
+              { title: "Guest PDF", tag: "Polished" },
+              { title: "Crew PDF", tag: "Detailed" },
+              { title: "VIP PDF", tag: "Branded" },
+            ].map((p) => (
+              <div key={p.title} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="aspect-[4/3] w-full rounded-xl bg-gradient-to-br from-slate-100 to-slate-200" />
+                <div className="mt-3 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-brand-navy">{p.title}</div>
+                    <div className="text-xs text-slate-500">{p.tag}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Link href="#" className="text-xs font-semibold text-[#c4a962] hover:underline">
+                      Preview
+                    </Link>
+                    <Link href="#" className="text-xs font-semibold text-slate-700 hover:underline">
+                      Download
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            *Βάλε αργότερα πραγματικά δείγματα αρχείων (.pdf) στα παραπάνω links.
+          </p>
         </div>
       </section>
 
@@ -197,13 +325,8 @@ export default function FeaturesPage() {
                 a: "Ναι, υπάρχει shareable link για να βλέπουν οι πελάτες την πορεία και τις στάσεις.",
               },
             ].map((f) => (
-              <details
-                key={f.q}
-                className="rounded-xl border border-slate-200 bg-white p-4 open:shadow-sm"
-              >
-                <summary className="cursor-pointer select-none font-medium text-brand-navy">
-                  {f.q}
-                </summary>
+              <details key={f.q} className="rounded-xl border border-slate-200 bg-white p-4 open:shadow-sm">
+                <summary className="cursor-pointer select-none font-medium text-brand-navy">{f.q}</summary>
                 <p className="mt-2 text-sm text-slate-600">{f.a}</p>
               </details>
             ))}
@@ -211,8 +334,43 @@ export default function FeaturesPage() {
         </div>
       </section>
 
+      {/* Roadmap */}
+      <section className="border-t bg-slate-50 py-12">
+        <div className="mx-auto max-w-7xl px-6">
+          <h2 className="text-xl font-semibold text-brand-navy">Roadmap</h2>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { t: "Weather+", d: "Gusts & waves overlays με quick risk badges." },
+              { t: "Offline mode", d: "Πλάνα & προβολή saved routes με ασθενές Wi-Fi." },
+              { t: "AIS filters", d: "Βασική εικόνα κίνησης γύρω από επόμενη στάση." },
+              { t: "Auto day splits", d: "Σπάει μακριά σκέλη σε ισορροπημένες ημέρες." },
+              { t: "iPad app", d: "Touch-first UI για bridge workflows." },
+              { t: "Private notes", d: "Προσωπικά σχόλια/blacklist spots ανά χρήστη." },
+            ].map((i) => (
+              <div key={i.t} className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="font-medium text-brand-navy">{i.t}</div>
+                <p className="mt-1 text-sm text-slate-600">{i.d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Status / Changelog strip */}
+      <section className="border-y">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4 text-sm">
+          <div className="flex items-center gap-2 text-slate-600">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            <span>All systems operational</span>
+          </div>
+          <Link href="/changelog" className="text-[#c4a962] hover:underline">
+            What’s new →
+          </Link>
+        </div>
+      </section>
+
       {/* Bottom CTA */}
-      <section className="border-t bg-white py-12">
+      <section className="bg-white py-12">
         <div className="mx-auto max-w-7xl px-6 text-center">
           <h3 className="text-2xl font-semibold text-brand-navy">
             Plan, price & present itineraries your clients will love.
