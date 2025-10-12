@@ -28,7 +28,7 @@ export default function HeroSection() {
           >
             Start Planning
           </a>
-          <a
+        <a
             href="#features"
             className="rounded-2xl border border-white/30 px-6 py-3 font-semibold text-white/90 hover:bg-white/10 transition"
           >
@@ -37,12 +37,22 @@ export default function HeroSection() {
         </div>
       </div>
 
-      {/* Bottom wave transition */}
-      <div className="pointer-events-none absolute bottom-[-1px] left-0 right-0">
-        <svg viewBox="0 0 1440 120" xmlns="http://www.w3.org/2000/svg" className="w-full">
+      {/* Animated ocean waves */}
+      <div className="pointer-events-none absolute bottom-[-1px] left-0 right-0 overflow-hidden">
+        <svg viewBox="0 0 2880 200" xmlns="http://www.w3.org/2000/svg" className="w-[200%]">
+          {/* back layer */}
           <path
-            d="M0,64 C160,96 320,96 480,80 C640,64 800,32 960,37.3 C1120,42.7 1280,85.3 1440,101.3 L1440,120 L0,120 Z"
-            fill="white"
+            className="wave-1"
+            d="M0,80 C320,110 640,110 960,88 C1280,66 1600,40 1920,48 C2240,56 2560,96 2880,118 L2880,200 L0,200 Z"
+            fill="#ffffff"
+            opacity="0.85"
+          />
+          {/* front layer */}
+          <path
+            className="wave-2"
+            d="M0,102 C320,126 640,126 960,102 C1280,82 1600,62 1920,70 C2240,78 2560,116 2880,138 L2880,200 L0,200 Z"
+            fill="#f8fafc"
+            opacity="1"
           />
         </svg>
       </div>
