@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
-/* ========= Types ========= */
+/* ================= Types ================= */
 type Feature = {
   title: string;
   text: string;
@@ -12,7 +12,7 @@ type Feature = {
   bullets?: string[];
 };
 
-/* ========= Icons ========= */
+/* ================= Icons ================= */
 const IconAI = (
   <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" />
@@ -50,7 +50,7 @@ const IconMap = (
   </svg>
 );
 
-/* ========= Data ========= */
+/* ================= Data ================= */
 const features: Feature[] = [
   {
     title: "AI Auto Planner",
@@ -96,7 +96,7 @@ const features: Feature[] = [
   },
 ];
 
-/* ========= Helpers ========= */
+/* ================= Helpers ================= */
 function Tick({ on }: { on?: boolean }) {
   return (
     <span
@@ -105,23 +105,23 @@ function Tick({ on }: { on?: boolean }) {
   );
 }
 
-/* ========= IntroGate (FULLSCREEN VIDEO) ========= */
+/* ============== IntroGate (fullscreen intro video) ============== */
 function IntroGate({ onDone }: { onDone: () => void }) {
   const vidRef = useRef<HTMLVideoElement | null>(null);
   const [needsTap, setNeedsTap] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Αν χρήστης προτιμά λιγότερη κίνηση → skip
+  // Respect reduced motion
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (mq.matches) onDone();
   }, [onDone]);
 
-  // Autoplay δοκιμή + iOS hacks
   useEffect(() => {
     const v = vidRef.current;
     if (!v) return;
 
+    // iOS/Safari requirements
     v.muted = true;
     v.setAttribute("muted", "");
     v.setAttribute("playsinline", "true");
@@ -130,15 +130,17 @@ function IntroGate({ onDone }: { onDone: () => void }) {
 
     const tryPlay = async () => {
       try {
-        await v.play();
+        const p = v.play();
+        if (p && typeof p.then === "function") await p;
         setLoading(false);
+        if (v.paused) setNeedsTap(true);
       } catch {
         setNeedsTap(true);
         setLoading(false);
       }
     };
 
-    // Πολύ αργά δίκτυα → ζήτα tap
+    // Very slow networks → ask for tap
     const et = (navigator as any).connection?.effectiveType;
     if (et && /^(slow-2g|2g)$/.test(et)) {
       setNeedsTap(true);
@@ -146,11 +148,23 @@ function IntroGate({ onDone }: { onDone: () => void }) {
       return;
     }
 
+    const onLoaded = () => tryPlay();
+    v.addEventListener("loadeddata", onLoaded, { once: true });
+    v.addEventListener("canplay", onLoaded, { once: true });
+    v.addEventListener("canplaythrough", onLoaded, { once: true });
+
+    // first attempt immediately
     tryPlay();
 
-    // Safety timeout
-    const t = setTimeout(() => onDone(), 9000);
-    return () => clearTimeout(t);
+    // Safety timeout so we never get stuck
+    const t = setTimeout(() => onDone(), 10000);
+
+    return () => {
+      clearTimeout(t);
+      v.removeEventListener("loadeddata", onLoaded);
+      v.removeEventListener("canplay", onLoaded);
+      v.removeEventListener("canplaythrough", onLoaded);
+    };
   }, [onDone]);
 
   const handleTapPlay = async () => {
@@ -177,8 +191,8 @@ function IntroGate({ onDone }: { onDone: () => void }) {
         onEnded={onDone}
         onError={() => setTimeout(onDone, 800)}
       >
-        {/* Χρησιμοποιείς ΜΟΝΟ αυτό το αρχείο */}
-        <source src="/videos/navigoplan-intro.mp4?v=8" type="video/mp4" />
+        {/* Χρησιμοποιεί το υπάρχον αρχείο σου */}
+        <source src="/videos/navigoplan-intro.mp4?v=10" type="video/mp4" />
       </video>
 
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
@@ -200,11 +214,11 @@ function IntroGate({ onDone }: { onDone: () => void }) {
         Skip
       </button>
 
-      {/* Αν ο browser ζητήσει χειρονομία */}
+      {/* If autoplay blocked */}
       {needsTap && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="rounded-2xl bg-black/60 p-4 text-center text-white backdrop-blur">
-            <div className="text-sm opacity-90 mb-2">Intro video (~2.8 MB)</div>
+            <div className="text-sm opacity-90 mb-2">Intro video</div>
             <div className="flex gap-3 justify-center">
               <button
                 onClick={handleTapPlay}
@@ -223,6 +237,7 @@ function IntroGate({ onDone }: { onDone: () => void }) {
         </div>
       )}
 
+      {/* Small spinner while probing autoplay */}
       {loading && !needsTap && (
         <div className="absolute inset-0 grid place-items-center">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/40 border-t-white" />
@@ -232,7 +247,7 @@ function IntroGate({ onDone }: { onDone: () => void }) {
   );
 }
 
-/* ========= Page ========= */
+/* ================= Page ================= */
 export default function FeaturesPage() {
   const [showIntro, setShowIntro] = useState(true);
   const handleIntroDone = () => setShowIntro(false);
@@ -263,25 +278,6 @@ export default function FeaturesPage() {
           >
             See Pricing
           </Link>
-        </div>
-      </section>
-
-      {/* Social proof */}
-      <section className="border-y border-slate-100">
-        <div className="mx-auto max-w-7xl px-6 py-6">
-          <p className="mb-3 text-center text-xs uppercase tracking-widest text-slate-500">
-            Made for Greece — Saronic • Cyclades • Ionian • Dodecanese • Sporades • North Aegean • Crete
-          </p>
-          <div className="grid grid-cols-2 gap-3 opacity-80 sm:grid-cols-4 md:grid-cols-7">
-            {["Saronic", "Cyclades", "Ionian", "Dodecanese", "Sporades", "North Aegean", "Crete"].map((r) => (
-              <div
-                key={r}
-                className="flex h-9 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-500"
-              >
-                {r}
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -427,10 +423,22 @@ export default function FeaturesPage() {
           <h2 className="text-xl font-semibold text-brand-navy">FAQ</h2>
           <div className="mt-4 space-y-3">
             {[
-              { q: "Μπορώ να αλλάξω χειροκίνητα τις στάσεις που προτείνει το AI;", a: "Ναι. Το σχέδιο είναι απλώς μια βάση. Με το Custom Mode ρυθμίζεις μέρες, στάσεις και σημειώσεις όπως θες." },
-              { q: "Τα καύσιμα υπολογίζονται αυτόματα;", a: "Ναι, βάσει ταχύτητας και αποστάσεων/ωρών. Μπορείς να αλλάξεις τις παραμέτρους για ακριβέστερα estimates." },
-              { q: "Γίνεται export σε PDF με το λογότυπό μου;", a: "Βεβαίως. Υποστηρίζουμε branded PDF export με summary και day cards." },
-              { q: "Μπορώ να μοιραστώ το itinerary με link;", a: "Ναι, υπάρχει shareable link για να βλέπουν οι πελάτες την πορεία και τις στάσεις." },
+              {
+                q: "Μπορώ να αλλάξω χειροκίνητα τις στάσεις που προτείνει το AI;",
+                a: "Ναι. Το σχέδιο είναι απλώς μια βάση. Με το Custom Mode ρυθμίζεις μέρες, στάσεις και σημειώσεις όπως θες.",
+              },
+              {
+                q: "Τα καύσιμα υπολογίζονται αυτόματα;",
+                a: "Ναι, βάσει ταχύτητας και αποστάσεων/ωρών. Μπορείς να αλλάξεις τις παραμέτρους για ακριβέστερα estimates.",
+              },
+              {
+                q: "Γίνεται export σε PDF με το λογότυπό μου;",
+                a: "Βεβαίως. Υποστηρίζουμε branded PDF export με summary και day cards.",
+              },
+              {
+                q: "Μπορώ να μοιραστώ το itinerary με link;",
+                a: "Ναι, υπάρχει shareable link για να βλέπουν οι πελάτες την πορεία και τις στάσεις.",
+              },
             ].map((f) => (
               <details key={f.q} className="rounded-xl border border-slate-200 bg-white p-4 open:shadow-sm">
                 <summary className="cursor-pointer select-none font-medium text-brand-navy">{f.q}</summary>
@@ -445,7 +453,7 @@ export default function FeaturesPage() {
       <section className="border-t bg-slate-50 py-12">
         <div className="mx-auto max-w-7xl px-6">
           <h2 className="text-xl font-semibold text-brand-navy">Roadmap</h2>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { t: "Weather+", d: "Gusts & waves overlays με quick risk badges." },
               { t: "Offline mode", d: "Πλάνα & προβολή saved routes με ασθενές Wi-Fi." },
