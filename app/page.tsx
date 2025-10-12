@@ -1,42 +1,56 @@
 "use client";
+
 import { useState } from "react";
+import HeroVideo from "./components/HeroVideo";
 
 export default function Home() {
   const [submitted, setSubmitted] = useState(false);
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
-      {/* Hero */}
-      <section className="relative bg-slate-50">
-        <div className="mx-auto max-w-7xl px-6 py-20 text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-brand-navy md:text-5xl">
-            Luxury Yacht Charter Itinerary Software
-          </h1>
-          <p className="mt-4 mx-auto max-w-xl text-lg text-slate-600">
-            Plan routes, estimate costs, and present stunning itineraries your clients will love.
-          </p>
-          <div className="mt-6 flex justify-center gap-4">
-            <a
-              href="#trial"
-              className="rounded-2xl bg-brand-navy px-6 py-3 text-center text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-navy"
-            >
-              Start Planning
-            </a>
-            <a
-              href="#features"
-              className="rounded-2xl border border-brand-navy px-6 py-3 text-center text-sm font-medium text-brand-navy transition hover:bg-brand-gold hover:text-brand-navy"
-            >
-              See Features
-            </a>
+      {/* HERO with background video */}
+      <section className="relative">
+        <HeroVideo
+          mp4="/hero.mp4"
+          // αν έχεις και webm, βάλ'το. αλλιώς άστο undefined
+          // webm="/hero.webm"
+          poster="/hero-poster.png"
+          className="h-[70vh] md:h-[78vh]"
+        >
+          <div className="mx-auto max-w-7xl px-6 h-full flex flex-col items-center justify-center text-center">
+            <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow md:text-5xl">
+              Luxury Yacht Charter Itinerary Software
+            </h1>
+            <p className="mt-4 mx-auto max-w-xl text-lg text-white/90 drop-shadow">
+              Plan routes, estimate costs, and present stunning itineraries your clients will love.
+            </p>
+            <div className="mt-6 flex justify-center gap-4">
+              <a
+                href="#trial"
+                className="rounded-2xl bg-brand-gold px-6 py-3 text-center text-sm font-medium text-brand-navy transition hover:opacity-90"
+              >
+                Start Planning
+              </a>
+              <a
+                href="#features"
+                className="rounded-2xl border border-white/80 px-6 py-3 text-center text-sm font-medium text-white transition hover:bg-white hover:text-brand-navy"
+              >
+                See Features
+              </a>
+            </div>
           </div>
-        </div>
+        </HeroVideo>
       </section>
 
       {/* Features (anchor μόνο – τα πολλά είναι στη σελίδα /features) */}
       <section id="features" className="border-t bg-white py-16">
         <div className="mx-auto max-w-7xl px-6 text-center">
-          <h2 className="text-2xl font-semibold text-brand-navy">Built for modern charter operations</h2>
-          <p className="mt-2 text-slate-600">Plan, price and present high-end itineraries.</p>
+          <h2 className="text-2xl font-semibold text-brand-navy">
+            Built for modern charter operations
+          </h2>
+          <p className="mt-2 text-slate-600">
+            Plan, price and present high-end itineraries.
+          </p>
         </div>
       </section>
 
@@ -52,7 +66,9 @@ export default function Home() {
       <section id="trial" className="border-t bg-brand-navy py-16">
         <div className="mx-auto max-w-xl rounded-2xl border border-brand-gold bg-white p-6 text-center shadow-sm">
           <h3 className="text-xl font-semibold text-brand-navy">Start your free trial</h3>
-          <p className="mt-1 text-sm text-slate-600">No credit card required. Cancel anytime.</p>
+          <p className="mt-1 text-sm text-slate-600">
+            No credit card required. Cancel anytime.
+          </p>
 
           {!submitted ? (
             <form
@@ -70,7 +86,7 @@ export default function Home() {
               />
               <button
                 type="submit"
-                className="rounded-xl bg-brand-gold px-6 py-3 text-sm font-medium text-brand-navy hover:opacity-90"
+                className="rounded-2xl bg-brand-gold px-6 py-3 text-sm font-medium text-brand-navy hover:opacity-90"
               >
                 Create Account
               </button>
