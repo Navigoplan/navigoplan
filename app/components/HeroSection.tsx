@@ -28,7 +28,7 @@ export default function HeroSection() {
           >
             Start Planning
           </a>
-        <a
+          <a
             href="#features"
             className="rounded-2xl border border-white/30 px-6 py-3 font-semibold text-white/90 hover:bg-white/10 transition"
           >
