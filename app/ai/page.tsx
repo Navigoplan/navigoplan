@@ -692,13 +692,23 @@ function AIPlannerInner() {
 
           {/* ==== ΜΟΝΗ ΑΛΛΑΓΗ: χρυσά γράμματα & χρυσό περίγραμμα ==== */}
           <button
-            id="generate-btn"
-            type="submit"
-            disabled={!ready}
-            className="rounded-xl border border-[#c4a962] bg-transparent px-4 py-3 text-sm font-semibold text-[#c4a962] shadow-sm hover:bg-[#c4a962]/10 hover:shadow-[0_0_0_3px_rgba(196,169,98,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c4a962]/60 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Generate Itinerary
-          </button>
+  id="generate-btn"
+  type="submit"
+  disabled={!ready}
+  className="
+    inline-flex items-center justify-center
+    rounded-xl border border-[#c4a962]
+    bg-white px-5 py-3
+    text-sm font-semibold text-[#0b1220]
+    shadow-sm
+    hover:bg-[#c4a962]/90 hover:text-[#0b1220]
+    focus:outline-none focus:ring-2 focus:ring-[#c4a962]
+    disabled:opacity-50
+  "
+>
+  Generate Itinerary
+</button>
+
         </form>
 
         {/* ====== OUTPUT ====== */}
