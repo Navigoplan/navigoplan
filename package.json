@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "validate:ports": "node scripts/validate-ports.js public/data/ports.v1.json",
+    "dedupe:ports": "node scripts/dedupe-ports.js public/data/ports.v1.json",
+    "fix:ports": "node scripts/dedupe-ports.js public/data/ports.v1.json && node scripts/validate-ports.js public/data/ports.v1.json"
   },
   "engines": {
     "node": ">=18 <23"
