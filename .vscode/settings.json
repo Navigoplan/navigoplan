@@ -1,0 +1,12 @@
+{
+  // Απόκρυψη χρωμάτων (κίτρινο M, πράσινο U κ.λπ.)
+  "explorer.decorations.badges": false,
+  "explorer.decorations.colors": false,
+  "git.decorations.enabled": false,
+
+  // Κλείσε τα διακριτικά diff στις γραμμές του editor
+  "scm.diffDecorations": "none",
+
+  // Αγνόησε το προειδοποιητικό για το @theme του Tailwind v4
+  "css.lint.unknownAtRules": "ignore"
+}
