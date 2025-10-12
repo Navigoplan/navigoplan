@@ -571,7 +571,7 @@ function AIPlannerInner() {
       <section className="mx-auto max-w-7xl px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight text-brand-navy no-print">AI Itinerary Draft</h1>
         <p className="mt-2 max-w-2xl text-slate-600 no-print">
-          Region-guided ή πλήρως Custom. Βάλε ημερομηνία & στοιχεία σκάφους, πρόσθεσε στάσεις και κάνε generate.
+          <b>Auto AI Planner</b> ή πλήρως Custom. Βάλε ημερομηνία & στοιχεία σκάφους, πρόσθεσε στάσεις και κάνε generate.
         </p>
 
         {/* FORM */}
@@ -580,22 +580,34 @@ function AIPlannerInner() {
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-brand-navy">Planner Mode</label>
             <select value={mode} onChange={(e) => setMode(e.target.value as PlannerMode)} className="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <option value="Region">Region-guided</option>
+              <option value="Region">Auto AI Planner</option>
               <option value="Custom">Custom (day-by-day)</option>
             </select>
             {!ready && <span className="text-xs text-slate-500">Φορτώνω ports…</span>}
             {error && <span className="text-xs text-red-600">Σφάλμα dataset</span>}
           </div>
 
-          {/* Common controls */}
+          {/* Common controls (with labels) */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <input type="date" value={startDate || ""} onChange={(e) => setStartDate(e.target.value)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" />
-            <select value={yachtType} onChange={(e) => setYachtType(e.target.value as YachtType)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold">
-              <option value="Motor">Motor</option><option value="Sailing">Sailing</option>
-            </select>
-            <input type="number" min={4} value={speed} onChange={(e) => setSpeed(parseFloat(e.target.value || "10"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Cruise speed (kn)" />
+            <div className="flex flex-col">
+              <label htmlFor="date" className="mb-1 text-xs font-medium text-gray-600">Ημερομηνία αναχώρησης</label>
+              <input id="date" type="date" value={startDate || ""} onChange={(e) => setStartDate(e.target.value)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" />
+            </div>
+            <div className="flex flex-col">
+              <label htmlFor="yt" className="mb-1 text-xs font-medium text-gray-600">Τύπος σκάφους</label>
+              <select id="yt" value={yachtType} onChange={(e) => setYachtType(e.target.value as YachtType)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold">
+                <option value="Motor">Motor</option><option value="Sailing">Sailing</option>
+              </select>
+            </div>
+            <div className="flex flex-col">
+              <label htmlFor="speed" className="mb-1 text-xs font-medium text-gray-600">Ταχύτητα (kn)</label>
+              <input id="speed" type="number" min={4} value={speed} onChange={(e) => setSpeed(parseFloat(e.target.value || "10"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 20" />
+            </div>
             {yachtType === "Motor" && (
-              <input type="number" min={5} value={lph} onChange={(e) => setLph(parseFloat(e.target.value || "120"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Fuel burn (L/h)" />
+              <div className="flex flex-col">
+                <label htmlFor="lph" className="mb-1 text-xs font-medium text-gray-600">Κατανάλωση (L/h)</label>
+                <input id="lph" type="number" min={5} value={lph} onChange={(e) => setLph(parseFloat(e.target.value || "120"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 180" />
+              </div>
             )}
           </div>
 
@@ -603,19 +615,31 @@ function AIPlannerInner() {
           {mode === "Region" && (
             <>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <AutoCompleteInput value={start} onChange={setStart} placeholder="Start port (π.χ. Alimos / Άλιμος)" options={PORT_OPTIONS} />
-                <AutoCompleteInput value={end} onChange={setEnd} placeholder="End port (default: ίδιο με start)" options={PORT_OPTIONS} />
-                <select value={regionMode} onChange={(e) => setRegionMode(e.target.value as any)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold">
-                  <option value="Auto">Region: Auto</option>
-                  <option value="Saronic">Region: Saronic</option>
-                  <option value="Cyclades">Region: Cyclades</option>
-                  <option value="Ionian">Region: Ionian</option>
-                  <option value="Dodecanese">Region: Dodecanese</option>
-                  <option value="Sporades">Region: Sporades</option>
-                  <option value="NorthAegean">Region: North Aegean</option>
-                  <option value="Crete">Region: Crete</option>
-                </select>
-                <input type="number" min={2} max={21} value={days} onChange={(e) => setDays(parseInt(e.target.value || "7", 10))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Days (legs)" />
+                <div className="flex flex-col">
+                  <label className="mb-1 text-xs font-medium text-gray-600">Αφετηρία (λιμάνι)</label>
+                  <AutoCompleteInput value={start} onChange={setStart} placeholder="π.χ. Alimos / Άλιμος" options={PORT_OPTIONS} />
+                </div>
+                <div className="flex flex-col">
+                  <label className="mb-1 text-xs font-medium text-gray-600">Προορισμός (λιμάνι)</label>
+                  <AutoCompleteInput value={end} onChange={setEnd} placeholder="default: ίδιο με start" options={PORT_OPTIONS} />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="region" className="mb-1 text-xs font-medium text-gray-600">Περιοχή</label>
+                  <select id="region" value={regionMode} onChange={(e) => setRegionMode(e.target.value as any)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold">
+                    <option value="Auto">Auto</option>
+                    <option value="Saronic">Saronic</option>
+                    <option value="Cyclades">Cyclades</option>
+                    <option value="Ionian">Ionian</option>
+                    <option value="Dodecanese">Dodecanese</option>
+                    <option value="Sporades">Sporades</option>
+                    <option value="NorthAegean">North Aegean</option>
+                    <option value="Crete">Crete</option>
+                  </select>
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="days" className="mb-1 text-xs font-medium text-gray-600">Ημέρες ταξιδιού</label>
+                  <input id="days" type="number" min={2} max={21} value={days} onChange={(e) => setDays(parseInt(e.target.value || "7", 10))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 7" />
+                </div>
               </div>
 
               <div className="rounded-2xl border border-slate-200 p-4">
@@ -643,8 +667,14 @@ function AIPlannerInner() {
           {mode === "Custom" && (
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <AutoCompleteInput value={customStart} onChange={setCustomStart} placeholder="Start (Day 0)" options={PORT_OPTIONS} />
-                <input type="number" min={1} max={30} value={customDays} onChange={(e) => setCustomDays(parseInt(e.target.value || "7", 10))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="Number of days" />
+                <div className="flex flex-col">
+                  <label className="mb-1 text-xs font-medium text-gray-600">Αφετηρία (Day 0)</label>
+                  <AutoCompleteInput value={customStart} onChange={setCustomStart} placeholder="Start" options={PORT_OPTIONS} />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="cdays" className="mb-1 text-xs font-medium text-gray-600">Ημέρες</label>
+                  <input id="cdays" type="number" min={1} max={30} value={customDays} onChange={(e) => setCustomDays(parseInt(e.target.value || "7", 10))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 7" />
+                </div>
               </div>
               <div className="mt-4">
                 <div className="text-sm font-medium text-brand-navy">Προορισμοί ανά ημέρα</div>
@@ -679,7 +709,7 @@ function AIPlannerInner() {
             {/* Toolbar */}
             <div className="mb-4 flex items-center justify-between no-print">
               <div className="text-sm text-slate-500">
-                Mode: <span className="font-medium text-brand-navy">{mode}</span>
+                Mode: <span className="font-medium text-brand-navy">{mode === "Region" ? "Auto AI Planner" : "Custom"}</span>
                 {mode === "Region" && <> • Region: <span className="font-medium text-brand-navy">{regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region}</span></>}
               </div>
               <div className="flex items-center gap-2">
