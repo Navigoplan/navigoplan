@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
-/* ======================= Types ======================= */
+/* ========= Types ========= */
 type Feature = {
   title: string;
   text: string;
@@ -12,7 +12,7 @@ type Feature = {
   bullets?: string[];
 };
 
-/* ======================= Icons ======================= */
+/* ========= Icons ========= */
 const IconAI = (
   <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" />
@@ -50,7 +50,7 @@ const IconMap = (
   </svg>
 );
 
-/* ======================= Data ======================= */
+/* ========= Data ========= */
 const features: Feature[] = [
   {
     title: "AI Auto Planner",
@@ -96,35 +96,73 @@ const features: Feature[] = [
   },
 ];
 
-/* ======================= UI helpers ======================= */
+/* ========= Helpers ========= */
 function Tick({ on }: { on?: boolean }) {
   return (
     <span
-      className={
-        on
-          ? "inline-block h-3 w-3 rounded-full bg-emerald-500"
-          : "inline-block h-3 w-3 rounded-full bg-slate-300"
-      }
+      className={on ? "inline-block h-3 w-3 rounded-full bg-emerald-500" : "inline-block h-3 w-3 rounded-full bg-slate-300"}
     />
   );
 }
 
-/* ======================= Intro Gate (Video) ======================= */
-/** Fullscreen intro video. Autoplay/muted/playsInline for mobile, Skip button, auto-fallback in 5s. */
+/* ========= IntroGate (FULLSCREEN VIDEO) ========= */
 function IntroGate({ onDone }: { onDone: () => void }) {
   const vidRef = useRef<HTMLVideoElement | null>(null);
+  const [needsTap, setNeedsTap] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Respect reduced motion
+  // Αν χρήστης προτιμά λιγότερη κίνηση → skip
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (mq.matches) onDone();
   }, [onDone]);
 
-  // Safety timeout in case autoplay fails or file is heavy
+  // Autoplay δοκιμή + iOS hacks
   useEffect(() => {
-    const t = setTimeout(() => onDone(), 5000);
+    const v = vidRef.current;
+    if (!v) return;
+
+    v.muted = true;
+    v.setAttribute("muted", "");
+    v.setAttribute("playsinline", "true");
+    // @ts-ignore
+    v.setAttribute("webkit-playsinline", "true");
+
+    const tryPlay = async () => {
+      try {
+        await v.play();
+        setLoading(false);
+      } catch {
+        setNeedsTap(true);
+        setLoading(false);
+      }
+    };
+
+    // Πολύ αργά δίκτυα → ζήτα tap
+    const et = (navigator as any).connection?.effectiveType;
+    if (et && /^(slow-2g|2g)$/.test(et)) {
+      setNeedsTap(true);
+      setLoading(false);
+      return;
+    }
+
+    tryPlay();
+
+    // Safety timeout
+    const t = setTimeout(() => onDone(), 9000);
     return () => clearTimeout(t);
   }, [onDone]);
+
+  const handleTapPlay = async () => {
+    const v = vidRef.current;
+    if (!v) return onDone();
+    try {
+      await v.play();
+      setNeedsTap(false);
+    } catch {
+      onDone();
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[60] bg-black">
@@ -137,16 +175,15 @@ function IntroGate({ onDone }: { onDone: () => void }) {
         preload="metadata"
         poster="/hero-poster.png"
         onEnded={onDone}
-        onError={onDone}
+        onError={() => setTimeout(onDone, 800)}
       >
-        {/* Έχεις ήδη αυτό το αρχείο: /public/videos/navigoplan-intro.mp4 */}
-        <source src="/videos/navigoplan-intro.mp4" type="video/mp4" />
+        {/* Χρησιμοποιείς ΜΟΝΟ αυτό το αρχείο */}
+        <source src="/videos/navigoplan-intro.mp4?v=8" type="video/mp4" />
       </video>
 
-      {/* Soft gradient overlay */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
 
-      {/* Tagline (optional) */}
+      {/* Tagline */}
       <div className="absolute inset-x-0 bottom-10 flex items-center justify-center">
         <div className="rounded-full bg-black/50 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/10">
           Navigoplan — Luxury Yacht Charter Itineraries
@@ -162,11 +199,40 @@ function IntroGate({ onDone }: { onDone: () => void }) {
       >
         Skip
       </button>
+
+      {/* Αν ο browser ζητήσει χειρονομία */}
+      {needsTap && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="rounded-2xl bg-black/60 p-4 text-center text-white backdrop-blur">
+            <div className="text-sm opacity-90 mb-2">Intro video (~2.8 MB)</div>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={handleTapPlay}
+                className="rounded-full bg-white/90 px-5 py-2 text-sm font-semibold text-slate-900 hover:bg-white"
+              >
+                Play intro
+              </button>
+              <button
+                onClick={onDone}
+                className="rounded-full border border-white/60 px-5 py-2 text-sm font-semibold text-white/90 hover:bg-white/10"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loading && !needsTap && (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+        </div>
+      )}
     </div>
   );
 }
 
-/* ======================= Page ======================= */
+/* ========= Page ========= */
 export default function FeaturesPage() {
   const [showIntro, setShowIntro] = useState(true);
   const handleIntroDone = () => setShowIntro(false);
@@ -279,7 +345,7 @@ export default function FeaturesPage() {
             Level up with weather layers, Crew Mode, private notes και branding.
           </p>
 
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
@@ -361,22 +427,10 @@ export default function FeaturesPage() {
           <h2 className="text-xl font-semibold text-brand-navy">FAQ</h2>
           <div className="mt-4 space-y-3">
             {[
-              {
-                q: "Μπορώ να αλλάξω χειροκίνητα τις στάσεις που προτείνει το AI;",
-                a: "Ναι. Το σχέδιο είναι απλώς μια βάση. Με το Custom Mode ρυθμίζεις μέρες, στάσεις και σημειώσεις όπως θες.",
-              },
-              {
-                q: "Τα καύσιμα υπολογίζονται αυτόματα;",
-                a: "Ναι, βάσει ταχύτητας και αποστάσεων/ωρών. Μπορείς να αλλάξεις τις παραμέτρους για ακριβέστερα estimates.",
-              },
-              {
-                q: "Γίνεται export σε PDF με το λογότυπό μου;",
-                a: "Βεβαίως. Υποστηρίζουμε branded PDF export με summary και day cards.",
-              },
-              {
-                q: "Μπορώ να μοιραστώ το itinerary με link;",
-                a: "Ναι, υπάρχει shareable link για να βλέπουν οι πελάτες την πορεία και τις στάσεις.",
-              },
+              { q: "Μπορώ να αλλάξω χειροκίνητα τις στάσεις που προτείνει το AI;", a: "Ναι. Το σχέδιο είναι απλώς μια βάση. Με το Custom Mode ρυθμίζεις μέρες, στάσεις και σημειώσεις όπως θες." },
+              { q: "Τα καύσιμα υπολογίζονται αυτόματα;", a: "Ναι, βάσει ταχύτητας και αποστάσεων/ωρών. Μπορείς να αλλάξεις τις παραμέτρους για ακριβέστερα estimates." },
+              { q: "Γίνεται export σε PDF με το λογότυπό μου;", a: "Βεβαίως. Υποστηρίζουμε branded PDF export με summary και day cards." },
+              { q: "Μπορώ να μοιραστώ το itinerary με link;", a: "Ναι, υπάρχει shareable link για να βλέπουν οι πελάτες την πορεία και τις στάσεις." },
             ].map((f) => (
               <details key={f.q} className="rounded-xl border border-slate-200 bg-white p-4 open:shadow-sm">
                 <summary className="cursor-pointer select-none font-medium text-brand-navy">{f.q}</summary>
