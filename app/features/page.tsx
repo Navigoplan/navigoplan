@@ -1,6 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
+/* ======================= Types ======================= */
 type Feature = {
   title: string;
   text: string;
@@ -8,6 +12,7 @@ type Feature = {
   bullets?: string[];
 };
 
+/* ======================= Icons ======================= */
 const IconAI = (
   <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" />
@@ -44,24 +49,8 @@ const IconMap = (
     <path d="M9 3v15M15 6v15" />
   </svg>
 );
-const IconShare = (
-  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
-    <path d="M8.6 11l6.8-4M8.6 13l6.8 4" />
-  </svg>
-);
-const IconLang = (
-  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path d="M3 5h12M9 3v2m6 0a8 8 0 1 1-15 7h15" />
-  </svg>
-);
-const IconShield = (
-  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-    <path d="M12 3l7 4v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V7l7-4Z" />
-    <path d="M9.5 12.5l1.8 1.8 3.7-3.8" />
-  </svg>
-);
 
+/* ======================= Data ======================= */
 const features: Feature[] = [
   {
     title: "AI Auto Planner",
@@ -107,6 +96,7 @@ const features: Feature[] = [
   },
 ];
 
+/* ======================= UI helpers ======================= */
 function Tick({ on }: { on?: boolean }) {
   return (
     <span
@@ -119,9 +109,72 @@ function Tick({ on }: { on?: boolean }) {
   );
 }
 
+/* ======================= Intro Gate (Video) ======================= */
+/** Fullscreen intro video. Autoplay/muted/playsInline for mobile, Skip button, auto-fallback in 5s. */
+function IntroGate({ onDone }: { onDone: () => void }) {
+  const vidRef = useRef<HTMLVideoElement | null>(null);
+
+  // Respect reduced motion
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (mq.matches) onDone();
+  }, [onDone]);
+
+  // Safety timeout in case autoplay fails or file is heavy
+  useEffect(() => {
+    const t = setTimeout(() => onDone(), 5000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black">
+      <video
+        ref={vidRef}
+        className="h-full w-full object-cover"
+        autoPlay
+        muted
+        playsInline
+        preload="metadata"
+        poster="/hero-poster.png"
+        onEnded={onDone}
+        onError={onDone}
+      >
+        {/* Έχεις ήδη αυτό το αρχείο: /public/videos/navigoplan-intro.mp4 */}
+        <source src="/videos/navigoplan-intro.mp4" type="video/mp4" />
+      </video>
+
+      {/* Soft gradient overlay */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+
+      {/* Tagline (optional) */}
+      <div className="absolute inset-x-0 bottom-10 flex items-center justify-center">
+        <div className="rounded-full bg-black/50 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/10">
+          Navigoplan — Luxury Yacht Charter Itineraries
+        </div>
+      </div>
+
+      {/* Skip */}
+      <button
+        type="button"
+        onClick={onDone}
+        className="absolute right-4 top-4 rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-slate-900 shadow-lg ring-1 ring-black/10 hover:bg-white"
+        aria-label="Skip intro"
+      >
+        Skip
+      </button>
+    </div>
+  );
+}
+
+/* ======================= Page ======================= */
 export default function FeaturesPage() {
+  const [showIntro, setShowIntro] = useState(true);
+  const handleIntroDone = () => setShowIntro(false);
+
   return (
     <main className="min-h-screen bg-white text-slate-900">
+      {showIntro && <IntroGate onDone={handleIntroDone} />}
+
       {/* Header */}
       <section className="mx-auto max-w-7xl px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight text-brand-navy md:text-4xl">Features</h1>
@@ -226,7 +279,7 @@ export default function FeaturesPage() {
             Level up with weather layers, Crew Mode, private notes και branding.
           </p>
 
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
