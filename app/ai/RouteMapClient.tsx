@@ -55,12 +55,11 @@ const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 const TRANSPARENT_1PX =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-/* Tunables (A* + simplify + animation/UI) — ADAPTIVE COAST-AVOIDING */
-/* Πιο “λεπτή” ανάλυση & πιο ασφαλές clearance */
+/* Tunables (A* + simplify + animation/UI) — κρατάμε τα τωρινά */
 const BASE_CELL_DEG = 0.03;
-const GRID_MARGIN_DEG = 0.75;       // μεγαλύτερο πλαίσιο γύρω από κάθε leg
-const NEAR_LAND_PENALTY = 1.2;      // βαρύτερο κόστος κοντά σε ακτή
-const SIMPLIFY_EPS = 0.003;         // λιγότερο aggressive simplify
+const GRID_MARGIN_DEG = 0.75;
+const NEAR_LAND_PENALTY = 1.2;
+const SIMPLIFY_EPS = 0.003;
 
 /* -------- Animation speed -------- */
 const DRAW_POINTS_PER_SEC = 3;
@@ -100,22 +99,17 @@ function pointInPoly(pt: [number, number], poly: PolyRings): boolean {
 function collectPolys(geo: any): PolyRings[] {
   const polys: PolyRings[] = [];
   if (!geo) return polys;
-
   function pushPolygon(coords: Ring[]) {
     if (!coords?.length) return;
     const outer = coords[0];
     const holes = coords.slice(1);
     polys.push({ outer, holes });
   }
-
   const pushFromGeom = (g: any) => {
     if (!g) return;
     if (g.type === "Polygon") pushPolygon(g.coordinates as Ring[]);
-    else if (g.type === "MultiPolygon") {
-      for (const p of g.coordinates as Ring[][]) pushPolygon(p);
-    }
+    else if (g.type === "MultiPolygon") for (const p of g.coordinates as Ring[][]) pushPolygon(p);
   };
-
   if (geo.type === "FeatureCollection") {
     for (const f of (geo.features ?? [])) pushFromGeom(f?.geometry);
   } else {
@@ -129,8 +123,6 @@ function pickCellDegForLeg(a: Point, b: Point) {
   const dLat = Math.abs(a.lat - b.lat);
   const dLon = Math.abs(a.lon - b.lon);
   const span = Math.max(dLat, dLon);
-
-  // Πιο “λεπτά” cells για μικρομεσαία legs ώστε να αποφεύγονται στεριές/στενά
   let cell = Math.min(BASE_CELL_DEG, Math.max(0.006, span / 180));
   if (span < 2.5) cell = 0.016;
   if (span < 1.5) cell = 0.012;
@@ -176,8 +168,8 @@ function buildGridForBounds(
     }
   }
 
-  // Clearance γύρω από στεριά (πιο γενναιόδωρο, κλιμακώνεται με την ανάλυση)
-  const clearanceCells = Math.max(1, Math.round(0.12 / cellDeg)); // ~0.12° ≈ 13 km
+  // Λίγο πιο γενναιόδωρο clearance για να αποφεύγουμε “γλείψιμο” ακτής
+  const clearanceCells = Math.max(1, Math.round(0.12 / cellDeg)); // ~0.12°
   if (clearanceCells > 0) {
     const toBlock: [number, number][] = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
@@ -366,92 +358,82 @@ export default function RouteMapClient({
 }) {
   const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
-  /* coast */
+  /* ---------- Base map toggle & layer readiness ---------- */
+  const [base, setBase] = useState<"gebco" | "osm">("gebco");
+  const [baseReady, setBaseReady] = useState(false);
+  const [deferOverlay, setDeferOverlay] = useState(false); // για labels/seamarks μετά το πρώτο paint
+  useEffect(() => {
+    // Μικρό defer ώστε να μην “φορτώνουν” όλα τα layers στο ίδιο frame.
+    const id = setTimeout(() => setDeferOverlay(true), 200);
+    return () => clearTimeout(id);
+  }, []);
+
+  /* ---------- Coast GeoJSON με timeout & fallback ---------- */
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch("/data/coastlines-gr.geojson")
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000); // 6s safety timeout
+
+    fetch("/data/coastlines-gr.geojson", { signal: ctrl.signal })
       .then(r => (r.ok ? r.json() : Promise.reject(new Error("GeoJSON fetch failed"))))
       .then(j => { if (!cancelled) setCoast(j); })
-      .catch(() => { if (!cancelled) setCoast(null); });
-    return () => { cancelled = true; };
+      .catch(() => { if (!cancelled) setCoast(null); })
+      .finally(() => clearTimeout(timer));
+
+    return () => { cancelled = true; ctrl.abort(); };
   }, []);
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* ---- async compute water path + leg indices (chunked για να μην κολλάει) ---- */
-  const [waterLatLngs, setWaterLatLngs] = useState<LatLngExpression[]>([]);
-  const [legEndIdx, setLegEndIdx] = useState<number[]>([]);
-  const [isComputing, setIsComputing] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function compute() {
-      if (points.length < 2) {
-        setWaterLatLngs(points.map(p => [p.lat, p.lon] as LatLngExpression));
-        setLegEndIdx([]);
-        return;
-      }
-      setIsComputing(true);
-      try {
-        const out: [number, number][][] = [];
-        for (let i = 0; i < points.length - 1; i++) {
-          const a = points[i], b = points[i + 1];
-          let seg: [number, number][] | null = null;
-
-          if (coastPolys.length) {
-            const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
-            const path = aStarWater(grid, start, goal);
-            if (path) {
-              const mid = path.map(n => [n.lat, n.lon] as [number, number]);
-              const midS = simplifyRDP(mid, SIMPLIFY_EPS);
-              seg = [[a.lat, a.lon], ...midS, [b.lat, b.lon]];
-            }
-          }
-          if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
-
-          // dedup consecutive equal points
-          const cleaned: [number, number][] = [];
-          for (const pt of seg) {
-            if (!cleaned.length) cleaned.push(pt);
-            else {
-              const last = cleaned[cleaned.length - 1];
-              if (Math.abs(last[0]-pt[0]) > 1e-9 || Math.abs(last[1]-pt[1]) > 1e-9) cleaned.push(pt);
-            }
-          }
-          out.push(cleaned);
-
-          // κάθε 2 legs άφησε το UI να αναπνεύσει
-          if ((i % 2) === 1) {
-            await new Promise(requestAnimationFrame);
-            if (cancelled) return;
-          }
-        }
-
-        const joined: [number, number][] = [];
-        const endIdx: number[] = [];
-        for (let i = 0; i < out.length; i++) {
-          const leg = out[i];
-          if (!joined.length) joined.push(...leg);
-          else joined.push(...leg.slice(1));
-          endIdx.push(joined.length - 1);
-        }
-
-        if (!cancelled) {
-          setWaterLatLngs(joined as LatLngExpression[]);
-          setLegEndIdx(endIdx);
-        }
-      } finally {
-        if (!cancelled) setIsComputing(false);
-      }
+  /* ---- compute water path + breakpoint indices ανά leg ---- */
+  const { waterLatLngs, legEndIdx } = useMemo(() => {
+    const result: { waterLatLngs: LatLngExpression[]; legEndIdx: number[] } = { waterLatLngs: [], legEndIdx: [] };
+    if (points.length < 2) {
+      result.waterLatLngs = points.map(p => [p.lat, p.lon] as LatLngExpression);
+      return result;
     }
-    compute();
-    return () => { cancelled = true; };
+    const out: [number, number][][] = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      let seg: [number, number][] | null = null;
+      if (coastPolys.length) {
+        const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
+        const path = aStarWater(grid, start, goal);
+        if (path) {
+          const mid = path.map(n => [n.lat, n.lon] as [number, number]);
+          const midS = simplifyRDP(mid, SIMPLIFY_EPS);
+          seg = [[a.lat, a.lon], ...midS, [b.lat, b.lon]];
+        }
+      }
+      if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
+
+      // dedup consecutive equal points
+      const cleaned: [number, number][] = [];
+      for (const pt of seg) {
+        if (!cleaned.length) cleaned.push(pt);
+        else {
+          const last = cleaned[cleaned.length - 1];
+          if (Math.abs(last[0]-pt[0]) > 1e-9 || Math.abs(last[1]-pt[1]) > 1e-9) cleaned.push(pt);
+        }
+      }
+      out.push(cleaned);
+    }
+    const joined: [number, number][] = [];
+    const endIdx: number[] = [];
+    for (let i = 0; i < out.length; i++) {
+      const leg = out[i];
+      if (!joined.length) joined.push(...leg);
+      else joined.push(...leg.slice(1));
+      endIdx.push(joined.length - 1);
+    }
+    result.waterLatLngs = joined as LatLngExpression[];
+    result.legEndIdx = endIdx;
+    return result;
   }, [points, coastPolys]);
 
   /* ---- progressive draw ---- */
   const [drawCount, setDrawCount] = useState(0);
   useEffect(() => { setDrawCount(waterLatLngs.length ? 1 : 0); }, [waterLatLngs]);
-
   useEffect(() => {
     if (drawCount <= 0 || drawCount >= waterLatLngs.length) return;
     const id = window.setInterval(() => {
@@ -478,7 +460,7 @@ export default function RouteMapClient({
   const [followShip, setFollowShip] = useState(false);
   const lastFollowedPointRef = useRef<string>("");
 
-  /* auto-zoom σε κάθε νέο leg boundary */
+  /* auto-zoom ανά leg */
   const prevLegRef = useRef<number>(-999);
   useEffect(() => {
     if (!map) return;
@@ -493,21 +475,17 @@ export default function RouteMapClient({
       const L = require("leaflet") as typeof import("leaflet");
       const bnds = L.latLngBounds([a.lat, a.lon], [b.lat, b.lon]).pad(0.18);
       map.flyToBounds(bnds, { padding: [28, 28] });
-      setTimeout(() => {
-        if (!map) return;
-        if (map.getZoom() > LEG_VIEW_ZOOM_MAX) map.setZoom(LEG_VIEW_ZOOM_MAX);
-      }, 500);
+      setTimeout(() => { if (map && map.getZoom() > LEG_VIEW_ZOOM_MAX) map.setZoom(LEG_VIEW_ZOOM_MAX); }, 500);
     }
   }, [map, currentLegIndex, points, followShip]);
 
-  /* follow ship: πέτα την κάμερα στο tip της γραμμής */
+  /* follow ship */
   useEffect(() => {
     if (!map || !followShip || animatedLatLngs.length < 2) return;
     const tip = animatedLatLngs[animatedLatLngs.length - 1] as [number, number];
     const key = `${tip[0].toFixed(5)},${tip[1].toFixed(5)}`;
     if (lastFollowedPointRef.current === key) return;
     lastFollowedPointRef.current = key;
-
     const targetZoom = Math.max(map.getZoom(), FOLLOW_ZOOM_MIN);
     map.flyTo(tip as any, targetZoom, { duration: 0.5 });
   }, [animatedLatLngs, followShip, map]);
@@ -542,24 +520,29 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* Loader overlay όταν «γεννάει» τη διαδρομή */}
-      {isComputing && (
-        <div className="absolute left-3 bottom-3 z-[1200] rounded-md bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
-          Generating route…
-        </div>
-      )}
-
-      {/* μικρό UI για Follow ship */}
-      <div className="absolute right-3 top-3 z-[1000] no-print">
+      {/* UI: Base toggle + Follow */}
+      <div className="absolute right-3 top-3 z-[1000] flex gap-2 no-print">
         <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
-          <input
-            type="checkbox"
-            checked={followShip}
-            onChange={(e) => setFollowShip(e.target.checked)}
-          />
+          <input type="checkbox" checked={followShip} onChange={(e) => setFollowShip(e.target.checked)} />
           Follow ship
         </label>
+        <button
+          onClick={() => setBase(b => (b === "gebco" ? "osm" : "gebco"))}
+          className="rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200"
+          title="Toggle base map"
+        >
+          Base: {base.toUpperCase()}
+        </button>
       </div>
+
+      {/* Loader overlay μέχρι να φορτώσει το base layer */}
+      {!baseReady && (
+        <div className="absolute inset-0 z-[1500] grid place-items-center bg-white/40 backdrop-blur-[1px]">
+          <div className="animate-pulse text-[13px] px-3 py-2 rounded-md bg-white shadow border border-slate-200">
+            Loading map…
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         .leaflet-tile[src*="tiles.gebco.net"] {
@@ -585,9 +568,22 @@ export default function RouteMapClient({
       >
         <CaptureMap onReady={setMap} />
 
-        {/* GEBCO */}
-        <Pane name="pane-gebco" style={{ zIndex: 200 }}>
-          <TileLayer attribution="&copy; GEBCO" url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png" opacity={0.9} />
+        {/* Base map (με onload handlers για το loader) */}
+        <Pane name="pane-base" style={{ zIndex: 200 }}>
+          {base === "gebco" ? (
+            <TileLayer
+              attribution="&copy; GEBCO"
+              url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
+              opacity={0.9}
+              eventHandlers={{ load: () => setBaseReady(true) }}
+            />
+          ) : (
+            <TileLayer
+              attribution="&copy; OpenStreetMap"
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              eventHandlers={{ load: () => setBaseReady(true) }}
+            />
+          )}
         </Pane>
 
         {/* light blue νερό */}
@@ -609,42 +605,46 @@ export default function RouteMapClient({
           )}
         </Pane>
 
-        {/* labels */}
-        <Pane name="pane-labels" style={{ zIndex: 360 }}>
-          <TileLayer
-            attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
-            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
-            tileSize={512}
-            zoomOffset={-1}
-            detectRetina={false}
-            opacity={0.75}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"
-            tileSize={512}
-            zoomOffset={-1}
-            detectRetina={false}
-            opacity={0.25}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png"
-            tileSize={256}
-            zoomOffset={0}
-            detectRetina={true}
-            opacity={0.55}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
-        </Pane>
+        {/* labels (deferred) */}
+        {deferOverlay && (
+          <Pane name="pane-labels" style={{ zIndex: 360 }}>
+            <TileLayer
+              attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
+              url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
+              tileSize={512}
+              zoomOffset={-1}
+              detectRetina={false}
+              opacity={0.75}
+              errorTileUrl={TRANSPARENT_1PX}
+              pane="pane-labels"
+            />
+            <TileLayer
+              url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"
+              tileSize={512}
+              zoomOffset={-1}
+              detectRetina={false}
+              opacity={0.25}
+              errorTileUrl={TRANSPARENT_1PX}
+              pane="pane-labels"
+            />
+            <TileLayer
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png"
+              tileSize={256}
+              zoomOffset={0}
+              detectRetina={true}
+              opacity={0.55}
+              errorTileUrl={TRANSPARENT_1PX}
+              pane="pane-labels"
+            />
+          </Pane>
+        )}
 
-        {/* seamarks */}
-        <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
-          <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
-        </Pane>
+        {/* seamarks (deferred) */}
+        {deferOverlay && (
+          <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
+            <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
+          </Pane>
+        )}
 
         {/* full route (σκιά) */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
