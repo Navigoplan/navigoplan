@@ -168,9 +168,10 @@ function AutoCompleteInput({
 /* ========= Query helpers ========= */
 function encodeArr(arr: string[]) { return arr.map((s) => encodeURIComponent(s)).join(","); }
 function decodeArr(s: string | null): string[] { if (!s) return []; return s.split(",").map((x) => decodeURIComponent(x)).filter(Boolean); }
+
 function buildQueryFromState(state: {
   mode: PlannerMode; startDate: string; yachtType: YachtType; speed: number; lph: number;
-  start: string; end: string; days: number; regionMode: "Auto" | RegionKey; vias: string[]; viaCanal: boolean;
+  start: string; end: string; days: number; regionMode: "Auto" | RegionKey; vias: string[];
   customStart: string; customDays: number; customDayStops: string[];
 }) {
   const q = new URLSearchParams();
@@ -185,7 +186,6 @@ function buildQueryFromState(state: {
     q.set("days", String(state.days));
     q.set("region", state.regionMode);
     if (state.vias.length) q.set("vias", encodeArr(state.vias));
-    if (state.viaCanal) q.set("canal", "1");
   } else {
     q.set("cstart", state.customStart);
     q.set("cdays", String(state.customDays));
@@ -194,11 +194,12 @@ function buildQueryFromState(state: {
   q.set("autogen", "1");
   return q.toString();
 }
+
 function loadStateFromQuery(sp: URLSearchParams, setters: {
   setMode: (v: PlannerMode) => void; setStartDate: (v: string) => void;
   setYachtType: (v: YachtType) => void; setSpeed: (v: number) => void; setLph: (v: number) => void;
   setStart: (v: string) => void; setEnd: (v: string) => void; setDays: (v: number) => void;
-  setRegionMode: (v: "Auto" | RegionKey) => void; setVias: (v: string[]) => void; setViaCanal: (v: boolean) => void;
+  setRegionMode: (v: "Auto" | RegionKey) => void; setVias: (v: string[]) => void;
   setCustomStart: (v: string) => void; setCustomDays: (v: number) => void; setCustomDayStops: (v: string[]) => void;
 }) {
   const mode = (sp.get("mode") as PlannerMode) || "Region";
@@ -222,14 +223,12 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
     const days = Number(sp.get("days") || 7);
     const region = (sp.get("region") as "Auto" | RegionKey) || "Auto";
     const vias = decodeArr(sp.get("vias"));
-    const canal = sp.get("canal") === "1";
 
     setters.setStart(start);
     setters.setEnd(end);
     setters.setDays(days);
     setters.setRegionMode(region);
     setters.setVias(vias);
-    setters.setViaCanal(canal);
   } else {
     const cstart = sp.get("cstart") || "Alimos";
     const cdays = Number(sp.get("cdays") || 7);
@@ -369,14 +368,11 @@ function AIPlannerInner() {
   const region: RegionKey = regionMode === "Auto" ? autoRegion : (regionMode as RegionKey);
 
   const [vias, setVias] = useState<string[]>([]);
-  const [viaCanal, setViaCanal] = useState<boolean>(false);
   const effectiveVias = useMemo(() => {
-    const list = [...vias].filter(Boolean);
-    if (viaCanal && !list.some(v => normalize(v) === normalize("Corinth Canal (Isthmia)"))) {
-      list.unshift("Corinth Canal (Isthmia)");
-    }
-    return list.filter(v => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
-  }, [vias, viaCanal, start, end]);
+    return [...vias]
+      .filter(Boolean)
+      .filter(v => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
+  }, [vias, start, end]);
 
   // Custom mode
   const [customStart, setCustomStart] = useState<string>("Alimos");
@@ -401,7 +397,7 @@ function AIPlannerInner() {
     if (!searchParams || !ready) return;
     const { autogen } = loadStateFromQuery(searchParams, {
       setMode, setStartDate, setYachtType, setSpeed, setLph,
-      setStart, setEnd, setDays, setRegionMode, setVias, setViaCanal,
+      setStart, setEnd, setDays, setRegionMode, setVias,
       setCustomStart, setCustomDays, setCustomDayStops,
     });
     const hasParams = Array.from(searchParams.keys()).length > 0;
@@ -467,7 +463,7 @@ function AIPlannerInner() {
 
     const qs = buildQueryFromState({
       mode, startDate, yachtType, speed, lph,
-      start, end, days, regionMode, vias, viaCanal,
+      start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
     });
     router.replace(`/ai?${qs}`, { scroll: false });
@@ -478,7 +474,7 @@ function AIPlannerInner() {
   async function handleCopyLink() {
     const qs = buildQueryFromState({
       mode, startDate, yachtType, speed, lph,
-      start, end, days, regionMode, vias, viaCanal,
+      start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
     });
     const url = `${window.location.origin}/ai?${qs}`;
@@ -647,10 +643,6 @@ function AIPlannerInner() {
                   <div className="text-sm font-medium text-brand-navy">Προαιρετικές διελεύσεις/στάσεις (σειρά)</div>
                   <button type="button" onClick={addVia} className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50">+ Add Stop</button>
                 </div>
-                <label className="mt-3 inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={viaCanal} onChange={(e) => setViaCanal(e.target.checked)} />
-                  <span>Via <b>Corinth Canal (Isthmia)</b></span>
-                </label>
                 <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {vias.map((v, i) => (
                     <div key={i} className="flex items-center gap-2">
