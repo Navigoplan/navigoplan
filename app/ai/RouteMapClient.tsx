@@ -55,24 +55,22 @@ type WeatherField = { get(lat:number, lon:number): { wind:number; wave:number } 
 
 /* ---- consts ---- */
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
-const TRANSPARENT_1PX =
-  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+const TRANSPARENT_1PX = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-/* Tunables (A* + simplify) — κρατάμε τα τωρινά, ελαφρώς πιο safe */
+/* Tunables */
 const BASE_CELL_DEG = 0.03;
 const GRID_MARGIN_DEG = 0.75;
 const NEAR_LAND_PENALTY = 1.2;
 const SIMPLIFY_EPS = 0.003;
 
 /* Weather impact (penalty) */
-const WEATHER_WIND_REF = 12;     // m/s ~ 23kn: πάνω από αυτό αρχίζει να “πονάει”
-const WEATHER_WAVE_REF = 2.0;    // m κύμα
-const WEATHER_PENALTY  = 0.45;   // πόσο δυνατά επιδρά στο κόστος
+const WEATHER_WIND_REF = 12;
+const WEATHER_WAVE_REF = 2.0;
+const WEATHER_PENALTY  = 0.45;
 
-/* -------- Animation speed -------- */
+/* Animation */
 const DRAW_POINTS_PER_SEC = 3;
 const DRAW_INTERVAL_MS = Math.max(20, Math.round(1000 / DRAW_POINTS_PER_SEC));
-
 const FOLLOW_ZOOM_MIN = 9;
 const LEG_VIEW_ZOOM_MAX = 10;
 const MARKER_FADE_MS = 280;
@@ -88,7 +86,7 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/* ---- Point-In-Polygon (outer + holes) ---- */
+/* ---- Point-In-Polygon ---- */
 function pointInRing(pt: [number, number], ring: Ring): boolean {
   const [x, y] = pt;
   let inside = false;
@@ -136,7 +134,7 @@ function pickCellDegForLeg(a: Point, b: Point) {
   if (span < 1.5) cell = 0.012;
   if (span < 0.90) cell = 0.009;
   if (span < 0.50) cell = 0.007;
-  if (span < 0.25) cell = 0.006;  // ~600m
+  if (span < 0.25) cell = 0.006;
   return cell;
 }
 
@@ -146,14 +144,7 @@ type GridNode = {
   walkable: boolean; nearLand: boolean;
 };
 
-function buildGridForBounds(
-  minLat: number,
-  maxLat: number,
-  minLon: number,
-  maxLon: number,
-  coastPolys: PolyRings[],
-  cellDeg: number
-) {
+function buildGridForBounds(minLat:number,maxLat:number,minLon:number,maxLon:number,coastPolys: PolyRings[],cellDeg:number) {
   const rows = Math.max(12, Math.ceil((maxLat - minLat) / cellDeg));
   const cols = Math.max(12, Math.ceil((maxLon - minLon) / cellDeg));
   const grid: GridNode[][] = new Array(rows);
@@ -166,42 +157,36 @@ function buildGridForBounds(
       const pt: [number, number] = [lon, lat];
       let onLand = false;
       for (const poly of coastPolys) { if (pointInPoly(pt, poly)) { onLand = true; break; } }
-      grid[r][c] = { r, c, lat, lon, walkable: !onLand, nearLand: false };
+      grid[r][c] = { r, c, lat, lon, walkable:!onLand, nearLand:false };
     }
   }
   const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
     const cell = grid[r][c]; if (!cell.walkable) continue;
-    for (const [dr, dc] of dirs) {
-      const rr = r + dr, cc = c + dc;
+    for (const [dr,dc] of dirs) {
+      const rr=r+dr, cc=c+dc;
       if (rr<0||cc<0||rr>=rows||cc>=cols) continue;
       if (!grid[rr][cc].walkable) { cell.nearLand = true; break; }
     }
   }
-
-  function nodeFor(lat: number, lon: number) {
-    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
-    const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
+  function nodeFor(lat:number,lon:number){
+    const r = Math.min(rows-1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
+    const c = Math.min(cols-1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
     return grid[r][c];
   }
   return { grid, nodeFor };
 }
 
-/* ---- Weather (Open-Meteo Marine) --------------------------------------- */
+/* ---- Weather (Open-Meteo Marine) ---- */
 const _weatherCache = new Map<string, WeatherField>();
 
-async function fetchWeatherField(minLat:number, maxLat:number, minLon:number, maxLon:number): Promise<WeatherField|null> {
-  // coarse grid ανά ~0.3° για λίγα σημεία
+async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLon:number): Promise<WeatherField|null> {
   const step = 0.3;
-  const lats:number[] = [];
-  const lons:number[] = [];
+  const lats:number[] = []; const lons:number[] = [];
   for (let lat = Math.floor(minLat/step)*step; lat <= maxLat; lat += step) lats.push(parseFloat(lat.toFixed(2)));
   for (let lon = Math.floor(minLon/step)*step; lon <= maxLon; lon += step) lons.push(parseFloat(lon.toFixed(2)));
 
-  // Open-Meteo marine API (χωρίς key). Παίρνουμε τρέχουσα ώρα (nearest)
-  // docs: https://open-meteo.com/en/docs/marine-weather-api
-  const latParam = lats.join(",");
-  const lonParam = lons.join(",");
+  const latParam = lats.join(","); const lonParam = lons.join(",");
   const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${latParam}&longitude=${lonParam}&hourly=wave_height,wind_speed_10m&length_unit=metric&windspeed_unit=ms`;
 
   try {
@@ -209,30 +194,23 @@ async function fetchWeatherField(minLat:number, maxLat:number, minLon:number, ma
     if (!res.ok) return null;
     const data = await res.json();
 
-    // Η API επιστρέφει arrays ανά συντεταγμένη: data.hourly_units / data.hourly
-    // Όταν δίνουμε πολλά lat/lon, παίρνουμε "results". Διαφορετικά παίρνουμε μία σειρά.
     const entries: WeatherCell[] = [];
-
-    const results = data?.results ?? [data]; // normalize
+    const results = data?.results ?? [data];
     const nowISO = new Date();
     const nowHourISO = new Date(nowISO.getFullYear(), nowISO.getMonth(), nowISO.getDate(), nowISO.getHours()).toISOString().slice(0,13)+":00";
-    for (let i=0; i<results.length; i++) {
+    for (let i=0;i<results.length;i++){
       const r = results[i];
       const lat = Array.isArray(data.latitude) ? data.latitude[i] : data.latitude;
       const lon = Array.isArray(data.longitude)? data.longitude[i] : data.longitude;
       const times: string[] = r?.hourly?.time ?? data?.hourly?.time ?? [];
-      let idx = Math.max(0, times.findIndex((t:string) => t.startsWith(nowHourISO.slice(0,13))));
+      let idx = Math.max(0, times.findIndex((t:string)=>t.startsWith(nowHourISO.slice(0,13))));
       if (idx < 0) idx = 0;
       const wind = (r?.hourly?.wind_speed_10m ?? data?.hourly?.wind_speed_10m)?.[idx] ?? null;
       const wave = (r?.hourly?.wave_height ?? data?.hourly?.wave_height)?.[idx] ?? null;
-      if (wind != null && wave != null) {
-        entries.push({ lat, lon, wind: Number(wind), wave: Number(wave) });
-      }
+      if (wind!=null && wave!=null) entries.push({ lat, lon, wind:Number(wind), wave:Number(wave) });
     }
-
     if (!entries.length) return null;
 
-    // Φτιάχνουμε απλό nearest-neighbour field (αρκετό για penalty).
     const get = (lat:number, lon:number) => {
       let best = entries[0], bestD = Infinity;
       for (const e of entries) {
@@ -247,7 +225,7 @@ async function fetchWeatherField(minLat:number, maxLat:number, minLon:number, ma
   }
 }
 
-/* ---- A* helpers ---- */
+/* ---- A* ---- */
 function nearestWaterNode(grid: GridNode[][], start: GridNode) {
   if (start.walkable) return start;
   const q: GridNode[] = [start];
@@ -255,8 +233,8 @@ function nearestWaterNode(grid: GridNode[][], start: GridNode) {
   const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
   while (q.length) {
     const cur = q.shift()!;
-    for (const [dr, dc] of dirs) {
-      const rr = cur.r + dr, cc = cur.c + dc;
+    for (const [dr,dc] of dirs){
+      const rr = cur.r+dr, cc = cur.c+dc;
       if (rr<0||cc<0||rr>=grid.length||cc>=grid[0].length) continue;
       const nb = grid[rr][cc];
       const key = `${rr},${cc}`; if (seen.has(key)) continue; seen.add(key);
@@ -267,17 +245,11 @@ function nearestWaterNode(grid: GridNode[][], start: GridNode) {
   return start;
 }
 
-function aStarWater(
-  grid: GridNode[][],
-  start: GridNode,
-  goal: GridNode,
-  weather: WeatherField | null,
-  weatherAware: boolean
-) {
+function aStarWater(grid:GridNode[][], start:GridNode, goal:GridNode, weather:WeatherField|null, weatherAware:boolean){
   start = nearestWaterNode(grid, start);
   goal  = nearestWaterNode(grid, goal);
 
-  const key = (n: GridNode) => `${n.r},${n.c}`;
+  const key = (n:GridNode)=>`${n.r},${n.c}`;
   const open: GridNode[] = [start];
   const came = new Map<string, GridNode>();
   const gScore = new Map<string, number>([[key(start), 0]]);
@@ -285,37 +257,36 @@ function aStarWater(
   const inOpen = new Set<string>([key(start)]);
   const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
 
-  while (open.length) {
-    open.sort((a, b) => (fScore.get(key(a))! - fScore.get(key(b))!));
+  while (open.length){
+    open.sort((a,b)=> (fScore.get(key(a))! - fScore.get(key(b))!));
     const current = open.shift()!; inOpen.delete(key(current));
 
-    if (current.r === goal.r && current.c === goal.c) {
+    if (current.r===goal.r && current.c===goal.c){
       const path: GridNode[] = [current];
       let curKey = key(current);
-      while (came.has(curKey)) { const prev = came.get(curKey)!; path.push(prev); curKey = key(prev); }
+      while (came.has(curKey)){ const prev = came.get(curKey)!; path.push(prev); curKey = key(prev); }
       return path.reverse();
     }
 
-    for (const [dr, dc] of dirs) {
-      const rr = current.r + dr, cc = current.c + dc;
+    for (const [dr,dc] of dirs){
+      const rr=current.r+dr, cc=current.c+dc;
       if (rr<0||cc<0||rr>=grid.length||cc>=grid[0].length) continue;
       const nb = grid[rr][cc]; if (!nb.walkable) continue;
 
       const step = haversineMeters(current.lat, current.lon, nb.lat, nb.lon);
       let costFactor = 1 + (nb.nearLand ? NEAR_LAND_PENALTY : 0);
 
-      if (weatherAware && weather) {
+      if (weatherAware && weather){
         const w = weather.get(nb.lat, nb.lon);
-        if (w) {
+        if (w){
           const windN = Math.max(0, (w.wind - WEATHER_WIND_REF) / WEATHER_WIND_REF);
           const waveN = Math.max(0, (w.wave - WEATHER_WAVE_REF) / WEATHER_WAVE_REF);
-          const meteo = Math.min(2.5, windN + waveN);     // clamp
+          const meteo = Math.min(2.5, windN + waveN);
           costFactor *= (1 + WEATHER_PENALTY * meteo);
         }
       }
 
       const tentative = (gScore.get(key(current)) ?? Infinity) + step * costFactor;
-
       const nbKey = key(nb);
       if (tentative < (gScore.get(nbKey) ?? Infinity)) {
         came.set(nbKey, current);
@@ -329,56 +300,32 @@ function aStarWater(
 }
 
 /* ---- Simplify ---- */
-function perpendicularDistance(p: [number, number], a: [number, number], b: [number, number]) {
-  const x0 = p[1], y0 = p[0], x1 = a[1], y1 = a[0], x2 = b[1], y2 = b[0];
+function perpendicularDistance(p:[number,number], a:[number,number], b:[number,number]){
+  const x0=p[1], y0=p[0], x1=a[1], y1=a[0], x2=b[1], y2=b[0];
   const num = Math.abs((y2 - y1)*x0 - (x2 - x1)*y0 + x2*y1 - y2*x1);
   const den = Math.sqrt((y2 - y1)**2 + (x2 - x1)**2) + 1e-9;
-  return num / den;
+  return num/den;
 }
-function simplifyRDP(path: [number, number][], epsilonDeg = SIMPLIFY_EPS): [number, number][] {
-  if (path.length <= 2) return path;
-  let dmax = 0, index = 0;
-  const end = path.length - 1;
-  for (let i = 1; i < end; i++) {
-    const d = perpendicularDistance(path[i], path[0], path[end]);
-    if (d > dmax) { index = i; dmax = d; }
-  }
-  if (dmax > epsilonDeg) {
-    const rec1 = simplifyRDP(path.slice(0, index + 1), epsilonDeg);
+function simplifyRDP(path:[number,number][], epsilonDeg=SIMPLIFY_EPS): [number,number][]{
+  if (path.length<=2) return path;
+  let dmax=0, index=0; const end=path.length-1;
+  for (let i=1;i<end;i++){ const d=perpendicularDistance(path[i], path[0], path[end]); if (d>dmax){ index=i; dmax=d; } }
+  if (dmax>epsilonDeg){
+    const rec1 = simplifyRDP(path.slice(0, index+1), epsilonDeg);
     const rec2 = simplifyRDP(path.slice(index, path.length), epsilonDeg);
-    return rec1.slice(0, -1).concat(rec2);
+    return rec1.slice(0,-1).concat(rec2);
   } else {
     return [path[0], path[end]];
   }
 }
 
-/* ---- Μικρό animated circle marker για fade-in ---- */
-function useNow() {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => { setTick(t => t + 1); raf = requestAnimationFrame(loop); };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-}
-function AnimatedDot({
-  center,
-  label,
-  active,
-  onClick,
-  appearAtMs,
-  baseRadius = 5,
-}: {
-  center: LatLngExpression;
-  label?: string;
-  active?: boolean;
-  onClick?: () => void;
-  appearAtMs: number;
-  baseRadius?: number;
-}) {
+/* ---- Animated Dot ---- */
+function useNow(){ const [,setTick]=useState(0); useEffect(()=>{ let raf=0; const loop=()=>{ setTick(t=>t+1); raf=requestAnimationFrame(loop); }; raf=requestAnimationFrame(loop); return ()=>cancelAnimationFrame(raf); },[]); }
+function AnimatedDot({ center,label,active,onClick,appearAtMs,baseRadius=5 }:{
+  center:LatLngExpression; label?:string; active?:boolean; onClick?:()=>void; appearAtMs:number; baseRadius?:number;
+}){
   useNow();
-  const [start] = useState<number>(() => performance.now());
+  const [start] = useState<number>(()=>performance.now());
   const now = performance.now();
   const t = Math.max(0, Math.min(1, (now - appearAtMs - start) / MARKER_FADE_MS));
   const radius = (t <= 0 ? 0 : baseRadius * (0.66 + 0.34 * t));
@@ -389,101 +336,36 @@ function AnimatedDot({
       center={center}
       radius={radius}
       eventHandlers={onClick ? { click: onClick } : undefined}
-      pathOptions={{
-        color: active ? "#c4a962" : "#0b1220",
-        fillColor: active ? "#c4a962" : "#0b1220",
-        fillOpacity: opacity,
-        opacity,
-        weight: active ? 2 : 1.5,
-      }}
+      pathOptions={{ color: active ? "#c4a962" : "#0b1220", fillColor: active ? "#c4a962" : "#0b1220", fillOpacity: opacity, opacity, weight: active ? 2 : 1.5 }}
     >
-      {!!label && (
-        <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-          {label}
-        </Tooltip>
-      )}
+      {!!label && (<Tooltip direction="top" offset={[0,-6]} opacity={0.95}>{label}</Tooltip>)}
     </CircleMarker>
   );
 }
 
-/* ---------------------- Region suggestions (placeholder seeds) ---------------------- */
+/* ---------------------- Region suggestions ---------------------- */
 type RegionKey = "ionio" | "cyclades" | "sporades";
 
 const REGION_SEEDS: Record<RegionKey, Point[][]> = {
   ionio: [
-    [
-      { name: "Corfu",        lat: 39.624, lon: 19.922 },
-      { name: "Paxoi",        lat: 39.198, lon: 20.184 },
-      { name: "Lefkada",      lat: 38.833, lon: 20.706 },
-      { name: "Kefalonia",    lat: 38.176, lon: 20.489 },
-      { name: "Zakynthos",    lat: 37.787, lon: 20.897 },
-    ],
-    [
-      { name: "Igoumenitsa",  lat: 39.503, lon: 20.262 },
-      { name: "Parga",        lat: 39.285, lon: 20.400 },
-      { name: "Preveza",      lat: 38.960, lon: 20.750 },
-      { name: "Meganisi",     lat: 38.650, lon: 20.783 },
-      { name: "Ithaki",       lat: 38.370, lon: 20.716 },
-    ],
-    [
-      { name: "Corfu",        lat: 39.624, lon: 19.922 },
-      { name: "Sivota",       lat: 39.408, lon: 20.242 },
-      { name: "Paxoi",        lat: 39.198, lon: 20.184 },
-      { name: "Antipaxoi",    lat: 39.121, lon: 20.231 },
-      { name: "Lefkada",      lat: 38.833, lon: 20.706 },
-    ],
+    [{ name:"Corfu",lat:39.624,lon:19.922 },{ name:"Paxoi",lat:39.198,lon:20.184 },{ name:"Lefkada",lat:38.833,lon:20.706 },{ name:"Kefalonia",lat:38.176,lon:20.489 },{ name:"Zakynthos",lat:37.787,lon:20.897 }],
+    [{ name:"Igoumenitsa",lat:39.503,lon:20.262 },{ name:"Parga",lat:39.285,lon:20.400 },{ name:"Preveza",lat:38.960,lon:20.750 },{ name:"Meganisi",lat:38.650,lon:20.783 },{ name:"Ithaki",lat:38.370,lon:20.716 }],
+    [{ name:"Corfu",lat:39.624,lon:19.922 },{ name:"Sivota",lat:39.408,lon:20.242 },{ name:"Paxoi",lat:39.198,lon:20.184 },{ name:"Antipaxoi",lat:39.121,lon:20.231 },{ name:"Lefkada",lat:38.833,lon:20.706 }]
   ],
   cyclades: [
-    [
-      { name: "Athens",       lat: 37.942, lon: 23.646 },
-      { name: "Kythnos",      lat: 37.390, lon: 24.416 },
-      { name: "Serifos",      lat: 37.145, lon: 24.527 },
-      { name: "Sifnos",       lat: 36.980, lon: 24.720 },
-      { name: "Milos",        lat: 36.733, lon: 24.430 },
-    ],
-    [
-      { name: "Lavrio",       lat: 37.713, lon: 24.055 },
-      { name: "Kea",          lat: 37.636, lon: 24.321 },
-      { name: "Syros",        lat: 37.445, lon: 24.941 },
-      { name: "Mykonos",      lat: 37.450, lon: 25.328 },
-      { name: "Paros",        lat: 37.083, lon: 25.150 },
-    ],
-    [
-      { name: "Athens",       lat: 37.942, lon: 23.646 },
-      { name: "Andros",       lat: 37.833, lon: 24.933 },
-      { name: "Tinos",        lat: 37.540, lon: 25.167 },
-      { name: "Naxos",        lat: 37.104, lon: 25.374 },
-      { name: "Ios",          lat: 36.720, lon: 25.281 },
-    ],
+    [{ name:"Athens",lat:37.942,lon:23.646 },{ name:"Kythnos",lat:37.390,lon:24.416 },{ name:"Serifos",lat:37.145,lon:24.527 },{ name:"Sifnos",lat:36.980,lon:24.720 },{ name:"Milos",lat:36.733,lon:24.430 }],
+    [{ name:"Lavrio",lat:37.713,lon:24.055 },{ name:"Kea",lat:37.636,lon:24.321 },{ name:"Syros",lat:37.445,lon:24.941 },{ name:"Mykonos",lat:37.450,lon:25.328 },{ name:"Paros",lat:37.083,lon:25.150 }],
+    [{ name:"Athens",lat:37.942,lon:23.646 },{ name:"Andros",lat:37.833,lon:24.933 },{ name:"Tinos",lat:37.540,lon:25.167 },{ name:"Naxos",lat:37.104,lon:25.374 },{ name:"Ios",lat:36.720,lon:25.281 }]
   ],
   sporades: [
-    [
-      { name: "Volos",        lat: 39.360, lon: 22.937 },
-      { name: "Trikeri",      lat: 39.135, lon: 23.078 },
-      { name: "Skiathos",     lat: 39.162, lon: 23.490 },
-      { name: "Skopelos",     lat: 39.121, lon: 23.730 },
-      { name: "Alonissos",    lat: 39.146, lon: 23.864 },
-    ],
-    [
-      { name: "Volos",        lat: 39.360, lon: 22.937 },
-      { name: "Skiathos",     lat: 39.162, lon: 23.490 },
-      { name: "Skopelos",     lat: 39.121, lon: 23.730 },
-      { name: "Kyra Panagia", lat: 39.344, lon: 24.041 },
-      { name: "Alonissos",    lat: 39.146, lon: 23.864 },
-    ],
-    [
-      { name: "Volos",        lat: 39.360, lon: 22.937 },
-      { name: "Trikeri",      lat: 39.135, lon: 23.078 },
-      { name: "Skiathos",     lat: 39.162, lon: 23.490 },
-      { name: "Skopelos",     lat: 39.121, lon: 23.730 },
-      { name: "Skiros",       lat: 38.906, lon: 24.566 },
-    ],
-  ],
+    [{ name:"Volos",lat:39.360,lon:22.937 },{ name:"Trikeri",lat:39.135,lon:23.078 },{ name:"Skiathos",lat:39.162,lon:23.490 },{ name:"Skopelos",lat:39.121,lon:23.730 },{ name:"Alonissos",lat:39.146,lon:23.864 }],
+    [{ name:"Volos",lat:39.360,lon:22.937 },{ name:"Skiathos",lat:39.162,lon:23.490 },{ name:"Skopelos",lat:39.121,lon:23.730 },{ name:"Kyra Panagia",lat:39.344,lon:24.041 },{ name:"Alonissos",lat:39.146,lon:23.864 }],
+    [{ name:"Volos",lat:39.360,lon:22.937 },{ name:"Trikeri",lat:39.135,lon:23.078 },{ name:"Skiathos",lat:39.162,lon:23.490 },{ name:"Skopelos",lat:39.121,lon:23.730 },{ name:"Skiros",lat:38.906,lon:24.566 }]
+  ]
 };
 
 function pickRegionSeeds(region: RegionKey): Point[][] {
   const seed = REGION_SEEDS[region];
-  // κάνουμε ένα μικρό shuffle για να φαίνονται "φρέσκες" οι 3
   const arr = [...seed];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random()*(i+1));
@@ -493,16 +375,8 @@ function pickRegionSeeds(region: RegionKey): Point[][] {
 }
 
 /* ===================================================== */
-export default function RouteMapClient({
-  points,
-  markers,
-  activeNames,
-  onMarkerClick,
-}: {
-  points: Point[];
-  markers?: Marker[];
-  activeNames?: string[];
-  onMarkerClick?: (portName: string) => void;
+export default function RouteMapClient({ points, markers, activeNames, onMarkerClick }:{
+  points: Point[]; markers?: Marker[]; activeNames?: string[]; onMarkerClick?: (portName: string) => void;
 }) {
   const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
@@ -511,7 +385,6 @@ export default function RouteMapClient({
   const [suggestions, setSuggestions] = useState<Point[][]>([]);
   const [current, setCurrent] = useState<Point[] | null>(null);
 
-  // Αν ο γονιός δίνει points, τα προτιμάμε· αλλιώς χρησιμοποιούμε το current (από προτάσεις)
   const effPoints = (points?.length ?? 0) >= 2 ? points : (current ?? []);
 
   /* Weather toggle */
@@ -529,11 +402,9 @@ export default function RouteMapClient({
   }, []);
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* ---- compute water path + breakpoint indices ανά leg ---- */
+  /* weather prefetch per leg */
   const [weatherFieldsForLeg, setWeatherFieldsForLeg] = useState<(WeatherField|null)[]>([]);
-
   useEffect(() => {
-    // προ-υπολογισμός weather field ανά leg όταν ενεργό
     let cancelled = false;
     (async () => {
       if (!weatherAware || effPoints.length < 2) { setWeatherFieldsForLeg([]); return; }
@@ -589,7 +460,7 @@ export default function RouteMapClient({
       }
       if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
 
-      // dedup consecutive equal points
+      // dedup
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -613,10 +484,9 @@ export default function RouteMapClient({
     return result;
   }, [effPoints, coastPolys, weatherAware, weatherFieldsForLeg]);
 
-  /* ---- progressive draw ---- */
+  /* progressive draw */
   const [drawCount, setDrawCount] = useState(0);
   useEffect(() => { setDrawCount((waterLatLngs.length ? 1 : 0)); }, [waterLatLngs]);
-
   useEffect(() => {
     if (drawCount <= 0 || drawCount >= waterLatLngs.length) return;
     const id = window.setInterval(() => {
@@ -630,7 +500,7 @@ export default function RouteMapClient({
     return (waterLatLngs as [number, number][]).slice(0, Math.max(2, drawCount)) as LatLngExpression[];
   }, [waterLatLngs, drawCount]);
 
-  /* τρέχον leg index */
+  /* current leg */
   const currentLegIndex = useMemo(() => {
     if (!legEndIdx.length) return -1;
     for (let i = 0; i < legEndIdx.length; i++) {
@@ -639,12 +509,11 @@ export default function RouteMapClient({
     return legEndIdx.length - 1;
   }, [drawCount, legEndIdx]);
 
-  /* follow ship toggle + UI */
+  /* follow ship / auto-zoom */
   const [followShip, setFollowShip] = useState(false);
   const lastFollowedPointRef = useRef<string>("");
-
-  /* auto-zoom ανά leg */
   const prevLegRef = useRef<number>(-999);
+
   useEffect(() => {
     if (!map) return;
     if (followShip) return;
@@ -665,7 +534,6 @@ export default function RouteMapClient({
     }
   }, [map, currentLegIndex, effPoints, followShip]);
 
-  /* follow ship */
   useEffect(() => {
     if (!map || !followShip || animatedLatLngs.length < 2) return;
     const tip = animatedLatLngs[animatedLatLngs.length - 1] as [number, number];
@@ -687,18 +555,11 @@ export default function RouteMapClient({
     const L = require("leaflet") as typeof import("leaflet");
     return L.latLngBounds(waterLatLngs as any).pad(0.08);
   }, [waterLatLngs]);
+  const center: LatLngExpression = (effPoints[0] ? [effPoints[0].lat, effPoints[0].lon] : [37.97, 23.72]) as LatLngExpression;
 
-  const center: LatLngExpression =
-    (effPoints[0] ? [effPoints[0].lat, effPoints[0].lon] : [37.97, 23.72]) as LatLngExpression;
-
-  const isActive = (name: string) =>
-    (activeNames ?? []).some(n => n.toLowerCase() === name.toLowerCase());
-
+  const isActive = (name: string) => (activeNames ?? []).some(n => n.toLowerCase() === name.toLowerCase());
   function flyTo(name: string, lat: number, lon: number) {
-    if (map) {
-      const targetZoom = Math.max(map.getZoom(), 9);
-      map.flyTo([lat, lon], targetZoom, { duration: 0.8 });
-    }
+    if (map) { const targetZoom = Math.max(map.getZoom(), 9); map.flyTo([lat, lon], targetZoom, { duration: 0.8 }); }
     onMarkerClick?.(name);
   }
 
@@ -713,29 +574,18 @@ export default function RouteMapClient({
     <div className="w-full h-[520px] overflow-hidden rounded-2xl border border-slate-200 relative">
       {/* Controls */}
       <div className="absolute left-3 top-3 z-[1000] flex flex-wrap items-center gap-2 no-print">
-        <select
-          value={region}
-          onChange={(e)=>setRegion(e.target.value as RegionKey)}
-          className="rounded-xl bg-white/90 px-2 py-[6px] text-xs shadow border border-slate-200"
-          title="Region"
-        >
+        <select value={region} onChange={(e)=>setRegion(e.target.value as RegionKey)} className="rounded-xl bg-white/90 px-2 py-[6px] text-xs shadow border border-slate-200" title="Region">
           <option value="ionio">Ionio</option>
           <option value="cyclades">Cyclades</option>
           <option value="sporades">Sporades</option>
         </select>
-        <button
-          onClick={handleGenerate}
-          className="rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200"
-          title="Generate suggestions"
-        >
-          Generate
-        </button>
+        <button onClick={handleGenerate} className="rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200" title="Generate suggestions">Generate</button>
         <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
           <input type="checkbox" checked={weatherAware} onChange={(e)=>setWeatherAware(e.target.checked)} />
           Weather-aware routing
         </label>
         <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
-          <input type="checkbox" checked={followShip} onChange={(e) => setFollowShip(e.target.checked)} />
+          <input type="checkbox" checked={followShip} onChange={(e)=>setFollowShip(e.target.checked)} />
           Follow ship
         </label>
       </div>
@@ -746,11 +596,7 @@ export default function RouteMapClient({
           <div className="font-medium mb-1">Suggestions ({region})</div>
           <div className="grid gap-2">
             {suggestions.map((sug, idx) => (
-              <button
-                key={idx}
-                onClick={()=>setCurrent(sug)}
-                className={`text-left rounded-lg border px-2 py-1 hover:bg-slate-50 ${current===sug ? "border-amber-400 bg-amber-50" : "border-slate-200"}`}
-              >
+              <button key={idx} onClick={()=>setCurrent(sug)} className={`text-left rounded-lg border px-2 py-1 hover:bg-slate-50 ${current===sug ? "border-amber-400 bg-amber-50" : "border-slate-200"}`}>
                 {sug.map(p => p.name).join(" → ")}
               </button>
             ))}
@@ -759,27 +605,12 @@ export default function RouteMapClient({
       )}
 
       <style jsx global>{`
-        .leaflet-tile[src*="tiles.gebco.net"] {
-          filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
-        }
-        .leaflet-pane.pane-labels img.leaflet-tile {
-          image-rendering: -webkit-optimize-contrast;
-          image-rendering: crisp-edges;
-          filter: brightness(0.9) contrast(1.35);
-        }
-        .leaflet-pane.pane-labels img[src*="voyager_labels_over"]{
-          filter: brightness(0.88) contrast(1.45);
-        }
+        .leaflet-tile[src*="tiles.gebco.net"] { filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06); }
+        .leaflet-pane.pane-labels img.leaflet-tile { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; filter: brightness(0.9) contrast(1.35); }
+        .leaflet-pane.pane-labels img[src*="voyager_labels_over"]{ filter: brightness(0.88) contrast(1.45); }
       `}</style>
 
-      <MapContainer
-        center={center}
-        zoom={7}
-        minZoom={3}
-        maxZoom={14}
-        scrollWheelZoom
-        style={{ height: "100%", width: "100%" }}
-      >
+      <MapContainer center={center} zoom={7} minZoom={3} maxZoom={14} scrollWheelZoom style={{ height:"100%", width:"100%" }}>
         <CaptureMap onReady={setMap} />
 
         {/* GEBCO */}
@@ -787,55 +618,21 @@ export default function RouteMapClient({
           <TileLayer attribution="&copy; GEBCO" url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png" opacity={0.9} />
         </Pane>
 
-        {/* light blue νερό */}
+        {/* water tint */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
-          <Rectangle
-            bounds={WORLD_BOUNDS}
-            pathOptions={{ color: "transparent", weight: 0, fillColor: "#7fa8d8", fillOpacity: 0.35 }}
-            interactive={false}
-          />
+          <Rectangle bounds={WORLD_BOUNDS} pathOptions={{ color:"transparent", weight:0, fillColor:"#7fa8d8", fillOpacity:0.35 }} interactive={false} />
         </Pane>
 
-        {/* στεριά */}
+        {/* land */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
-          {coast && (
-            <GeoJSON
-              data={coast}
-              style={() => ({ color: "#0b1220", weight: 2, opacity: 1, fillColor: "#ffffff", fillOpacity: 1 })}
-            />
-          )}
+          {coast && (<GeoJSON data={coast} style={() => ({ color:"#0b1220", weight:2, opacity:1, fillColor:"#ffffff", fillOpacity:1 })} />)}
         </Pane>
 
         {/* labels */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
-          <TileLayer
-            attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
-            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
-            tileSize={512}
-            zoomOffset={-1}
-            detectRetina={false}
-            opacity={0.75}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"
-            tileSize={512}
-            zoomOffset={-1}
-            detectRetina={false}
-            opacity={0.25}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png"
-            tileSize={256}
-            zoomOffset={0}
-            detectRetina
-            opacity={0.55}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
+          <TileLayer attribution="&copy; OpenStreetMap contributors, &copy; CARTO" url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.75} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.25} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png" tileSize={256} zoomOffset={0} detectRetina opacity={0.55} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
         </Pane>
 
         {/* seamarks */}
@@ -843,49 +640,22 @@ export default function RouteMapClient({
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
-        {/* full route (σκιά) */}
+        {/* full route shadow */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
-            <Polyline
-              pane="pane-route-shadow"
-              positions={waterLatLngs}
-              pathOptions={{
-                color: "#9aa3b2",
-                weight: 2,
-                opacity: 0.6,
-                lineJoin: "round",
-                lineCap: "round",
-              }}
-            />
+            <Polyline pane="pane-route-shadow" positions={waterLatLngs} pathOptions={{ color:"#9aa3b2", weight:2, opacity:0.6, lineJoin:"round", lineCap:"round" }} />
           )}
         </Pane>
 
         {/* progressive dashed route */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {animatedLatLngs.length >= 2 && (
-            <Polyline
-              pane="pane-route"
-              positions={animatedLatLngs}
-              pathOptions={{
-                color: "#0b1220",
-                weight: 3,
-                opacity: 0.95,
-                dashArray: "6 8",
-                lineJoin: "round",
-                lineCap: "round",
-              }}
-            />
+            <Polyline pane="pane-route" positions={animatedLatLngs} pathOptions={{ color:"#0b1220", weight:3, opacity:0.95, dashArray:"6 8", lineJoin:"round", lineCap:"round" }} />
           )}
 
           {/* start */}
           {markerStart && (
-            <AnimatedDot
-              center={[markerStart.lat, markerStart.lon] as LatLngExpression}
-              label={`Start: ${effPoints[0]?.name}`}
-              active
-              appearAtMs={0}
-              baseRadius={8}
-            />
+            <AnimatedDot center={[markerStart.lat, markerStart.lon] as LatLngExpression} label={`Start: ${effPoints[0]?.name}`} active appearAtMs={0} baseRadius={8} />
           )}
 
           {/* mids */}
@@ -895,59 +665,28 @@ export default function RouteMapClient({
             const appearAt = (appearWhenIdx + 1) * DRAW_INTERVAL_MS;
             const active = isActive(p.name);
             return (
-              <AnimatedDot
-                key={`${p.name}-${i}`}
-                center={[p.lat, p.lon] as LatLngExpression}
-                label={p.name}
-                active={active}
-                appearAtMs={appearAt}
-                onClick={() => flyTo(p.name, p.lat, p.lon)}
-                baseRadius={5}
-              />
+              <AnimatedDot key={`${p.name}-${i}`} center={[p.lat, p.lon] as LatLngExpression} label={p.name} active={active} appearAtMs={appearAt} onClick={() => flyTo(p.name, p.lat, p.lon)} baseRadius={5} />
             );
           })}
 
           {/* end */}
           {markerEnd && (
-            <AnimatedDot
-              center={[markerEnd.lat, markerEnd.lon] as LatLngExpression}
-              label={`End: ${effPoints.at(-1)?.name}`}
-              active
-              appearAtMs={(legEndIdx[legEndIdx.length - 1] ?? 0) * DRAW_INTERVAL_MS}
-              onClick={() => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon)}
-              baseRadius={8}
-            />
+            <AnimatedDot center={[markerEnd.lat, markerEnd.lon] as LatLngExpression} label={`End: ${effPoints.at(-1)?.name}`} active appearAtMs={(legEndIdx[legEndIdx.length - 1] ?? 0) * DRAW_INTERVAL_MS} onClick={() => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon)} baseRadius={8} />
           )}
         </Pane>
 
-        {/* dataset markers (προαιρετικά) */}
+        {/* dataset markers */}
         {markers?.length ? (
           <Pane name="pane-dataset" style={{ zIndex: 430 }}>
             {markers.map((m, i) => (
-              <CircleMarker
-                key={`${m.name}-${i}`}
-                pane="pane-dataset"
-                center={[m.lat, m.lon] as LatLngExpression}
-                radius={3.5}
-                eventHandlers={{ click: () => flyTo(m.name, m.lat, m.lon) }}
-                pathOptions={{
-                  color: isActive(m.name) ? "#c4a962" : "#0b122033",
-                  fillColor: isActive(m.name) ? "#c4a962" : "#0b122033",
-                  fillOpacity: isActive(m.name) ? 0.95 : 0.5,
-                  weight: isActive(m.name) ? 2 : 1,
-                }}
-              >
-                {isActive(m.name) && (
-                  <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-                    {m.name}
-                  </Tooltip>
-                )}
+              <CircleMarker key={`${m.name}-${i}`} pane="pane-dataset" center={[m.lat, m.lon] as LatLngExpression} radius={3.5} eventHandlers={{ click: () => flyTo(m.name, m.lat, m.lon) }} pathOptions={{ color: isActive(m.name) ? "#c4a962" : "#0b122033", fillColor: isActive(m.name) ? "#c4a962" : "#0b122033", fillOpacity: isActive(m.name) ? 0.95 : 0.5, weight: isActive(m.name) ? 2 : 1 }}>
+                {isActive(m.name) && (<Tooltip direction="top" offset={[0,-6]} opacity={0.95}>{m.name}</Tooltip>)}
               </CircleMarker>
             ))}
           </Pane>
         ) : null}
 
-        {/* αρχικό fit */}
+        {/* initial fit */}
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
