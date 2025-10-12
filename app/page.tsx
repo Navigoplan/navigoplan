@@ -23,16 +23,18 @@ export default function Home() {
             <p className="mt-4 mx-auto max-w-xl text-lg text-white/90 drop-shadow">
               Plan routes, estimate costs, and present stunning itineraries your clients will love.
             </p>
+
+            {/* CTAs: outlined gold (ίδιο στυλ και στα δύο) */}
             <div className="mt-6 flex justify-center gap-4">
               <a
                 href="#trial"
-                className="rounded-2xl bg-brand-gold px-6 py-3 text-center text-sm font-medium text-brand-navy transition hover:opacity-90"
+                className="inline-flex items-center justify-center rounded-full border-2 border-[#c4a962] px-6 py-3 text-center text-sm font-semibold text-[#c4a962] bg-transparent hover:bg-[#c4a962]/10 transition"
               >
                 Start Planning
               </a>
               <a
                 href="#features"
-                className="rounded-2xl border border-white/80 px-6 py-3 text-center text-sm font-medium text-white transition hover:bg-white hover:text-brand-navy"
+                className="inline-flex items-center justify-center rounded-full border-2 border-[#c4a962] px-6 py-3 text-center text-sm font-semibold text-[#c4a962] bg-transparent hover:bg-[#c4a962]/10 transition"
               >
                 See Features
               </a>
