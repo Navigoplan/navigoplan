@@ -1,140 +1,24 @@
-@import "tailwindcss";
-
 /* =========================
-   Design tokens (Tailwind v4)
+   Animated ocean waves
    ========================= */
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@keyframes waveMoveLeft {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes waveMoveRight {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(50%); }
+}
+.wave-1 {
+  animation: waveMoveLeft 22s linear infinite;
+  will-change: transform;
+}
+.wave-2 {
+  animation: waveMoveRight 30s linear infinite;
+  will-change: transform;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-
-  /* --- Navigoplan brand colors --- */
-  --color-brand-navy: #0b1220; /* σκουρο ναυτικό μπλε */
-  --color-brand-gold: #c4a962; /* luxury χρυσό */
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-/* =========================
-   Base styles
-   ========================= */
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans, Arial), Helvetica, sans-serif;
-}
-
-/* =========================
-   Hero animations & utilities
-   ========================= */
-@layer utilities {
-  /* Τίτλος: ήπιο pop-in */
-  @keyframes titlePop {
-    0% { opacity: 0; transform: translateY(12px) scale(0.98); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  .animate-title {
-    animation: titlePop 600ms cubic-bezier(.2,.9,.2,1) both;
-  }
-
-  /* Overlay: αργό “αναπνευστικό” float */
-  @keyframes overlayFloat {
-    0% { transform: translateY(0px); opacity: 1; }
-    50% { transform: translateY(-3px); opacity: 0.98; }
-    100% { transform: translateY(0px); opacity: 1; }
-  }
-  .animate-overlay {
-    animation: overlayFloat 8s ease-in-out infinite;
-  }
-
-  /* Print-only helper */
-  .print\:block { display: none; }
-}
-
-/* =========================
-   PRINT STYLES FOR PDF
-   ========================= */
-@media print {
-  /* Κράτα τα χρώματα όπως στην οθόνη */
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  /* Κρύψε navbar/footer/κουμπιά στο PDF */
-  .no-print,
-  header,
-  footer {
-    display: none !important;
-  }
-
-  html, body {
-    background: #ffffff !important;
-  }
-
-  /* 2 στήλες στο PDF (utility συμβατό με τα components μας) */
-  .print\:grid-cols-2 {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 16px !important;
-  }
-
-  /* Μην κόβεις κάρτες στη μέση σε αλλαγή σελίδας */
-  .print-card {
-    break-inside: avoid;
-    page-break-inside: avoid;
-    border: 1px solid rgba(196, 169, 98, 0.35); /* λεπτό χρυσό περίγραμμα στο PDF */
-    box-shadow: none !important;
-    background: #fff;
-  }
-
-  /* Προαιρετικό: κάλυψη A4 με ωραία περιθώρια */
-  @page {
-    size: A4;
-    margin: 14mm;
-  }
-
-  /* Utility: εμφανίζεται μόνο στο print */
-  .print\:block { display: block !important; }
-}
-
-/* =========================
-   Extra helpers που χρησιμοποιεί ο planner
-   ========================= */
-
-/* Εξώφυλλο PDF να “σπάει” σελίδα μετά */
-.print-cover {
-  page-break-after: always;
-}
-
-/* Νέα ενότητα να ξεκινά σε νέα σελίδα (αν χρειαστεί) */
-.print-section {
-  page-break-before: always;
-}
-
-/* Λεπτό χρώμα κειμένου για υποδείξεις στο PDF */
-.print-subtle { color: #64748b; } /* slate-500 περίπου */
-
-/* Monospace utility για αριθμούς/μετρικά στο PDF */
-.print-mono {
-  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
-}
-
-/* Οριζόντια γραμμή για το summary στο PDF */
-.print-hr {
-  border: 0;
-  height: 1px;
-  background: #e2e8f0; /* slate-200 περίπου */
-  margin: 12px 0;
+/* reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .wave-1, .wave-2 { animation: none; }
 }
