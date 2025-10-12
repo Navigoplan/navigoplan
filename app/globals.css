@@ -93,3 +93,30 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .wave-band::before, .wave-band::after { animation: none; }
 }
+
+/* ============================================================= */
+/* === Force styles μόνο για το κουμπί Generate Itinerary     === */
+/* ============================================================= */
+#generate-btn,
+#generate-btn * {
+  color: #0b1220 !important;            /* σκούρο κείμενο */
+}
+
+#generate-btn {
+  background: #ffffff !important;       /* λευκό φόντο */
+  border: 2px solid var(--color-brand-gold, #c4a962) !important; /* χρυσό περίγραμμα */
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+
+#generate-btn:hover {
+  background: rgba(196,169,98,.9) !important; /* χρυσαφί hover */
+  color: #0b1220 !important;
+}
+
+button#generate-btn[disabled] {
+  opacity: .5 !important;
+  cursor: not-allowed !important;
+}
