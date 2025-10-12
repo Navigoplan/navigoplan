@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* --- Base colors --- */
+/* ---------------- Base tokens ---------------- */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -8,49 +8,88 @@
   --color-brand-gold: #c4a962;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root { --background: #0a0a0a; --foreground: #ededed; }
+}
+
+/* ---------------- Base ---------------- */
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* --- Hero animations --- */
+/* ---------------- Hero animations ---------------- */
 @keyframes titlePop {
   0% { opacity: 0; transform: translateY(12px) scale(0.98); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-.animate-title {
-  animation: titlePop 600ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
-}
+.animate-title { animation: titlePop 600ms cubic-bezier(.2,.9,.2,1) both; }
 
 @keyframes overlayFloat {
   0% { transform: translateY(0); opacity: 1; }
-  50% { transform: translateY(-3px); opacity: 0.98; }
+  50% { transform: translateY(-3px); opacity: .98; }
   100% { transform: translateY(0); opacity: 1; }
 }
-.animate-overlay {
-  animation: overlayFloat 8s ease-in-out infinite;
-}
+.animate-overlay { animation: overlayFloat 8s ease-in-out infinite; }
 
-/* --- Waves animation (guaranteed) --- */
-@keyframes waveMove {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(-50%, 0, 0); }
+/* ---------------- Print (όπως πριν) ---------------- */
+@media print {
+  * { -webkit-print-color-adjust: exact!important; print-color-adjust: exact!important; }
+  .no-print, header, footer { display: none!important; }
+  html, body { background: #fff!important; }
+  .print\:grid-cols-2 { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:16px!important; }
+  .print-card { break-inside:avoid; page-break-inside:avoid; border:1px solid rgba(196,169,98,.35); box-shadow:none!important; background:#fff; }
+  @page { size:A4; margin:14mm; }
+  .print\:block { display:block!important; }
 }
+.print-cover { page-break-after: always; }
+.print-section { page-break-before: always; }
+.print-subtle { color:#64748b; }
+.print-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+.print-hr { border:0; height:1px; background:#e2e8f0; margin:12px 0; }
 
-.waves-wrapper {
+/* ---------------- Animated waves (background-image SVG) ---------------- */
+/* Δημιουργούμε "λωρίδα" με επαναλαμβανόμενο SVG και κινούμε το background-position. */
+.wave-band {
   position: relative;
-  width: 200%;
-  height: 200px;
-  display: flex;
-  animation: waveMove 20s linear infinite;
+  height: 120px;            /* ύψος κύματος */
+  background-color: #ffffff;/* χρώμα της επόμενης ενότητας */
+  overflow: hidden;
 }
 
-.waves-wrapper svg {
-  width: 50%;
-  flex-shrink: 0;
+/* SVG wave ως background (repeat-x). URL-encoded SVG για πλήρη συμβατότητα. */
+.wave-band::before {
+  content: "";
+  position: absolute; inset: 0 -50% 0 0;   /* έξτρα πλάτος δεξιά για ομαλή κύλιση */
+  background-repeat: repeat-x;
+  background-size: 1440px 120px;           /* ίδιο με viewBox του SVG */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 120'><path d='M0 64 C160 96 320 96 480 80 C640 64 800 32 960 37 C1120 43 1280 85 1440 101 L1440 120 L0 120 Z' fill='%23ffffff'/></svg>");
+  animation: waveScroll 22s linear infinite;
+  will-change: background-position-x;
+}
+
+/* δεύτερο, πιο απαλό layer για βάθος */
+.wave-band::after {
+  content: "";
+  position: absolute; inset: 10px -50% 0 0;
+  background-repeat: repeat-x;
+  background-size: 1440px 120px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 120'><path d='M0 86 C160 108 320 108 480 92 C640 76 800 52 960 58 C1120 64 1280 102 1440 118 L1440 120 L0 120 Z' fill='%23f8fafc'/></svg>");
+  opacity: .9;
+  animation: waveScrollReverse 30s linear infinite;
+  will-change: background-position-x;
+}
+
+@keyframes waveScroll {
+  0%   { background-position-x: 0; }
+  100% { background-position-x: -1440px; }
+}
+@keyframes waveScrollReverse {
+  0%   { background-position-x: 0; }
+  100% { background-position-x: 1440px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .waves-wrapper { animation: none; }
+  .wave-band::before, .wave-band::after { animation: none; }
 }
