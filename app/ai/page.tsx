@@ -699,15 +699,18 @@ function AIPlannerInner() {
     inline-flex items-center justify-center
     rounded-xl border border-[#c4a962]
     bg-white px-5 py-3
-    text-sm font-semibold text-[#0b1220]
+    text-sm font-semibold
     shadow-sm
-    hover:bg-[#c4a962]/90 hover:text-[#0b1220]
+    hover:bg-[#c4a962]/90
     focus:outline-none focus:ring-2 focus:ring-[#c4a962]
     disabled:opacity-50
+    !text-[#0b1220]   /* force text color */
   "
+  style={{ color: '#0b1220' }}   // extra ασφάλεια απέναντι σε global rules
 >
   Generate Itinerary
 </button>
+
 
         </form>
 
