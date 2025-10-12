@@ -723,10 +723,19 @@ export default function RouteMapClient({
           <option value="cyclades">Cyclades</option>
           <option value="sporades">Sporades</option>
         </select>
+        {/* --- ΜΟΝΗ ΑΛΛΑΓΗ: οπτικό στυλ κουμπιού Generate --- */}
         <button
+          id="map-generate-btn"
           onClick={handleGenerate}
-          className="rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200"
+          className="rounded-xl px-4 py-2 text-sm font-semibold shadow border transition
+                     hover:bg-[#c4a962] hover:text-[#0b1220]"
           title="Generate suggestions"
+          style={{
+            backgroundColor: 'var(--color-brand-navy, #0b1220)',
+            color: '#fff',
+            borderColor: 'var(--color-brand-gold, #c4a962)',
+            borderWidth: 1.5
+          }}
         >
           Generate
         </button>
