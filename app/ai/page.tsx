@@ -690,8 +690,15 @@ function AIPlannerInner() {
             ))}
           </div>
 
-          <button id="generate-btn" type="submit" disabled={!ready} className="rounded-xl bg-brand-navy px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-navy disabled:opacity-50">
-            Generate Itinerary
+          {/* === ΤΟ ΚΟΥΜΠΙ: μονογραμμικό string + id === */}
+          <button
+            id="generate-btn"
+            type="submit"
+            disabled={!ready}
+            className="rounded-xl border px-4 py-2 text-sm font-semibold shadow-sm border-[#c4a962] text-[#0b1220] bg-white/90 hover:bg-[#c4a962] hover:text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#c4a962]"
+            title="Generate itinerary"
+          >
+            Generate
           </button>
         </form>
 
