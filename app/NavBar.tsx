@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
@@ -8,21 +9,25 @@ export default function NavBar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Active link (ελαφρώς πιο φωτεινό)
+  // Χρυσό στυλ για active/hover links
   const linkClass = (href: string) =>
     pathname === href
       ? "text-sm font-semibold text-[#d6bd78]"
       : "text-sm text-[#c4a962] hover:text-[#d6bd78] transition";
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-brand-gold/20 bg-[#0b1220cc] backdrop-blur-sm shadow-[0_2px_6px_rgba(0,0,0,0.2)]">
+    <header className="sticky top-0 z-40 w-full border-b border-[#c4a962]/30 bg-[#0b1220cc] backdrop-blur-sm shadow-[0_2px_6px_rgba(0,0,0,0.2)]">
       <nav className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-        {/* Logo */}
-        <Link
-          href="/"
-          className="text-lg font-bold tracking-tight text-[#c4a962] hover:text-[#d6bd78] transition"
-        >
-          Navigoplan
+        {/* Λογότυπο Navigoplan */}
+        <Link href="/" className="flex items-center gap-2">
+          <Image
+            src="/navigoplan-logo.png"
+            alt="Navigoplan Logo"
+            width={160}
+            height={45}
+            priority
+            className="object-contain"
+          />
         </Link>
 
         {/* Desktop menu */}
