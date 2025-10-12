@@ -8,10 +8,10 @@ export default function HeroSection() {
       {/* Background video */}
       <HeroVideo mp4="/hero.mp4" poster="/hero-poster.png" className="absolute inset-0" />
 
-      {/* Overlay (για αναγνωσιμότητα) */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/35 to-black/40 animate-overlay" />
+      {/* Dark overlay for readability */}
+      <div className="absolute inset-0 z-0 bg-gradient-to-b from-black/60 via-black/40 to-black/45 animate-overlay" />
 
-      {/* Περιεχόμενο */}
+      {/* Content */}
       <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center justify-center px-6 text-center">
         <h1 className="animate-title text-4xl font-bold tracking-tight text-white drop-shadow md:text-5xl">
           Luxury Yacht Charter Itinerary Software
@@ -20,24 +20,24 @@ export default function HeroSection() {
           Plan routes, estimate costs, and present stunning itineraries your clients will love.
         </p>
 
-        {/* CTA buttons */}
+        {/* CTAs */}
         <div className="mt-8 flex gap-4">
           <a
             href="/ai"
-            className="rounded-2xl bg-amber-400 px-6 py-3 text-sm font-semibold text-slate-900 shadow-md ring-1 ring-black/10 hover:bg-amber-300 transition"
+            className="rounded-full bg-[var(--color-brand-gold)] px-6 py-3 text-sm font-semibold text-[var(--color-brand-navy)] shadow-md ring-1 ring-black/10 hover:opacity-90 transition"
           >
             Start Planning
           </a>
           <a
             href="#features"
-            className="rounded-2xl border border-white/70 px-6 py-3 text-sm font-semibold text-white/90 hover:bg-white/10 transition"
+            className="rounded-full border border-white/70 px-6 py-3 text-sm font-semibold text-white/90 shadow-sm hover:bg-white/10 transition"
           >
             See Features
           </a>
         </div>
       </div>
 
-      {/* Κάτω animated κύματα (background-image) */}
+      {/* Bottom animated waves (from globals.css .wave-band) */}
       <div className="pointer-events-none absolute bottom-[-1px] left-0 right-0">
         <div className="wave-band" />
       </div>

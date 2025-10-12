@@ -16,28 +16,14 @@ export default function NavBar() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#0b1220cc] backdrop-blur-sm shadow-[0_2px_6px_rgba(0,0,0,0.2)]">
       <nav className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-        {/* Logo */}
         <Link href="/" className="text-lg font-semibold tracking-tight text-brand-gold">
           Navigoplan
         </Link>
 
-        {/* Desktop menu */}
         <ul className="hidden items-center gap-6 md:flex">
-          <li>
-            <Link href="/features" className={linkClass("/features")}>
-              Features
-            </Link>
-          </li>
-          <li>
-            <Link href="/pricing" className={linkClass("/pricing")}>
-              Pricing
-            </Link>
-          </li>
-          <li>
-            <Link href="/ai" className={linkClass("/ai")}>
-              AI Planner
-            </Link>
-          </li>
+          <li><Link href="/features" className={linkClass("/features")}>Features</Link></li>
+          <li><Link href="/pricing" className={linkClass("/pricing")}>Pricing</Link></li>
+          <li><Link href="/ai" className={linkClass("/ai")}>AI Planner</Link></li>
           <li>
             <Link
               href="/#trial"
@@ -48,28 +34,23 @@ export default function NavBar() {
           </li>
         </ul>
 
-        {/* Mobile toggle */}
         <button
           aria-label="Toggle menu"
-          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          onClick={() => setOpen(v => !v)}
           className="md:hidden inline-flex items-center gap-2 rounded-md bg-[#0b1220] px-3 py-2 text-sm text-white ring-1 ring-white/10"
         >
           {open ? "Close" : "Menu"}
         </button>
       </nav>
 
-      {/* Mobile dropdown */}
       {open && (
         <div className="md:hidden bg-white/98 shadow-xl backdrop-blur-sm">
           <ul className="flex flex-col divide-y divide-slate-200">
             <li>
               <Link
                 href="/features"
-                className={`block px-6 py-3 ${
-                  pathname === "/features"
-                    ? "text-brand-navy font-medium"
-                    : "text-slate-800 hover:bg-slate-100"
-                }`}
+                className={`block px-6 py-3 ${pathname === "/features" ? "text-brand-navy font-medium" : "text-slate-800 hover:bg-slate-100"}`}
                 onClick={() => setOpen(false)}
               >
                 Features
@@ -78,11 +59,7 @@ export default function NavBar() {
             <li>
               <Link
                 href="/pricing"
-                className={`block px-6 py-3 ${
-                  pathname === "/pricing"
-                    ? "text-brand-navy font-medium"
-                    : "text-slate-800 hover:bg-slate-100"
-                }`}
+                className={`block px-6 py-3 ${pathname === "/pricing" ? "text-brand-navy font-medium" : "text-slate-800 hover:bg-slate-100"}`}
                 onClick={() => setOpen(false)}
               >
                 Pricing
@@ -91,11 +68,7 @@ export default function NavBar() {
             <li>
               <Link
                 href="/ai"
-                className={`block px-6 py-3 ${
-                  pathname === "/ai"
-                    ? "text-brand-navy font-medium"
-                    : "text-slate-800 hover:bg-slate-100"
-                }`}
+                className={`block px-6 py-3 ${pathname === "/ai" ? "text-brand-navy font-medium" : "text-slate-800 hover:bg-slate-100"}`}
                 onClick={() => setOpen(false)}
               >
                 AI Planner
