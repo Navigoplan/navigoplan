@@ -124,7 +124,7 @@ body {
 }
 
 /* =========================
-   Extra helpers που χρησιμοποιεί ο planner
+   Extra helpers
    ========================= */
 .print-cover {
   page-break-after: always;
@@ -135,7 +135,7 @@ body {
 }
 
 .print-subtle {
-  color: #64748b; /* slate-500 περίπου */
+  color: #64748b;
 }
 
 .print-mono {
@@ -154,19 +154,13 @@ body {
 .print-hr {
   border: 0;
   height: 1px;
-  background: #e2e8f0; /* slate-200 περίπου */
+  background: #e2e8f0;
   margin: 12px 0;
 }
 
 /* =========================
-   Animated ocean waves (WORKING VERSION)
+   Animated ocean waves (WORKING)
    ========================= */
-.wave-container {
-  width: 200%;
-  animation: waveDrift 25s linear infinite;
-  will-change: transform;
-}
-
 @keyframes waveDrift {
   0% {
     transform: translateX(0);
@@ -176,24 +170,14 @@ body {
   }
 }
 
-/* Αν θέλεις πιο έντονο εφέ, μπορείς να προσθέσεις δεύτερο layer */
-.wave-container::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: inherit;
-  animation: waveDriftReverse 40s linear infinite;
-  opacity: 0.4;
+.wave-svg {
+  width: 200%;
+  animation: waveDrift 24s linear infinite;
+  will-change: transform;
 }
 
-@keyframes waveDriftReverse {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(50%);
+@media (prefers-reduced-motion: reduce) {
+  .wave-svg {
+    animation: none;
   }
 }

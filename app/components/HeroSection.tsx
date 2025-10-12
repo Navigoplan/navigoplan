@@ -37,22 +37,24 @@ export default function HeroSection() {
         </div>
       </div>
 
-      {/* Animated ocean waves – guaranteed working */}
+      {/* Animated SVG waves */}
       <div className="pointer-events-none absolute bottom-[-1px] left-0 right-0 overflow-hidden">
-        <div className="wave-container">
-          <svg viewBox="0 0 2880 200" xmlns="http://www.w3.org/2000/svg" className="w-[200%]">
-            <path
-              d="M0,80 C320,110 640,110 960,88 C1280,66 1600,40 1920,48 C2240,56 2560,96 2880,118 L2880,200 L0,200 Z"
-              fill="#ffffff"
-              opacity="0.85"
-            />
-            <path
-              d="M0,102 C320,126 640,126 960,102 C1280,82 1600,62 1920,70 C2240,78 2560,116 2880,138 L2880,200 L0,200 Z"
-              fill="#f8fafc"
-              opacity="1"
-            />
-          </svg>
-        </div>
+        <svg
+          viewBox="0 0 2880 200"
+          xmlns="http://www.w3.org/2000/svg"
+          className="wave-svg"
+        >
+          <path
+            d="M0,80 C320,110 640,110 960,88 C1280,66 1600,40 1920,48 C2240,56 2560,96 2880,118 L2880,200 L0,200 Z"
+            fill="#ffffff"
+            opacity="0.85"
+          />
+          <path
+            d="M0,102 C320,126 640,126 960,102 C1280,82 1600,62 1920,70 C2240,78 2560,116 2880,138 L2880,200 L0,200 Z"
+            fill="#f8fafc"
+            opacity="1"
+          />
+        </svg>
       </div>
     </section>
   );
