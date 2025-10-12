@@ -8,11 +8,11 @@ export default function NavBar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Active link highlight
+  // Active link (ελαφρώς πιο φωτεινό)
   const linkClass = (href: string) =>
     pathname === href
-      ? "text-sm font-semibold text-brand-gold"
-      : "text-sm text-brand-gold hover:opacity-90 transition";
+      ? "text-sm font-semibold text-[#d6bd78]"
+      : "text-sm text-[#c4a962] hover:text-[#d6bd78] transition";
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-brand-gold/20 bg-[#0b1220cc] backdrop-blur-sm shadow-[0_2px_6px_rgba(0,0,0,0.2)]">
@@ -20,7 +20,7 @@ export default function NavBar() {
         {/* Logo */}
         <Link
           href="/"
-          className="text-lg font-bold tracking-tight text-brand-gold"
+          className="text-lg font-bold tracking-tight text-[#c4a962] hover:text-[#d6bd78] transition"
         >
           Navigoplan
         </Link>
@@ -45,7 +45,7 @@ export default function NavBar() {
           <li>
             <Link
               href="/#trial"
-              className="rounded-full border border-brand-gold px-4 py-2 text-sm font-semibold text-brand-gold shadow-md transition hover:bg-brand-gold hover:text-brand-navy"
+              className="rounded-full border border-[#c4a962] px-4 py-2 text-sm font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition shadow-sm"
             >
               Start Planning
             </Link>
@@ -56,7 +56,7 @@ export default function NavBar() {
         <button
           aria-label="Toggle menu"
           onClick={() => setOpen((v) => !v)}
-          className="md:hidden inline-flex items-center gap-2 rounded-md border border-brand-gold bg-[#0b1220] px-3 py-2 text-sm text-brand-gold"
+          className="md:hidden inline-flex items-center gap-2 rounded-md border border-[#c4a962] bg-[#0b1220] px-3 py-2 text-sm text-[#c4a962] hover:text-[#d6bd78]"
         >
           {open ? "Close" : "Menu"}
         </button>
@@ -64,8 +64,8 @@ export default function NavBar() {
 
       {/* Mobile dropdown */}
       {open && (
-        <div className="md:hidden bg-[#0b1220f2] backdrop-blur-md border-t border-brand-gold/30">
-          <ul className="flex flex-col divide-y divide-brand-gold/10">
+        <div className="md:hidden bg-[#0b1220f2] backdrop-blur-md border-t border-[#c4a962]/30">
+          <ul className="flex flex-col divide-y divide-[#c4a962]/10">
             {[
               { href: "/features", label: "Features" },
               { href: "/pricing", label: "Pricing" },
@@ -75,7 +75,7 @@ export default function NavBar() {
                 <Link
                   href={item.href}
                   onClick={() => setOpen(false)}
-                  className={`block px-6 py-3 text-brand-gold hover:bg-brand-gold/10 ${
+                  className={`block px-6 py-3 text-[#c4a962] hover:text-[#d6bd78] ${
                     pathname === item.href ? "font-semibold" : ""
                   }`}
                 >
@@ -87,7 +87,7 @@ export default function NavBar() {
               <Link
                 href="/#trial"
                 onClick={() => setOpen(false)}
-                className="block w-full rounded-xl border border-brand-gold px-4 py-3 text-center font-semibold text-brand-gold hover:bg-brand-gold hover:text-brand-navy transition"
+                className="block w-full rounded-xl border border-[#c4a962] px-4 py-3 text-center font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition"
               >
                 Start Planning
               </Link>
