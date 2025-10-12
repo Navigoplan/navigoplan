@@ -2,28 +2,13 @@
 
 import HeroVideo from "@/app/components/HeroVideo";
 
-const WaveSvg = () => (
-  <svg viewBox="0 0 2880 200" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M0,80 C320,110 640,110 960,88 C1280,66 1600,40 1920,48 C2240,56 2560,96 2880,118 L2880,200 L0,200 Z"
-      fill="#ffffff"
-      opacity="0.85"
-    />
-    <path
-      d="M0,102 C320,126 640,126 960,102 C1280,82 1600,62 1920,70 C2240,78 2560,116 2880,138 L2880,200 L0,200 Z"
-      fill="#f8fafc"
-      opacity="1"
-    />
-  </svg>
-);
-
 export default function HeroSection() {
   return (
     <section className="relative h-[70vh] min-h-[520px] overflow-hidden bg-slate-900">
       {/* Background video */}
       <HeroVideo mp4="/hero.mp4" poster="/hero-poster.png" className="absolute inset-0" />
 
-      {/* Animated dark overlay */}
+      {/* Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/35 to-black/40 animate-overlay" />
 
       {/* Content */}
@@ -35,7 +20,6 @@ export default function HeroSection() {
           Plan routes, estimate fuel, generate PDFs & interactive maps.
         </p>
 
-        {/* CTA buttons */}
         <div className="mt-8 flex gap-4">
           <a
             href="/ai"
@@ -52,11 +36,23 @@ export default function HeroSection() {
         </div>
       </div>
 
-      {/* Animated ocean waves (robust, looping) */}
-      <div className="pointer-events-none absolute bottom-[-1px] left-0 right-0 overflow-hidden">
-        <div className="wave-track">
-          <WaveSvg />
-          <WaveSvg />
+      {/* Animated waves */}
+      <div className="pointer-events-none absolute bottom-[-1px] left-0 right-0 overflow-hidden bg-white">
+        <div className="waves-wrapper">
+          <svg viewBox="0 0 2880 200" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M0,80 C320,110 640,110 960,88 C1280,66 1600,40 1920,48 C2240,56 2560,96 2880,118 L2880,200 L0,200 Z"
+              fill="#ffffff"
+              opacity="0.9"
+            />
+          </svg>
+          <svg viewBox="0 0 2880 200" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M0,80 C320,110 640,110 960,88 C1280,66 1600,40 1920,48 C2240,56 2560,96 2880,118 L2880,200 L0,200 Z"
+              fill="#ffffff"
+              opacity="0.9"
+            />
+          </svg>
         </div>
       </div>
     </section>

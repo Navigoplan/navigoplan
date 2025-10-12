@@ -1,87 +1,56 @@
 @import "tailwindcss";
 
-/* =========================
-   Design tokens (Tailwind v4)
-   ========================= */
+/* --- Base colors --- */
 :root {
   --background: #ffffff;
   --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
   --color-brand-navy: #0b1220;
   --color-brand-gold: #c4a962;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root { --background:#0a0a0a; --foreground:#ededed; }
-}
-
-/* ========== Base ========== */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans, Arial, Helvetica, sans-serif);
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-/* ========== Hero animations ========== */
-@layer utilities {
-  @keyframes titlePop {
-    0% { opacity:0; transform:translateY(12px) scale(0.98); }
-    100%{ opacity:1; transform:translateY(0) scale(1); }
-  }
-  .animate-title { animation:titlePop 600ms cubic-bezier(.2,.9,.2,1) both; }
-
-  @keyframes overlayFloat {
-    0% { transform:translateY(0); opacity:1; }
-    50%{ transform:translateY(-3px); opacity:.98; }
-    100%{ transform:translateY(0); opacity:1; }
-  }
-  .animate-overlay { animation:overlayFloat 8s ease-in-out infinite; }
-
-  .print\:block { display:none; }
+/* --- Hero animations --- */
+@keyframes titlePop {
+  0% { opacity: 0; transform: translateY(12px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-title {
+  animation: titlePop 600ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
-/* ========== Print styles ========== */
-@media print {
-  * { -webkit-print-color-adjust: exact!important; print-color-adjust: exact!important; }
-  .no-print, header, footer { display:none!important; }
-  html, body { background:#fff!important; }
-  .print\:grid-cols-2 { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:16px!important; }
-  .print-card { break-inside:avoid; page-break-inside:avoid; border:1px solid rgba(196,169,98,.35); box-shadow:none!important; background:#fff; }
-  @page { size:A4; margin:14mm; }
-  .print\:block { display:block!important; }
+@keyframes overlayFloat {
+  0% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-3px); opacity: 0.98; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-overlay {
+  animation: overlayFloat 8s ease-in-out infinite;
 }
 
-/* ========== Extra helpers ========== */
-.print-cover { page-break-after:always; }
-.print-section { page-break-before:always; }
-.print-subtle { color:#64748b; }
-.print-mono { font-family:var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace); }
-.print-hr { border:0; height:1px; background:#e2e8f0; margin:12px 0; }
+/* --- Waves animation (guaranteed) --- */
+@keyframes waveMove {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
 
-/* ========== Animated ocean waves (robust loop) ========== */
-/* Track με 2 ίδια SVG στη σειρά. Μετακινούμε ΟΛΟ το track. */
-.wave-track {
+.waves-wrapper {
+  position: relative;
+  width: 200%;
+  height: 200px;
   display: flex;
-  width: 400%;          /* δύο SVG x 200% πλάτος το καθένα */
-  animation: waveDrift 24s linear infinite;
-  will-change: transform;
+  animation: waveMove 20s linear infinite;
 }
-.wave-track > svg {
-  width: 50%;           /* κάθε ένα καταλαμβάνει τη μισή "τεράστια" πίστα */
+
+.waves-wrapper svg {
+  width: 50%;
   flex-shrink: 0;
 }
 
-@keyframes waveDrift {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); } /* μετά κινείται ξανά από την αρχή (seamless) */
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .wave-track { animation: none; }
+  .waves-wrapper { animation: none; }
 }
