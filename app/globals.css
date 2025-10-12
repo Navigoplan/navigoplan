@@ -97,18 +97,42 @@ body {
   font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
 }
 .print-hr {
-  border: 0; height: 1px; background: #e2e8f0; margin: 12px 0;
+  border: 0;
+  height: 1px;
+  background: #e2e8f0;
+  margin: 12px 0;
 }
 
 /* =========================
-   Animated ocean waves
+   Animated ocean waves (fixed working version)
    ========================= */
-@keyframes waveMoveLeft   { 0% {transform:translateX(0)} 100% {transform:translateX(-50%)} }
-@keyframes waveMoveRight  { 0% {transform:translateX(0)} 100% {transform:translateX(50%)}  }
+@keyframes waveMoveLeft {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes waveMoveRight {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(50%); }
+}
 
-.wave-1 { animation: waveMoveLeft 22s linear infinite;  will-change: transform; }
-.wave-2 { animation: waveMoveRight 30s linear infinite; will-change: transform; }
+/* Το transform-box είναι κρίσιμο για να κινούνται τα κύματα σε SVG */
+.wave-1,
+.wave-2 {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.wave-1 {
+  animation: waveMoveLeft 22s linear infinite;
+}
+.wave-2 {
+  animation: waveMoveRight 30s linear infinite;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .wave-1, .wave-2 { animation: none; }
+  .wave-1,
+  .wave-2 {
+    animation: none;
+  }
 }
