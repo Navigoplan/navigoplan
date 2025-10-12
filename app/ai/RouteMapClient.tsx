@@ -47,10 +47,22 @@ const FitBounds = dynamic(async () => {
 export type Point = { name: string; lat: number; lon: number };
 export type Marker = { name: string; lat: number; lon: number };
 
+type Ring = [number, number][]; // [lon,lat]
+type PolyRings = { outer: Ring; holes: Ring[] };
+
 /* ---- consts ---- */
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
 const TRANSPARENT_1PX =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+
+/* Tunables (A* + simplify + animation/UI) */
+const BASE_CELL_DEG = 0.05;       // πιο “χοντρό” default
+const GRID_MARGIN_DEG = 0.45;     // μικρότερο margin
+const NEAR_LAND_PENALTY = 0.8;    // αρκετό αλλά όχι εξωφρενικό
+const SIMPLIFY_EPS = 0.004;
+
+const MAX_GRID_NODES = 60000;     // safeguard ~60k nodes/leg
+const MAX_SAMPLES_INTERSECT = 80; // για γρήγορο έλεγχο “κόβει στεριά;”
 
 /* -------- Animation speed -------- */
 const DRAW_POINTS_PER_SEC = 3;
@@ -59,6 +71,255 @@ const DRAW_INTERVAL_MS = Math.max(20, Math.round(1000 / DRAW_POINTS_PER_SEC));
 const FOLLOW_ZOOM_MIN = 9;
 const LEG_VIEW_ZOOM_MAX = 10;
 const MARKER_FADE_MS = 280;
+
+/* ---- geo helpers ---- */
+const toRad = (x: number) => (x * Math.PI) / 180;
+function sin2(x: number) { return Math.sin(x) * Math.sin(x); }
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = sin2(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sin2(dLon/2);
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/* ---- Point-In-Polygon (outer + holes) ---- */
+function pointInRing(pt: [number, number], ring: Ring): boolean {
+  const [x, y] = pt;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    const intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi + 0.0) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+function pointInPoly(pt: [number, number], poly: PolyRings): boolean {
+  if (!pointInRing(pt, poly.outer)) return false;
+  for (const hole of poly.holes) if (pointInRing(pt, hole)) return false;
+  return true;
+}
+function collectPolys(geo: any): PolyRings[] {
+  const polys: PolyRings[] = [];
+  if (!geo) return polys;
+
+  function pushPolygon(coords: Ring[]) {
+    if (!coords?.length) return;
+    polys.push({ outer: coords[0], holes: coords.slice(1) });
+  }
+  const pushFromGeom = (g: any) => {
+    if (!g) return;
+    if (g.type === "Polygon") pushPolygon(g.coordinates as Ring[]);
+    else if (g.type === "MultiPolygon") {
+      for (const p of g.coordinates as Ring[][]) pushPolygon(p);
+    }
+  };
+  if (geo.type === "FeatureCollection") {
+    for (const f of (geo.features ?? [])) pushFromGeom(f?.geometry);
+  } else {
+    pushFromGeom(geo);
+  }
+  return polys;
+}
+
+/* Γρήγορος έλεγχος αν η ευθεία α->β “πατάει” στεριά (δειγματοληψία) */
+function segmentHitsLand(a: Point, b: Point, coastPolys: PolyRings[]): boolean {
+  const steps = Math.max(8, Math.min(MAX_SAMPLES_INTERSECT, Math.ceil(haversineMeters(a.lat,a.lon,b.lat,b.lon)/5000)));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const lat = a.lat + (b.lat - a.lat) * t;
+    const lon = a.lon + (b.lon - a.lon) * t;
+    const pt: [number, number] = [lon, lat];
+    for (const poly of coastPolys) {
+      if (pointInPoly(pt, poly)) return true;
+    }
+  }
+  return false;
+}
+
+/* -------- Adaptive cell size για κάθε leg -------- */
+function pickCellDegForLeg(a: Point, b: Point) {
+  const dLat = Math.abs(a.lat - b.lat);
+  const dLon = Math.abs(a.lon - b.lon);
+  const span = Math.max(dLat, dLon);
+
+  let cell = Math.min(BASE_CELL_DEG, Math.max(0.01, span / 120));
+  if (span < 1.20) cell = 0.020;
+  if (span < 0.60) cell = 0.015;
+  if (span < 0.35) cell = 0.012;
+  if (span < 0.22) cell = 0.010;
+  if (span < 0.12) cell = 0.008;
+  return cell;
+}
+
+/* ---- Grid + A* ---- */
+type GridNode = { r: number; c: number; lat: number; lon: number; walkable: boolean; nearLand: boolean };
+
+function buildGridForBounds(
+  minLat: number,
+  maxLat: number,
+  minLon: number,
+  maxLon: number,
+  coastPolys: PolyRings[],
+  cellDegInput: number
+) {
+  let cellDeg = Math.max(0.006, cellDegInput);
+
+  // Safeguard: προσαρμόζουμε ώστε rows*cols <= MAX_GRID_NODES
+  const latSpan = Math.max(0.02, (maxLat - minLat));
+  const lonSpan = Math.max(0.02, (maxLon - minLon));
+  let rows = Math.max(12, Math.ceil(latSpan / cellDeg));
+  let cols = Math.max(12, Math.ceil(lonSpan / cellDeg));
+  if (rows * cols > MAX_GRID_NODES) {
+    const k = Math.sqrt((rows * cols) / MAX_GRID_NODES);
+    cellDeg *= k;
+    rows = Math.max(12, Math.ceil(latSpan / cellDeg));
+    cols = Math.max(12, Math.ceil(lonSpan / cellDeg));
+  }
+
+  const grid: GridNode[][] = new Array(rows);
+  for (let r = 0; r < rows; r++) {
+    grid[r] = new Array(cols);
+    const lat = minLat + (r + 0.5) * (maxLat - minLat) / rows;
+    for (let c = 0; c < cols; c++) {
+      const lon = minLon + (c + 0.5) * (maxLon - minLon) / cols;
+      const pt: [number, number] = [lon, lat];
+      let onLand = false;
+      for (const poly of coastPolys) { if (pointInPoly(pt, poly)) { onLand = true; break; } }
+      grid[r][c] = { r, c, lat, lon, walkable: !onLand, nearLand: false };
+    }
+  }
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const cell = grid[r][c]; if (!cell.walkable) continue;
+    for (const [dr, dc] of dirs) {
+      const rr = r + dr, cc = c + dc;
+      if (rr<0||cc<0||rr>=rows||cc>=cols) continue;
+      if (!grid[rr][cc].walkable) { cell.nearLand = true; break; }
+    }
+  }
+
+  // πιο “συγκρατημένο” clearance γύρω από στεριά
+  const clearanceCells = Math.max(1, Math.round(0.06 / cellDeg)); // ~0.06° ~ 6–7 km buffer
+  if (clearanceCells > 0) {
+    const toBlock: [number, number][] = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      if (!grid[r][c].walkable) {
+        for (let dr = -clearanceCells; dr <= clearanceCells; dr++) {
+          for (let dc = -clearanceCells; dc <= clearanceCells; dc++) {
+            const rr = r + dr, cc = c + dc;
+            if (rr<0||cc<0||rr>=rows||cc>=cols) continue;
+            toBlock.push([rr, cc]);
+          }
+        }
+      }
+    }
+    for (const [rr, cc] of toBlock) grid[rr][cc].walkable = false;
+  }
+
+  function nodeFor(lat: number, lon: number) {
+    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
+    const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
+    return grid[r][c];
+  }
+  return { grid, nodeFor };
+}
+
+function buildGridForLeg(a: Point, b: Point, coastPolys: PolyRings[]) {
+  const minLat = Math.min(a.lat, b.lat) - GRID_MARGIN_DEG;
+  const maxLat = Math.max(a.lat, b.lat) + GRID_MARGIN_DEG;
+  const minLon = Math.min(a.lon, b.lon) - GRID_MARGIN_DEG;
+  const maxLon = Math.max(a.lon, b.lon) + GRID_MARGIN_DEG;
+
+  const cellDeg = pickCellDegForLeg(a, b);
+  const { grid, nodeFor } = buildGridForBounds(minLat, maxLat, minLon, maxLon, coastPolys, cellDeg);
+  return { grid, start: nodeFor(a.lat, a.lon), goal: nodeFor(b.lat, b.lon) };
+}
+
+function nearestWaterNode(grid: GridNode[][], start: GridNode) {
+  if (start.walkable) return start;
+  const q: GridNode[] = [start];
+  const seen = new Set<string>([`${start.r},${start.c}`]);
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+  while (q.length) {
+    const cur = q.shift()!;
+    for (const [dr, dc] of dirs) {
+      const rr = cur.r + dr, cc = cur.c + dc;
+      if (rr<0||cc<0||rr>=grid.length||cc>=grid[0].length) continue;
+      const nb = grid[rr][cc];
+      const key = `${rr},${cc}`; if (seen.has(key)) continue; seen.add(key);
+      if (nb.walkable) return nb;
+      q.push(nb);
+    }
+  }
+  return start;
+}
+
+function aStarWater(grid: GridNode[][], start: GridNode, goal: GridNode) {
+  start = nearestWaterNode(grid, start);
+  goal  = nearestWaterNode(grid, goal);
+
+  const key = (n: GridNode) => `${n.r},${n.c}`;
+  const open: GridNode[] = [start];
+  const came = new Map<string, GridNode>();
+  const gScore = new Map<string, number>([[key(start), 0]]);
+  const fScore = new Map<string, number>([[key(start), haversineMeters(start.lat, start.lon, goal.lat, goal.lon)]]);
+  const inOpen = new Set<string>([key(start)]);
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+
+  while (open.length) {
+    open.sort((a, b) => (fScore.get(key(a))! - fScore.get(key(b))!));
+    const current = open.shift()!; inOpen.delete(key(current));
+
+    if (current.r === goal.r && current.c === goal.c) {
+      const path: GridNode[] = [current];
+      let curKey = key(current);
+      while (came.has(curKey)) { const prev = came.get(curKey)!; path.push(prev); curKey = key(prev); }
+      return path.reverse();
+    }
+    for (const [dr, dc] of dirs) {
+      const rr = current.r + dr, cc = current.c + dc;
+      if (rr<0||cc<0||rr>=grid.length||cc>=grid[0].length) continue;
+      const nb = grid[rr][cc]; if (!nb.walkable) continue;
+
+      const step = haversineMeters(current.lat, current.lon, nb.lat, nb.lon);
+      const tentative = (gScore.get(key(current)) ?? Infinity) + step * (1 + (nb.nearLand ? NEAR_LAND_PENALTY : 0));
+
+      const nbKey = key(nb);
+      if (tentative < (gScore.get(nbKey) ?? Infinity)) {
+        came.set(nbKey, current);
+        gScore.set(nbKey, tentative);
+        fScore.set(nbKey, tentative + haversineMeters(nb.lat, nb.lon, goal.lat, goal.lon));
+        if (!inOpen.has(nbKey)) { open.push(nb); inOpen.add(nbKey); }
+      }
+    }
+  }
+  return null;
+}
+
+/* ---- Simplify ---- */
+function perpendicularDistance(p: [number, number], a: [number, number], b: [number, number]) {
+  const x0 = p[1], y0 = p[0], x1 = a[1], y1 = a[0], x2 = b[1], y2 = b[0];
+  const num = Math.abs((y2 - y1)*x0 - (x2 - x1)*y0 + x2*y1 - y2*x1);
+  const den = Math.sqrt((y2 - y1)**2 + (x2 - x1)**2) + 1e-9;
+  return num / den;
+}
+function simplifyRDP(path: [number, number][], epsilonDeg = SIMPLIFY_EPS): [number, number][] {
+  if (path.length <= 2) return path;
+  let dmax = 0, index = 0;
+  const end = path.length - 1;
+  for (let i = 1; i < end; i++) {
+    const d = perpendicularDistance(path[i], path[0], path[end]);
+    if (d > dmax) { index = i; dmax = d; }
+  }
+  if (dmax > epsilonDeg) {
+    const rec1 = simplifyRDP(path.slice(0, index + 1), epsilonDeg);
+    const rec2 = simplifyRDP(path.slice(index, path.length), epsilonDeg);
+    return rec1.slice(0, -1).concat(rec2);
+  } else {
+    return [path[0], path[end]];
+  }
+}
 
 /* ---- Μικρό animated circle marker για fade-in ---- */
 function useNow() {
@@ -128,21 +389,26 @@ export default function RouteMapClient({
 }) {
   const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
-  /* ---------- Base map toggle & layer readiness ---------- */
-  const [base, setBase] = useState<"gebco" | "osm">("gebco");
-  const [baseReady, setBaseReady] = useState(false);
-  const [deferOverlay, setDeferOverlay] = useState(false);
-  useEffect(() => {
-    const id = setTimeout(() => setDeferOverlay(true), 200);
-    return () => clearTimeout(id);
+  // Canvas renderer για το GeoJSON (πολύ πιο ελαφρύ)
+  const canvasRenderer = useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    const L = require("leaflet") as typeof import("leaflet");
+    return L.canvas({ padding: 0.2 });
   }, []);
 
-  /* ---------- ΑΠΕΝΕΡΓΟΠΟΙΗΣΗ coast (για τώρα) ---------- */
-  // Δεν κάνουμε fetch του GeoJSON — μηδενίζουμε τα πάντα για να μην κολλάει
-  const coast: any = null;
-  const coastPolys: any[] = []; // σημαντικό: κενό => δεν τρέχει “αποφυγή στεριάς”
+  /* coast */
+  const [coast, setCoast] = useState<any | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/data/coastlines-gr.geojson")
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error("GeoJSON fetch failed"))))
+      .then(j => { if (!cancelled) setCoast(j); })
+      .catch(() => { if (!cancelled) setCoast(null); });
+    return () => { cancelled = true; };
+  }, []);
+  const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* ---- route points (χωρίς A* — ευθείες ανά leg) ---- */
+  /* ---- compute water path + breakpoint indices ανά leg ---- */
   const { waterLatLngs, legEndIdx } = useMemo(() => {
     const result: { waterLatLngs: LatLngExpression[]; legEndIdx: number[] } = { waterLatLngs: [], legEndIdx: [] };
     if (points.length < 2) {
@@ -152,8 +418,36 @@ export default function RouteMapClient({
     const out: [number, number][][] = [];
     for (let i = 0; i < points.length - 1; i++) {
       const a = points[i], b = points[i + 1];
-      const seg: [number, number][] = [[a.lat, a.lon], [b.lat, b.lon]];
-      out.push(seg);
+
+      // 1) Αν δεν έχουμε coast, ή αν το leg είναι πολύ μεγάλο, ή δεν “χτυπά” στεριά → straight
+      const dLat = Math.abs(a.lat - b.lat);
+      const dLon = Math.abs(a.lon - b.lon);
+      const span = Math.max(dLat, dLon);
+      let seg: [number, number][] | null = null;
+
+      if (coastPolys.length && span <= 3.5 && segmentHitsLand(a, b, coastPolys)) {
+        // 2) Τρέχουμε A* μόνο όταν χρειάζεται
+        const { grid, start, goal } = buildGridForLeg(a, b, coastPolys);
+        const path = aStarWater(grid, start, goal);
+        if (path) {
+          const mid = path.map(n => [n.lat, n.lon] as [number, number]);
+          const midS = simplifyRDP(mid, SIMPLIFY_EPS);
+          seg = [[a.lat, a.lon], ...midS, [b.lat, b.lon]];
+        }
+      }
+
+      if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
+
+      // dedup consecutive equal points
+      const cleaned: [number, number][] = [];
+      for (const pt of seg) {
+        if (!cleaned.length) cleaned.push(pt);
+        else {
+          const last = cleaned[cleaned.length - 1];
+          if (Math.abs(last[0]-pt[0]) > 1e-9 || Math.abs(last[1]-pt[1]) > 1e-9) cleaned.push(pt);
+        }
+      }
+      out.push(cleaned);
     }
     const joined: [number, number][] = [];
     const endIdx: number[] = [];
@@ -166,11 +460,12 @@ export default function RouteMapClient({
     result.waterLatLngs = joined as LatLngExpression[];
     result.legEndIdx = endIdx;
     return result;
-  }, [points, coastPolys]); // coastPolys κενό => δεν θα ανα-υπολογίζει
+  }, [points, coastPolys]);
 
   /* ---- progressive draw ---- */
   const [drawCount, setDrawCount] = useState(0);
   useEffect(() => { setDrawCount(waterLatLngs.length ? 1 : 0); }, [waterLatLngs]);
+
   useEffect(() => {
     if (drawCount <= 0 || drawCount >= waterLatLngs.length) return;
     const id = window.setInterval(() => {
@@ -197,7 +492,7 @@ export default function RouteMapClient({
   const [followShip, setFollowShip] = useState(false);
   const lastFollowedPointRef = useRef<string>("");
 
-  /* auto-zoom ανά leg */
+  /* auto-zoom σε κάθε νέο leg boundary */
   const prevLegRef = useRef<number>(-999);
   useEffect(() => {
     if (!map) return;
@@ -212,17 +507,21 @@ export default function RouteMapClient({
       const L = require("leaflet") as typeof import("leaflet");
       const bnds = L.latLngBounds([a.lat, a.lon], [b.lat, b.lon]).pad(0.18);
       map.flyToBounds(bnds, { padding: [28, 28] });
-      setTimeout(() => { if (map && map.getZoom() > LEG_VIEW_ZOOM_MAX) map.setZoom(LEG_VIEW_ZOOM_MAX); }, 500);
+      setTimeout(() => {
+        if (!map) return;
+        if (map.getZoom() > LEG_VIEW_ZOOM_MAX) map.setZoom(LEG_VIEW_ZOOM_MAX);
+      }, 500);
     }
   }, [map, currentLegIndex, points, followShip]);
 
-  /* follow ship */
+  /* follow ship: πέτα την κάμερα στο tip της γραμμής */
   useEffect(() => {
     if (!map || !followShip || animatedLatLngs.length < 2) return;
     const tip = animatedLatLngs[animatedLatLngs.length - 1] as [number, number];
     const key = `${tip[0].toFixed(5)},${tip[1].toFixed(5)}`;
     if (lastFollowedPointRef.current === key) return;
     lastFollowedPointRef.current = key;
+
     const targetZoom = Math.max(map.getZoom(), FOLLOW_ZOOM_MIN);
     map.flyTo(tip as any, targetZoom, { duration: 0.5 });
   }, [animatedLatLngs, followShip, map]);
@@ -257,29 +556,16 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[420px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* UI: Base toggle + Follow */}
-      <div className="absolute right-3 top-3 z-[1000] flex gap-2 no-print">
+      <div className="absolute right-3 top-3 z-[1000] no-print">
         <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
-          <input type="checkbox" checked={followShip} onChange={(e) => setFollowShip(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={followShip}
+            onChange={(e) => setFollowShip(e.target.checked)}
+          />
           Follow ship
         </label>
-        <button
-          onClick={() => { setBaseReady(false); setBase(b => (b === "gebco" ? "osm" : "gebco")); }}
-          className="rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200"
-          title="Toggle base map"
-        >
-          Base: {base.toUpperCase()}
-        </button>
       </div>
-
-      {/* Loader overlay μέχρι να φορτώσει το base layer */}
-      {!baseReady && (
-        <div className="absolute inset-0 z-[1500] grid place-items-center bg-white/40 backdrop-blur-[1px]">
-          <div className="animate-pulse text-[13px] px-3 py-2 rounded-md bg-white shadow border border-slate-200">
-            Loading map…
-          </div>
-        </div>
-      )}
 
       <style jsx global>{`
         .leaflet-tile[src*="tiles.gebco.net"] {
@@ -300,27 +586,15 @@ export default function RouteMapClient({
         zoom={7}
         minZoom={3}
         maxZoom={14}
-        scrollWheelZoom={true}
+        scrollWheelZoom
+        preferCanvas
         style={{ height: "100%", width: "100%" }}
       >
         <CaptureMap onReady={setMap} />
 
-        {/* Base map */}
-        <Pane name="pane-base" style={{ zIndex: 200 }}>
-          {base === "gebco" ? (
-            <TileLayer
-              attribution="&copy; GEBCO"
-              url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png"
-              opacity={0.9}
-              eventHandlers={{ load: () => setBaseReady(true), tileerror: () => setBaseReady(true) }}
-            />
-          ) : (
-            <TileLayer
-              attribution="&copy; OpenStreetMap"
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              eventHandlers={{ load: () => setBaseReady(true), tileerror: () => setBaseReady(true) }}
-            />
-          )}
+        {/* GEBCO */}
+        <Pane name="pane-gebco" style={{ zIndex: 200 }}>
+          <TileLayer attribution="&copy; GEBCO" url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png" opacity={0.9} />
         </Pane>
 
         {/* light blue νερό */}
@@ -332,53 +606,55 @@ export default function RouteMapClient({
           />
         </Pane>
 
-        {/* στεριά — ΑΠΕΝΕΡΓΟΠΟΙΗΜΕΝΗ επίτηδες */}
-        {/* {coast && (
-          <Pane name="pane-land" style={{ zIndex: 310 }}>
-            <GeoJSON data={coast} style={() => ({ color: "#0b1220", weight: 2, opacity: 1, fillColor: "#ffffff", fillOpacity: 1 })} />
-          </Pane>
-        )} */}
+        {/* στεριά */}
+        <Pane name="pane-land" style={{ zIndex: 310 }}>
+          {coast && (
+            <GeoJSON
+              data={coast}
+              renderer={canvasRenderer as any}
+              smoothFactor={0.5}
+              interactive={false}
+              style={() => ({ color: "#0b1220", weight: 2, opacity: 1, fillColor: "#ffffff", fillOpacity: 1 })}
+            />
+          )}
+        </Pane>
 
-        {/* labels (deferred) */}
-        {deferOverlay && (
-          <Pane name="pane-labels" style={{ zIndex: 360 }}>
-            <TileLayer
-              attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
-              url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
-              tileSize={512}
-              zoomOffset={-1}
-              detectRetina={false}
-              opacity={0.75}
-              errorTileUrl={TRANSPARENT_1PX}
-              pane="pane-labels"
-            />
-            <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"
-              tileSize={512}
-              zoomOffset={-1}
-              detectRetina={false}
-              opacity={0.25}
-              errorTileUrl={TRANSPARENT_1PX}
-              pane="pane-labels"
-            />
-            <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png"
-              tileSize={256}
-              zoomOffset={0}
-              detectRetina={true}
-              opacity={0.55}
-              errorTileUrl={TRANSPARENT_1PX}
-              pane="pane-labels"
-            />
-          </Pane>
-        )}
+        {/* labels */}
+        <Pane name="pane-labels" style={{ zIndex: 360 }}>
+          <TileLayer
+            attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
+            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
+            tileSize={512}
+            zoomOffset={-1}
+            detectRetina={false}
+            opacity={0.75}
+            errorTileUrl={TRANSPARENT_1PX}
+            pane="pane-labels"
+          />
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"
+            tileSize={512}
+            zoomOffset={-1}
+            detectRetina={false}
+            opacity={0.25}
+            errorTileUrl={TRANSPARENT_1PX}
+            pane="pane-labels"
+          />
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png"
+            tileSize={256}
+            zoomOffset={0}
+            detectRetina
+            opacity={0.55}
+            errorTileUrl={TRANSPARENT_1PX}
+            pane="pane-labels"
+          />
+        </Pane>
 
-        {/* seamarks (deferred) */}
-        {deferOverlay && (
-          <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
-            <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
-          </Pane>
-        )}
+        {/* seamarks */}
+        <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
+          <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
+        </Pane>
 
         {/* full route (σκιά) */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
