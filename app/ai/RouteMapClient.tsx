@@ -375,8 +375,16 @@ function pickRegionSeeds(region: RegionKey): Point[][] {
 }
 
 /* ===================================================== */
-export default function RouteMapClient({ points, markers, activeNames, onMarkerClick }:{
+export default function RouteMapClient({
+  points, markers, activeNames, onMarkerClick,
+  /** Optional: control weather-aware from parent (AI page) */
+  weatherAwareProp,
+  /** Optional: push back per-leg meteo stats to parent */
+  onLegMeteo
+}:{
   points: Point[]; markers?: Marker[]; activeNames?: string[]; onMarkerClick?: (portName: string) => void;
+  weatherAwareProp?: boolean;
+  onLegMeteo?: (legs: Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }>) => void;
 }) {
   const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
@@ -387,8 +395,12 @@ export default function RouteMapClient({ points, markers, activeNames, onMarkerC
 
   const effPoints = (points?.length ?? 0) >= 2 ? points : (current ?? []);
 
-  /* Weather toggle */
-  const [weatherAware, setWeatherAware] = useState(false);
+  /* Weather toggle (controlled or uncontrolled) */
+  const [weatherAwareInternal, setWeatherAwareInternal] = useState(false);
+  const weatherAware = (typeof weatherAwareProp === "boolean") ? weatherAwareProp : weatherAwareInternal;
+  useEffect(() => {
+    if (typeof weatherAwareProp === "boolean") setWeatherAwareInternal(weatherAwareProp);
+  }, [weatherAwareProp]);
 
   /* coast */
   const [coast, setCoast] = useState<any | null>(null);
@@ -430,12 +442,13 @@ export default function RouteMapClient({ points, markers, activeNames, onMarkerC
     return () => { cancelled = true; };
   }, [weatherAware, effPoints]);
 
-  const { waterLatLngs, legEndIdx } = useMemo(() => {
-    const result: { waterLatLngs: LatLngExpression[]; legEndIdx: number[] } = { waterLatLngs: [], legEndIdx: [] };
+  /* === Route compute (also keep per-leg segments) === */
+  const { waterLatLngs, legEndIdx, legSegments } = useMemo(() => {
+    const result: { waterLatLngs: LatLngExpression[]; legEndIdx: number[]; legSegments: [number,number][][] } = { waterLatLngs: [], legEndIdx: [], legSegments: [] };
     const pts = effPoints;
     if (pts.length < 2) return result;
 
-    const out: [number, number][][] = [];
+    const perLeg: [number, number][][] = [];
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i], b = pts[i + 1];
       let seg: [number, number][] | null = null;
@@ -469,20 +482,64 @@ export default function RouteMapClient({ points, markers, activeNames, onMarkerC
           if (Math.abs(last[0]-pt[0]) > 1e-9 || Math.abs(last[1]-pt[1]) > 1e-9) cleaned.push(pt);
         }
       }
-      out.push(cleaned);
+      perLeg.push(cleaned);
     }
+
     const joined: [number, number][] = [];
     const endIdx: number[] = [];
-    for (let i = 0; i < out.length; i++) {
-      const leg = out[i];
+    for (let i = 0; i < perLeg.length; i++) {
+      const leg = perLeg[i];
       if (!joined.length) joined.push(...leg);
       else joined.push(...leg.slice(1));
       endIdx.push(joined.length - 1);
     }
     result.waterLatLngs = joined as LatLngExpression[];
     result.legEndIdx = endIdx;
+    result.legSegments = perLeg;
     return result;
   }, [effPoints, coastPolys, weatherAware, weatherFieldsForLeg]);
+
+  /* === Compute & emit meteo metrics per leg to parent === */
+  useEffect(() => {
+    if (!onLegMeteo) return;
+    if (!effPoints.length || !legSegments.length) { onLegMeteo([]); return; }
+    const out: Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }> = [];
+
+    for (let i = 0; i < legSegments.length; i++) {
+      const seg = legSegments[i];
+      const field = weatherFieldsForLeg[i] ?? null;
+      if (!seg?.length || !field) {
+        out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
+        continue;
+      }
+      // sample κάθε ~5ο σημείο για οικονομία
+      let windSum = 0, waveSum = 0, n = 0, maxW = 0, maxH = 0;
+      for (let k = 0; k < seg.length; k += 5) {
+        const [lat, lon] = seg[k];
+        const w = field.get(lat, lon);
+        if (!w) continue;
+        windSum += w.wind;
+        waveSum += w.wave;
+        n++;
+        if (w.wind > maxW) maxW = w.wind;
+        if (w.wave > maxH) maxH = w.wave;
+      }
+      if (n === 0) {
+        out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
+      } else {
+        out.push({
+          index:i,
+          from: effPoints[i].name,
+          to: effPoints[i+1].name,
+          avgWind: +(windSum / n).toFixed(2),
+          avgWave: +(waveSum / n).toFixed(2),
+          maxWind: +maxW.toFixed(2),
+          maxWave: +maxH.toFixed(2),
+        });
+      }
+    }
+    onLegMeteo(out);
+  }, [onLegMeteo, legSegments, weatherFieldsForLeg, effPoints]);
 
   /* progressive draw */
   const [drawCount, setDrawCount] = useState(0);
@@ -580,10 +637,18 @@ export default function RouteMapClient({ points, markers, activeNames, onMarkerC
           <option value="sporades">Sporades</option>
         </select>
         <button onClick={handleGenerate} className="rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200" title="Generate suggestions">Generate</button>
-        <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
-          <input type="checkbox" checked={weatherAware} onChange={(e)=>setWeatherAware(e.target.checked)} />
+
+        {/* Weather-aware routing: αν ελέγχεται από parent, γίνεται disabled */}
+        <label className={`flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200 ${typeof weatherAwareProp === "boolean" ? "opacity-60 pointer-events-none" : ""}`}>
+          <input
+            type="checkbox"
+            checked={weatherAware}
+            onChange={(e)=> setWeatherAwareInternal(e.target.checked)}
+            disabled={typeof weatherAwareProp === "boolean"}
+          />
           Weather-aware routing
         </label>
+
         <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
           <input type="checkbox" checked={followShip} onChange={(e)=>setFollowShip(e.target.checked)} />
           Follow ship
