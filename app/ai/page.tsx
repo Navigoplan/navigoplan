@@ -432,6 +432,57 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard> {
   return card;
 }
 
+/* ========= LIVE Weather per-destination ========= */
+type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string };
+const weatherCache = new Map<string, SpotWeather>();
+
+function labelFromWx(precipMM?: number, cloudPct?: number) {
+  if ((precipMM ?? 0) > 0.1) return "Rain";
+  if ((cloudPct ?? 0) >= 70) return "Cloudy";
+  if ((cloudPct ?? 0) >= 30) return "Partly cloudy";
+  return "Clear";
+}
+
+async function fetchSpotWeather(lat: number, lon: number): Promise<SpotWeather | null> {
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+  if (weatherCache.has(key)) return weatherCache.get(key)!;
+
+  const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,precipitation,cloud_cover,is_day,weather_code&timezone=auto`;
+  const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=precipitation,cloudcover&timezone=auto`;
+
+  try {
+    let tempC: number | undefined;
+    let precipMM: number | undefined;
+    let cloudPct: number | undefined;
+
+    let r = await fetch(url1);
+    if (r.ok) {
+      const j = await r.json();
+      tempC = j?.current?.temperature_2m;
+      precipMM = j?.current?.precipitation;
+      cloudPct = j?.current?.cloud_cover;
+    } else {
+      r = await fetch(url2);
+      if (!r.ok) throw new Error("open-meteo fail");
+      const j = await r.json();
+      tempC = j?.current_weather?.temperature;
+      if (Array.isArray(j?.hourly?.precipitation)) precipMM = j.hourly.precipitation[0];
+      if (Array.isArray(j?.hourly?.cloudcover)) cloudPct = j.hourly.cloudcover[0];
+    }
+
+    const out: SpotWeather = {
+      tempC: tempC != null ? Math.round(tempC) : undefined,
+      precipMM: precipMM != null ? +Number(precipMM).toFixed(1) : undefined,
+      cloudPct: cloudPct != null ? Math.round(cloudPct) : undefined,
+    };
+    out.label = labelFromWx(out.precipMM, out.cloudPct);
+    weatherCache.set(key, out);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 /* ========= Best-time & ETA ========= */
 function suggestWindow(region: RegionKey, hours: number, weatherAware: boolean) {
   if (region === "Cyclades") return weatherAware ? "07:30–11:00" : (hours <= 2.5 ? "08:00–11:00" : "08:00–12:30");
@@ -475,6 +526,9 @@ function AIPlannerInner() {
 
   // thumbs cache
   const [thumbs, setThumbs] = useState<Record<string, string | undefined>>({});
+
+  // LIVE weather per-destination
+  const [destWeather, setDestWeather] = useState<Record<string, SpotWeather>>({});
 
   // Region mode
   const [start, setStart] = useState<string>("Alimos");
@@ -531,7 +585,7 @@ function AIPlannerInner() {
   function onTogglePref(value: string) {
     setPrefs((prev) => (prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]));
   }
-  function addVia() { setVias((v) => [...v, ""]); }
+  function addVia() { setVias((v) => [...v, ""]);}
   function setViaAt(i: number, val: string) { setVias((v) => v.map((x, idx) => (idx === i ? val : x))); }
   function removeVia(i: number) { setVias((v) => v.filter((_, idx) => idx !== i)); }
   function setCustomStopAt(i: number, val: string) { setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x))); }
@@ -741,6 +795,23 @@ function AIPlannerInner() {
     });
   }
 
+  /* ======= LIVE weather fetch per-destination (after plan gen) ======= */
+  useEffect(() => {
+    (async () => {
+      if (!plan || !plan.length) { setDestWeather({}); return; }
+      const uniqueDest = Array.from(new Set(plan.map(d => d.leg?.to).filter(Boolean) as string[]));
+      const next: Record<string, SpotWeather> = {};
+      for (const name of uniqueDest) {
+        const p = findPort(name);
+        if (!p) continue;
+        const wx = await fetchSpotWeather(p.lat, p.lon);
+        if (wx) next[name] = wx;
+      }
+      setDestWeather(next);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan]);
+
   return (
     <div className="bg-white text-slate-900">
       <section className="mx-auto max-w-7xl px-6 py-12">
@@ -903,7 +974,7 @@ function AIPlannerInner() {
               <div className="text-sm text-slate-500">
                 Mode: <span className="font-medium text-brand-navy">{mode === "Region" ? "Auto AI Planner" : "Custom"}</span>
                 {mode === "Region" && <> • Region: <span className="font-medium text-brand-navy">{regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region}</span></>}
-                {weatherAwareWin && <> • <span className="font-medium text-amber-700">WX-aware</span></>}
+                {weatherAwareWin && <> • <span className="text-sm font-medium text-amber-700">WX-aware</span></>}
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={handleCopyLink} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50">
@@ -986,6 +1057,7 @@ function AIPlannerInner() {
               {plan.map((d, idx) => {
                 const facilities = PORT_FACTS[d.leg?.to ?? ""] || {};
                 const destName = d.leg?.to ?? "";
+                const wx = destWeather[destName];
                 return (
                   <div key={d.day} className="rounded-2xl bg-white p-4 shadow-sm print-card">
                     <div className="flex items-start justify-between gap-3">
@@ -1022,6 +1094,23 @@ function AIPlannerInner() {
                             Suggested window: <b>{d.leg.eta.window}</b> • Depart <b>{d.leg.eta.dep}</b> → Arrive <b>{d.leg.eta.arr}</b>
                           </div>
                         )}
+
+                        {/* LIVE Weather chips */}
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full border px-2 py-1">
+                            Live weather{wx?.label ? `: ${wx.label}` : ""}
+                          </span>
+                          {wx?.tempC != null && (
+                            <span className="rounded-full border px-2 py-1">🌡 {wx.tempC}°C</span>
+                          )}
+                          {wx?.cloudPct != null && (
+                            <span className="rounded-full border px-2 py-1">☁️ {wx.cloudPct}%</span>
+                          )}
+                          {wx?.precipMM != null && (
+                            <span className="rounded-full border px-2 py-1">🌧 {wx.precipMM} mm/h</span>
+                          )}
+                          {!wx && <span className="text-slate-500">…</span>}
+                        </div>
 
                         {/* Facilities chips */}
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
