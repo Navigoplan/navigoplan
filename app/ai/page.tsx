@@ -27,6 +27,9 @@ type PlannerMode = "Region" | "Custom";
 
 type PortCoord = { id?: string; name: string; lat: number; lon: number; aliases?: string[] };
 
+/* === Port Info (modal) types === */
+type PortInfo = { id?: string; name: string; lat: number; lon: number; desc?: string; imageUrl?: string };
+
 /* ========= Helpers ========= */
 function normalize(s: string) {
   return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
@@ -50,6 +53,28 @@ function addDaysISO(iso: string, plus: number) {
   const d = new Date(iso);
   d.setDate(d.getDate() + plus);
   return d.toISOString().slice(0, 10);
+}
+
+/* ====== Port image helpers ====== */
+function slugifyPortName(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+}
+/** Προαιρετικός manual χάρτης -> αν θες να ορίσεις ρητά κάποια paths */
+const PORT_IMAGE_MAP: Record<string, string> = {
+  // "aegina": "/images/ports/aegina.jpg",
+};
+/** Επιστρέφει πιθανό μονοπάτι εικόνας από public/… ή undefined */
+function getPortImageUrlByName(name: string): string | undefined {
+  const slug = slugifyPortName(name);
+  if (!slug) return undefined;
+  if (PORT_IMAGE_MAP[slug]) return PORT_IMAGE_MAP[slug];
+  return `/images/ports/${slug}.jpg`; // βάλε τις εικόνες σου εδώ
 }
 
 /* ========= Regions ========= */
@@ -328,6 +353,102 @@ function formatHoursHM(hours: number) {
   return `${h}h ${m}m`;
 }
 
+/* ========= Port Info Modal ========= */
+function PortInfoModal({
+  port,
+  nearby,
+  onClose,
+}: {
+  port: PortInfo | null;
+  nearby: PortInfo[];
+  onClose: () => void;
+}) {
+  const [imgVisible, setImgVisible] = useState(true);
+  if (!port) return null;
+
+  const gm = `https://maps.google.com/?q=${port.lat},${port.lon}`;
+  const windy = `https://www.windy.com/${port.lat}/${port.lon}`;
+  const navily = `https://www.navily.com/search?query=${encodeURIComponent(port.name)}`;
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+        {port.imageUrl && imgVisible && (
+          <div className="relative h-48 w-full overflow-hidden">
+            <img
+              src={port.imageUrl}
+              alt={port.name}
+              className="h-full w-full object-cover"
+              onError={() => setImgVisible(false)}
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+          </div>
+        )}
+
+        <div className="p-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-brand-navy">{port.name}</h3>
+              <div className="mt-1 text-xs text-slate-500">
+                {port.lat.toFixed(4)}° / {port.lon.toFixed(4)}°
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-lg border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+
+          {port.desc && <p className="mt-3 text-sm text-slate-700">{port.desc}</p>}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href={gm}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              Google Maps
+            </a>
+            <a
+              href={windy}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              Windy (meteo)
+            </a>
+            <a
+              href={navily}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              Navily anchorages
+            </a>
+          </div>
+
+          {nearby.length > 0 && (
+            <div className="mt-5">
+              <div className="text-sm font-medium text-brand-navy">Κοντινά λιμάνια</div>
+              <ul className="mt-2 grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
+                {nearby.map((p) => (
+                  <li key={`${p.name}-${p.lat}`} className="text-slate-700">
+                    • {p.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ========= Main ========= */
 function AIPlannerInner() {
   const router = useRouter();
@@ -391,6 +512,10 @@ function AIPlannerInner() {
   type MapPick = "Start" | "End" | "Via" | "Custom";
   const [mapPickMode, setMapPickMode] = useState<MapPick>("Via");
   const [customPickIndex, setCustomPickIndex] = useState<number>(1); // Day 1..customDays
+
+  // === Modal state ===
+  const [showPort, setShowPort] = useState<PortInfo | null>(null);
+  const [nearbyPorts, setNearbyPorts] = useState<PortInfo[]>([]);
 
   // Load from URL
   useEffect(() => {
@@ -560,6 +685,40 @@ function AIPlannerInner() {
         return;
       }
     }
+  }
+
+  /* === Open modal for a port by name === */
+  function openPortInfoByName(name?: string) {
+    if (!name) return;
+    const p = findPort(name);
+    if (!p) return;
+
+    const raw = (ports || []).find((x: any) => normalize(x.name) === normalize(p.name));
+    const fromDatasetImage = raw?.image || raw?.img || raw?.photo || raw?.picture;
+    const port: PortInfo = {
+      id: p.id,
+      name: p.name,
+      lat: p.lat,
+      lon: p.lon,
+      desc: raw?.desc,
+      imageUrl: fromDatasetImage || getPortImageUrlByName(p.name),
+    };
+
+    const all = (ports || []) as any[];
+    const sorted = all
+      .filter((x) => x.name && normalize(x.name) !== normalize(port.name))
+      .map((x) => ({
+        name: x.name,
+        lat: x.lat,
+        lon: x.lon,
+        d: Math.hypot(x.lat - port.lat, x.lon - port.lon),
+      }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 5)
+      .map((x) => ({ name: x.name, lat: x.lat, lon: x.lon } as PortInfo));
+
+    setNearbyPorts(sorted);
+    setShowPort(port);
   }
 
   return (
@@ -799,7 +958,14 @@ function AIPlannerInner() {
                   </div>
                   {d.leg ? (
                     <>
-                      <div className="mt-1 text-lg font-semibold text-brand-navy">{d.leg.from} → {d.leg.to}</div>
+                      <button
+                        type="button"
+                        onClick={() => openPortInfoByName(d.leg.to)}
+                        className="mt-1 text-left text-lg font-semibold text-brand-navy hover:underline"
+                        title="Port info"
+                      >
+                        {d.leg.from} → {d.leg.to}
+                      </button>
                       <p className="mt-1 text-sm text-slate-600">
                         ~{formatHoursHM(d.leg.hours)} underway
                         {yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel</>} • {speed} kn
@@ -813,6 +979,15 @@ function AIPlannerInner() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* PORT INFO MODAL */}
+        {showPort && (
+          <PortInfoModal
+            port={showPort}
+            nearby={nearbyPorts}
+            onClose={() => setShowPort(null)}
+          />
         )}
       </section>
     </div>
