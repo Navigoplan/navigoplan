@@ -12,8 +12,14 @@ export const dynamic = "force-dynamic";
 /* ========= Types ========= */
 type YachtType = "Motor" | "Sailing";
 type Yacht = { type: YachtType; speed: number; lph: number };
-type Leg = { from: string; to: string; nm: number; hours: number; fuelL: number };
-type DayCard = { day: number; date: string; leg?: Leg; notes?: string };
+type Leg = { from: string; to: string; nm: number; hours: number; fuelL: number; cost?: number; eta?: { dep: string; arr: string; window: string } };
+type DayCard = {
+  day: number;
+  date: string;
+  leg?: Leg;
+  notes?: string;
+  userNotes?: { marina?: string; food?: string; beach?: string };
+};
 type RegionKey =
   | "Saronic"
   | "Cyclades"
@@ -43,7 +49,7 @@ function haversineNM(a: PortCoord, b: PortCoord) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 function legStats(nm: number, yacht: Yacht) {
-  const hours = (nm / yacht.speed) * 1.15;
+  const hours = (nm / yacht.speed) * 1.15; // +15% περιθώριο
   const fuelL = yacht.type === "Motor" ? hours * yacht.lph : 0;
   return { hours: +hours.toFixed(2), fuelL: Math.round(fuelL) };
 }
@@ -51,6 +57,14 @@ function addDaysISO(iso: string, plus: number) {
   const d = new Date(iso);
   d.setDate(d.getDate() + plus);
   return d.toISOString().slice(0, 10);
+}
+function pad2(n: number) { return n.toString().padStart(2, "0"); }
+function addHoursToTime(startHHmm: string, hoursFloat: number) {
+  const [hh, mm] = startHHmm.split(":").map((x) => parseInt(x, 10));
+  const totalMin = Math.round(hh * 60 + mm + hoursFloat * 60);
+  const h2 = Math.floor((totalMin / 60) % 24);
+  const m2 = totalMin % 60;
+  return `${pad2(h2)}:${pad2(m2)}`;
 }
 
 /* ========= Regions ========= */
@@ -174,6 +188,7 @@ function buildQueryFromState(state: {
   mode: PlannerMode; startDate: string; yachtType: YachtType; speed: number; lph: number;
   start: string; end: string; days: number; regionMode: "Auto" | RegionKey; vias: string[];
   customStart: string; customDays: number; customDayStops: string[];
+  fuelPrice: number; depTime: string;
 }) {
   const q = new URLSearchParams();
   q.set("mode", state.mode);
@@ -181,6 +196,8 @@ function buildQueryFromState(state: {
   q.set("yt", state.yachtType);
   q.set("speed", String(state.speed));
   if (state.yachtType === "Motor") q.set("lph", String(state.lph));
+  q.set("fuel", String(state.fuelPrice));
+  q.set("dep", state.depTime);
   if (state.mode === "Region") {
     q.set("start", state.start);
     q.set("end", state.end);
@@ -202,6 +219,7 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
   setStart: (v: string) => void; setEnd: (v: string) => void; setDays: (v: number) => void;
   setRegionMode: (v: "Auto" | RegionKey) => void; setVias: (v: string[]) => void;
   setCustomStart: (v: string) => void; setCustomDays: (v: number) => void; setCustomDayStops: (v: string[]) => void;
+  setFuelPrice: (v: number) => void; setDepTime: (v: string) => void;
 }) {
   const mode = (sp.get("mode") as PlannerMode) || "Region";
   setters.setMode(mode);
@@ -217,6 +235,12 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
 
   const lph = Number(sp.get("lph") || 180);
   setters.setLph(lph);
+
+  const fuelPrice = Number(sp.get("fuel") || 1.8);
+  setters.setFuelPrice(fuelPrice);
+
+  const dep = sp.get("dep") || "09:00";
+  setters.setDepTime(dep);
 
   if (mode === "Region") {
     const start = sp.get("start") || "Alimos";
@@ -329,29 +353,113 @@ function formatHoursHM(hours: number) {
   return `${h}h ${m}m`;
 }
 
-/* ========= Wikipedia helper ========= */
-async function fetchWikiCard(placeName: string): Promise<{
-  title: string; summary: string; imageUrl?: string; sourceUrl?: string;
-}> {
-  const enc = (s: string) => encodeURIComponent(s.replace(/\s+/g, "_"));
-  const tries = [
-    `https://el.wikipedia.org/api/rest_v1/page/summary/${enc(placeName)}`,
-    `https://en.wikipedia.org/api/rest_v1/page/summary/${enc(placeName)}`
-  ];
-  for (const url of tries) {
+/* ========= Practical facilities (simple seed) ========= */
+const PORT_FACTS: Record<string, { fuel?: boolean; water?: boolean; provisions?: boolean; berth?: boolean }> = {
+  "Alimos": { fuel: true, water: true, provisions: true, berth: true },
+  "Aegina": { fuel: true, water: true, provisions: true, berth: true },
+  "Agistri": { fuel: false, water: true, provisions: true, berth: true },
+  "Poros": { fuel: true, water: true, provisions: true, berth: true },
+  "Hydra": { fuel: false, water: true, provisions: true, berth: true },
+  "Spetses": { fuel: true, water: true, provisions: true, berth: true },
+  "Ermioni": { fuel: true, water: true, provisions: true, berth: true },
+  "Lavrio": { fuel: true, water: true, provisions: true, berth: true },
+  "Kea": { fuel: true, water: true, provisions: true, berth: true },
+  "Kythnos": { fuel: false, water: true, provisions: true, berth: true },
+  "Syros": { fuel: true, water: true, provisions: true, berth: true },
+  "Mykonos": { fuel: true, water: true, provisions: true, berth: true },
+  "Paros": { fuel: true, water: true, provisions: true, berth: true },
+  "Naxos": { fuel: true, water: true, provisions: true, berth: true },
+  "Ios": { fuel: true, water: true, provisions: true, berth: true },
+  "Milos": { fuel: true, water: true, provisions: true, berth: true },
+  "Sifnos": { fuel: false, water: true, provisions: true, berth: true },
+  "Serifos": { fuel: false, water: true, provisions: true, berth: true },
+};
+
+/* ========= Wikipedia helper (richer) ========= */
+type WikiCard = {
+  title: string;
+  summary: string;
+  imageUrl?: string;
+  gallery?: string[];
+  coords?: { lat: number; lon: number };
+  sourceUrl?: string;
+  related?: { title: string; thumb?: string }[];
+};
+async function fetchWikiJSON(url: string) {
+  const r = await fetch(url, { headers: { accept: "application/json" } });
+  if (!r.ok) throw new Error("wiki fetch");
+  return r.json();
+}
+function encTitle(s: string) {
+  return encodeURIComponent(s.replace(/\s+/g, "_"));
+}
+async function fetchWikiCard(placeName: string): Promise<WikiCard> {
+  const langs = ["el", "en"];
+  const base = (lang: string) => `https://${lang}.wikipedia.org/api/rest_v1`;
+
+  // summary
+  let summaryData: any = null;
+  for (const lang of langs) {
     try {
-      const r = await fetch(url, { headers: { accept: "application/json" } });
-      if (!r.ok) continue;
-      const j = await r.json();
-      return {
-        title: j.title ?? placeName,
-        summary: j.extract ?? "",
-        imageUrl: j.thumbnail?.source,
-        sourceUrl: j.content_urls?.desktop?.page
-      };
+      summaryData = await fetchWikiJSON(`${base(lang)}/page/summary/${encTitle(placeName)}`);
+      if (summaryData?.title) break;
     } catch {}
   }
-  return { title: placeName, summary: "" };
+
+  const card: WikiCard = {
+    title: summaryData?.title ?? placeName,
+    summary: summaryData?.extract ?? "",
+    imageUrl: summaryData?.thumbnail?.source,
+    coords: summaryData?.coordinates
+      ? { lat: summaryData.coordinates.lat, lon: summaryData.coordinates.lon }
+      : undefined,
+    sourceUrl: summaryData?.content_urls?.desktop?.page,
+    gallery: [],
+    related: [],
+  };
+
+  // media
+  try {
+    const lang = summaryData?.lang ?? "en";
+    const media = await fetchWikiJSON(`${base(lang)}/page/media/${encTitle(card.title)}`);
+    const pics: string[] = [];
+    for (const item of media?.items ?? []) {
+      if (item?.type === "image") {
+        const src =
+          item?.srcset?.[item.srcset.length - 1]?.src ||
+          item?.src ||
+          item?.thumbnail?.source;
+        if (src) pics.push(src);
+      }
+    }
+    card.gallery = Array.from(new Set([...(card.imageUrl ? [card.imageUrl] : []), ...pics])).slice(0, 8);
+    if (!card.imageUrl && card.gallery?.length) card.imageUrl = card.gallery[0];
+  } catch {}
+
+  // related
+  try {
+    const lang = summaryData?.lang ?? "en";
+    const rel = await fetchWikiJSON(`${base(lang)}/page/related/${encTitle(card.title)}`);
+    card.related = (rel?.pages ?? [])
+      .map((p: any) => ({
+        title: p?.titles?.display ?? p?.title,
+        thumb: p?.thumbnail?.source,
+      }))
+      .filter((x: any) => !!x.title)
+      .slice(0, 8);
+  } catch {}
+
+  return card;
+}
+
+/* ========= Best-time & ETA ========= */
+function suggestWindow(region: RegionKey, hours: number) {
+  // Cyclades: πρωινά λόγω μελτεμιού
+  if (region === "Cyclades") return hours <= 2.5 ? "08:00–11:00" : "08:00–12:30";
+  // Saronic/Ionian protected
+  if (region === "Saronic" || region === "Ionian") return hours <= 1.8 ? "09:00–10:45" : "09:00–12:00";
+  // default
+  return hours <= 2 ? "09:00–11:00" : "09:00–12:30";
 }
 
 /* ========= Main ========= */
@@ -383,9 +491,14 @@ function AIPlannerInner() {
   const [yachtType, setYachtType] = useState<YachtType>("Motor");
   const [speed, setSpeed] = useState<number>(20);
   const [lph, setLph] = useState<number>(180);
+  const [fuelPrice, setFuelPrice] = useState<number>(1.8); // €/L
+  const [depTime, setDepTime] = useState<string>("09:00");
   const [prefs, setPrefs] = useState<string[]>([]);
   const [plan, setPlan] = useState<DayCard[] | null>(null);
   const yacht: Yacht = { type: yachtType, speed, lph };
+
+  // thumbs cache (destination -> img)
+  const [thumbs, setThumbs] = useState<Record<string, string | undefined>>({});
 
   // Region mode
   const [start, setStart] = useState<string>("Alimos");
@@ -429,6 +542,7 @@ function AIPlannerInner() {
       setMode, setStartDate, setYachtType, setSpeed, setLph,
       setStart, setEnd, setDays, setRegionMode, setVias,
       setCustomStart, setCustomDays, setCustomDayStops,
+      setFuelPrice, setDepTime
     });
     const hasParams = Array.from(searchParams.keys()).length > 0;
     if (hasParams && autogen) {
@@ -444,6 +558,7 @@ function AIPlannerInner() {
   function removeVia(i: number) { setVias((v) => v.filter((_, idx) => idx !== i)); }
   function setCustomStopAt(i: number, val: string) { setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x))); }
 
+  /* ======= Generate ======= */
   function handleGenerate(e?: React.FormEvent) {
     e?.preventDefault?.();
     if (!ready) { alert("Φορτώνω ports… δοκίμασε ξανά σε λίγο."); return; }
@@ -467,7 +582,19 @@ function AIPlannerInner() {
     for (let i = 0; i < coords.length - 1; i++) {
       const nm = Math.max(1, Math.round(haversineNM(coords[i], coords[i + 1])));
       const { hours, fuelL } = legStats(nm, yacht);
-      legs.push({ from: namesSeq![i], to: namesSeq![i + 1], nm, hours, fuelL });
+      const window = suggestWindow(region, hours);
+      const dep = depTime || "09:00";
+      const arr = addHoursToTime(dep, hours);
+      const cost = yachtType === "Motor" ? Math.round(fuelL * fuelPrice) : 0;
+      legs.push({
+        from: namesSeq![i],
+        to: namesSeq![i + 1],
+        nm,
+        hours,
+        fuelL,
+        cost,
+        eta: { dep, arr, window }
+      });
     }
 
     const totalDays = (namesSeq?.length ?? 1) - 1;
@@ -487,14 +614,30 @@ function AIPlannerInner() {
         prefs.includes("family")    ? "Αμμουδιές & μικρότερα σκέλη." : "",
         prefs.includes("gastronomy")? "Κράτηση σε παραθαλάσσια ταβέρνα." : "",
       ].filter(Boolean).join(" ");
-      cards.push({ day: d + 1, date, leg, notes });
+      cards.push({ day: d + 1, date, leg, notes, userNotes: {} });
     }
     setPlan(cards);
+
+    // prefetch thumbs for destinations
+    (async () => {
+      const uniq = Array.from(new Set(legs.map(l => l.to)));
+      const next: Record<string, string | undefined> = {};
+      for (const t of uniq) {
+        try {
+          const c = await fetchWikiCard(t);
+          next[t] = c.imageUrl;
+        } catch {
+          next[t] = undefined;
+        }
+      }
+      setThumbs(next);
+    })();
 
     const qs = buildQueryFromState({
       mode, startDate, yachtType, speed, lph,
       start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
+      fuelPrice, depTime
     });
     router.replace(`/ai?${qs}`, { scroll: false });
   }
@@ -506,6 +649,7 @@ function AIPlannerInner() {
       mode, startDate, yachtType, speed, lph,
       start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
+      fuelPrice, depTime
     });
     const url = `${window.location.origin}/ai?${qs}`;
     try {
@@ -527,9 +671,10 @@ function AIPlannerInner() {
     const nm = plan.reduce((sum, d) => sum + (d.leg?.nm || 0), 0);
     const hrsNum = plan.reduce((sum, d) => sum + (d.leg?.hours || 0), 0);
     const fuel = plan.reduce((sum, d) => sum + (d.leg?.fuelL || 0), 0);
+    const cost = plan.reduce((sum, d) => sum + (d.leg?.cost || 0), 0);
     const hh = Math.floor(hrsNum);
     const mm = Math.round((hrsNum - hh) * 60);
-    return { nm, hrs: `${hh}h ${mm}m`, fuel };
+    return { nm, hrs: `${hh}h ${mm}m`, fuel, cost };
   }, [plan]);
 
   const mapPoints = useMemo(() => {
@@ -592,12 +737,24 @@ function AIPlannerInner() {
 
   /* ======= Wikipedia modal state + open ======= */
   const [infoOpen, setInfoOpen] = useState(false);
-  const [infoData, setInfoData] = useState<{title:string;summary:string;imageUrl?:string;sourceUrl?:string} | null>(null);
+  const [infoData, setInfoData] = useState<WikiCard | null>(null);
 
   async function openPortInfoByName(name: string) {
     const card = await fetchWikiCard(name);
     setInfoData(card);
     setInfoOpen(true);
+  }
+
+  // update user notes per day
+  function setUserNote(dayIdx: number, key: keyof NonNullable<DayCard["userNotes"]>, value: string) {
+    setPlan((old) => {
+      if (!old) return old;
+      const next = old.map((c) => ({ ...c }));
+      const obj = { ...(next[dayIdx].userNotes ?? {}) };
+      (obj as any)[key] = value;
+      next[dayIdx].userNotes = obj;
+      return next;
+    });
   }
 
   return (
@@ -622,8 +779,8 @@ function AIPlannerInner() {
           </div>
 
           {/* Common controls */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="flex flex-col">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+            <div className="flex flex-col md:col-span-2">
               <label htmlFor="date" className="mb-1 text-xs font-medium text-gray-600">Ημερομηνία αναχώρησης</label>
               <input id="date" type="date" value={startDate || ""} onChange={(e) => setStartDate(e.target.value)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" />
             </div>
@@ -638,11 +795,21 @@ function AIPlannerInner() {
               <input id="speed" type="number" min={4} value={speed} onChange={(e) => setSpeed(parseFloat(e.target.value || "10"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 20" />
             </div>
             {yachtType === "Motor" && (
-              <div className="flex flex-col">
-                <label htmlFor="lph" className="mb-1 text-xs font-medium text-gray-600">Κατανάλωση (L/h)</label>
-                <input id="lph" type="number" min={5} value={lph} onChange={(e) => setLph(parseFloat(e.target.value || "120"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 180" />
-              </div>
+              <>
+                <div className="flex flex-col">
+                  <label htmlFor="lph" className="mb-1 text-xs font-medium text-gray-600">Κατανάλωση (L/h)</label>
+                  <input id="lph" type="number" min={5} value={lph} onChange={(e) => setLph(parseFloat(e.target.value || "120"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 180" />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="fuel" className="mb-1 text-xs font-medium text-gray-600">Τιμή καυσίμου (€/L)</label>
+                  <input id="fuel" type="number" min={0} step="0.01" value={fuelPrice} onChange={(e) => setFuelPrice(parseFloat(e.target.value || "1.8"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 1.80" />
+                </div>
+              </>
             )}
+            <div className="flex flex-col">
+              <label htmlFor="dep" className="mb-1 text-xs font-medium text-gray-600">Ώρα αναχώρησης</label>
+              <input id="dep" type="time" value={depTime} onChange={(e) => setDepTime(e.target.value || "09:00")} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" />
+            </div>
           </div>
 
           {/* REGION MODE */}
@@ -728,7 +895,7 @@ function AIPlannerInner() {
             ))}
           </div>
 
-          {/* Κουμπί Generate (μονό string + id) */}
+          {/* Κουμπί Generate (με id) */}
           <button
             id="generate-btn"
             type="submit"
@@ -813,90 +980,213 @@ function AIPlannerInner() {
             {totals && (
               <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium text-brand-navy">Trip summary</div>
-                <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-5">
                   <div><div className="text-xs print-subtle">Route</div><div className="font-medium">{mode === "Region" ? `${start} → ${end}` : `${customStart}`}</div></div>
                   <div><div className="text-xs print-subtle">Region</div><div className="font-medium">{mode === "Region" ? (regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region) : "Custom"}</div></div>
                   <div><div className="text-xs print-subtle">Distance</div><div className="font-medium">{totals.nm} nm</div></div>
                   <div><div className="text-xs print-subtle">Underway</div><div className="font-medium">{totals.hrs}</div></div>
+                  {yachtType === "Motor" && (
+                    <div><div className="text-xs print-subtle">Fuel / Cost</div><div className="font-medium">~{totals.fuel} L • ~€{totals.cost}</div></div>
+                  )}
                 </div>
-                {yachtType === "Motor" && (
-                  <div className="mt-2 text-sm print-subtle">
-                    Estimated fuel: <b>~{totals.fuel} L</b> (speed {speed} kn • {lph} L/h)
-                  </div>
-                )}
               </div>
             )}
 
             {/* DAY CARDS */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 print-grid">
-              {plan.map((d) => (
-                <div key={d.day} className="rounded-2xl bg-white p-4 shadow-sm print-card">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-slate-500">Day {d.day} • {d.date}</div>
-                    {d.leg && <div className="text-xs rounded-full bg-brand-gold/20 px-2 py-1 text-brand-navy">{d.leg.nm} nm</div>}
-                  </div>
-                  {d.leg ? (
-                    <>
-                      <div className="mt-1 text-lg font-semibold text-brand-navy">
-                        {d.leg.from} →{" "}
-                        <button
-                          type="button"
-                          className="underline decoration-dotted underline-offset-4 hover:text-brand-gold"
-                          onClick={() => openPortInfoByName(d.leg!.to)}
-                          title="Πληροφορίες προορισμού (Wikipedia)"
-                        >
-                          {d.leg.to}
-                        </button>
+              {plan.map((d, idx) => {
+                const facilities = PORT_FACTS[d.leg?.to ?? ""] || {};
+                const destName = d.leg?.to ?? "";
+                return (
+                  <div key={d.day} className="rounded-2xl bg-white p-4 shadow-sm print-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm text-slate-500">Day {d.day} • {d.date}</div>
+                        {d.leg && <div className="text-xs rounded-full bg-brand-gold/20 inline-block mt-1 px-2 py-1 text-brand-navy">{d.leg.nm} nm</div>}
                       </div>
-                      <p className="mt-1 text-sm text-slate-600">
-                        ~{formatHoursHM(d.leg.hours)} underway
-                        {yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel</>} • {speed} kn
-                      </p>
-                    </>
-                  ) : (
-                    <div className="mt-1 text-lg font-semibold text-brand-navy">Leisure / Lay Day</div>
-                  )}
-                  {d.notes && <p className="mt-2 text-sm text-slate-600">{d.notes}</p>}
-                </div>
-              ))}
+                      {thumbs[destName] && (
+                        <img src={thumbs[destName]} alt={destName} className="h-16 w-24 rounded-md object-cover" />
+                      )}
+                    </div>
+
+                    {d.leg ? (
+                      <>
+                        <div className="mt-2 text-lg font-semibold text-brand-navy">
+                          {d.leg.from} →{" "}
+                          <button
+                            type="button"
+                            className="underline decoration-dotted underline-offset-4 hover:text-brand-gold"
+                            onClick={() => openPortInfoByName(destName)}
+                            title="Πληροφορίες προορισμού (Wikipedia)"
+                          >
+                            {destName}
+                          </button>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          ~{formatHoursHM(d.leg.hours)} underway
+                          {yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel • ~€{d.leg.cost}</>} • {speed} kn
+                        </p>
+
+                        {/* Best window & ETA */}
+                        {d.leg.eta && (
+                          <div className="mt-2 text-xs text-slate-600">
+                            Suggested window: <b>{d.leg.eta.window}</b> • Depart <b>{d.leg.eta.dep}</b> → Arrive <b>{d.leg.eta.arr}</b>
+                          </div>
+                        )}
+
+                        {/* Facilities chips */}
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          {facilities.fuel && <span className="rounded-full bg-slate-100 px-2 py-1">⛽ Fuel</span>}
+                          {facilities.water && <span className="rounded-full bg-slate-100 px-2 py-1">🚰 Water</span>}
+                          {facilities.provisions && <span className="rounded-full bg-slate-100 px-2 py-1">🛒 Provisions</span>}
+                          {facilities.berth && <span className="rounded-full bg-slate-100 px-2 py-1">⚓ Berths</span>}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-1 text-lg font-semibold text-brand-navy">Leisure / Lay Day</div>
+                    )}
+
+                    {d.notes && <p className="mt-3 text-sm text-slate-600">{d.notes}</p>}
+
+                    {/* Actions/Notes */}
+                    <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="w-28 text-slate-500">Marina booking</span>
+                        <input
+                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
+                          placeholder="π.χ. call Port Police / marina office"
+                          value={d.userNotes?.marina ?? ""}
+                          onChange={(e) => setUserNote(idx, "marina", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-28 text-slate-500">Food</span>
+                        <input
+                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
+                          placeholder="εστιατόριο/ταβέρνα"
+                          value={d.userNotes?.food ?? ""}
+                          onChange={(e) => setUserNote(idx, "food", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-28 text-slate-500">Beach / POI</span>
+                        <input
+                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
+                          placeholder="παραλία / αξιοθέατο"
+                          value={d.userNotes?.beach ?? ""}
+                          onChange={(e) => setUserNote(idx, "beach", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
       </section>
 
-      {/* ===== Wikipedia Modal ===== */}
+      {/* ===== Wikipedia Modal (rich) ===== */}
       {infoOpen && infoData && (
-        <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/40 p-4" onClick={() => setInfoOpen(false)}>
+        <div
+          className="fixed inset-0 z-[1000] grid place-items-center bg-black/40 p-4"
+          onClick={() => setInfoOpen(false)}
+        >
           <div
-            className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl"
+            className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4">
-              <h3 className="text-lg font-semibold">{infoData.title}</h3>
-              <button onClick={() => setInfoOpen(false)} className="rounded-md border px-2 py-1 text-sm">Close</button>
-            </div>
             {infoData.imageUrl && (
-              <img
-                src={infoData.imageUrl}
-                alt={infoData.title}
-                className="mt-3 w-full rounded-lg object-cover"
-              />
+              <div className="h-56 w-full overflow-hidden bg-slate-100">
+                <img
+                  src={infoData.imageUrl}
+                  alt={infoData.title}
+                  className="h-full w-full object-cover"
+                />
+              </div>
             )}
-            {infoData.summary && (
-              <p className="mt-3 text-sm text-slate-700">
-                {infoData.summary}
-              </p>
-            )}
-            {infoData.sourceUrl && (
-              <a
-                href={infoData.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-block text-xs text-slate-500 underline"
-              >
-                Source: Wikipedia
-              </a>
-            )}
+
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <h3 className="text-xl font-semibold">{infoData.title}</h3>
+                <button
+                  onClick={() => setInfoOpen(false)}
+                  className="rounded-md border px-2 py-1 text-sm"
+                >
+                  Close
+                </button>
+              </div>
+
+              {infoData.summary && (
+                <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                  {infoData.summary}
+                </p>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                {infoData.coords && (
+                  <>
+                    <span className="rounded-full bg-slate-100 px-2 py-1">
+                      {infoData.coords.lat.toFixed(4)}°, {infoData.coords.lon.toFixed(4)}°
+                    </span>
+                    <a
+                      className="rounded-full border px-2 py-1 hover:bg-slate-50"
+                      href={`https://www.google.com/maps?q=${infoData.coords.lat},${infoData.coords.lon}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View on map
+                    </a>
+                  </>
+                )}
+                {infoData.sourceUrl && (
+                  <a
+                    className="rounded-full border px-2 py-1 hover:bg-slate-50"
+                    href={infoData.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Source: Wikipedia
+                  </a>
+                )}
+              </div>
+
+              {infoData.gallery && infoData.gallery.length > 1 && (
+                <div className="mt-4">
+                  <div className="mb-2 text-sm font-medium text-slate-700">Gallery</div>
+                  <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+                    {infoData.gallery.slice(0, 8).map((g, i) => (
+                      <img
+                        key={`${g}-${i}`}
+                        src={g}
+                        alt={`img-${i}`}
+                        className="h-20 w-full rounded-md object-cover"
+                        loading="lazy"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {infoData.related && infoData.related.length > 0 && (
+                <div className="mt-4">
+                  <div className="mb-2 text-sm font-medium text-slate-700">Nearby / Related</div>
+                  <div className="flex flex-wrap gap-2">
+                    {infoData.related.map((r, i) => (
+                      <button
+                        key={`${r.title}-${i}`}
+                        onClick={() => openPortInfoByName(r.title)}
+                        className="flex items-center gap-2 rounded-full border px-2 py-1 text-sm hover:bg-slate-50"
+                        title="Άνοιγμα προεπισκόπησης"
+                      >
+                        {r.thumb && <img src={r.thumb} alt="" className="h-5 w-5 rounded-full object-cover" />}
+                        <span>{r.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
