@@ -1,7 +1,7 @@
 "use client";
 
 import RouteMapClient from "./RouteMapClient";
-import { Suspense, useMemo, useState, useEffect, useId } from "react";
+import { Suspense, useMemo, useState, useEffect, useId, useRef } from "react";
 import type React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
@@ -12,23 +12,17 @@ export const dynamic = "force-dynamic";
 /* ========= Types ========= */
 type YachtType = "Motor" | "Sailing";
 type Yacht = { type: YachtType; speed: number; lph: number };
-type Leg = { from: string; to: string; nm: number; hours: number; fuelL: number };
+type Leg = {
+  from: string; to: string; nm: number; hours: number; fuelL: number;
+  cost?: number; eta?: { dep: string; arr: string; window: string }
+};
 type DayCard = {
-  day: number;
-  date: string;
-  leg?: Leg;
-  notes?: string;
-  windowNote?: string;
-  meteo?: { avgWindKn?: number; maxWindKn?: number; avgWaveM?: number; maxWaveM?: number };
+  day: number; date: string; leg?: Leg; notes?: string;
+  userNotes?: { marina?: string; food?: string; beach?: string };
 };
 type RegionKey =
-  | "Saronic"
-  | "Cyclades"
-  | "Ionian"
-  | "Dodecanese"
-  | "Sporades"
-  | "NorthAegean"
-  | "Crete";
+  | "Saronic" | "Cyclades" | "Ionian" | "Dodecanese"
+  | "Sporades" | "NorthAegean" | "Crete";
 type PlannerMode = "Region" | "Custom";
 
 type PortCoord = { id?: string; name: string; lat: number; lon: number; aliases?: string[] };
@@ -44,47 +38,25 @@ function haversineNM(a: PortCoord, b: PortCoord) {
   const dLon = toRad(b.lon - a.lon);
   const la1 = toRad(a.lat);
   const la2 = toRad(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) ** 2;
+  const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 function legStats(nm: number, yacht: Yacht) {
-  const hours = (nm / yacht.speed) * 1.15;
+  const hours = (nm / yacht.speed) * 1.15; // +15% περιθώριο
   const fuelL = yacht.type === "Motor" ? hours * yacht.lph : 0;
   return { hours: +hours.toFixed(2), fuelL: Math.round(fuelL) };
 }
 function addDaysISO(iso: string, plus: number) {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + plus);
+  const d = new Date(iso); d.setDate(d.getDate() + plus);
   return d.toISOString().slice(0, 10);
 }
-const mpsToKn = (mps: number) => mps * 1.943844;
-
-/* window rules: επιστρέφει συμβουλή ανά leg */
-function suggestWindow(avgWindKn?: number, maxWindKn?: number, avgWaveM?: number, maxWaveM?: number) {
-  if (
-    avgWindKn == null ||
-    maxWindKn == null ||
-    avgWaveM == null ||
-    maxWaveM == null ||
-    Number.isNaN(avgWindKn) ||
-    Number.isNaN(maxWindKn) ||
-    Number.isNaN(avgWaveM) ||
-    Number.isNaN(maxWaveM)
-  ) {
-    return "";
-  }
-  // thresholds (συντηρητικά για άνεση/ασφάλεια)
-  if (maxWaveM >= 3.5 || maxWindKn >= 28) return "Απέφυγε σήμερα – περίμενε βελτίωση.";
-  if (avgWaveM >= 2.5 || avgWindKn >= 20) return "Προτίμησε πρωινές ώρες (πριν ενισχυθεί).";
-  if (avgWaveM >= 1.5 || avgWindKn >= 15) return "Καλύτερα πρωί/νωρίς απόγευμα.";
-  return "Ευέλικτο παράθυρο (όλη μέρα).";
-}
-function formatHoursHM(hours: number) {
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
-  return `${h}h ${m}m`;
+function pad2(n: number) { return n.toString().padStart(2, "0"); }
+function addHoursToTime(startHHmm: string, hoursFloat: number) {
+  const [hh, mm] = startHHmm.split(":").map((x) => parseInt(x, 10));
+  const totalMin = Math.round(hh * 60 + mm + hoursFloat * 60);
+  const h2 = Math.floor((totalMin / 60) % 24);
+  const m2 = totalMin % 60;
+  return `${pad2(h2)}:${pad2(m2)}`;
 }
 
 /* ========= Regions ========= */
@@ -131,11 +103,7 @@ function AutoCompleteInput({
     return options.filter((o) => o.toLowerCase().includes(v)).slice(0, 12);
   }, [value, options, showAll]);
 
-  function pick(v: string) {
-    onChange(v);
-    setOpen(false);
-    setShowAll(false);
-  }
+  function pick(v: string) { onChange(v); setOpen(false); setShowAll(false); }
   function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!open && (e.key === "ArrowDown" || e.key === "Enter")) { setOpen(true); return; }
     if (e.key === "ArrowDown") setHighlight((h) => Math.min(h + 1, filtered.length - 1));
@@ -201,6 +169,15 @@ function AutoCompleteInput({
 }
 
 /* ========= Query helpers ========= */
+const safeEncode = (obj: unknown) =>
+  encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(obj)))));
+const safeDecode = <T,>(s: string | null): T | null => {
+  if (!s) return null;
+  try {
+    return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(s))))) as T;
+  } catch { return null; }
+};
+
 function encodeArr(arr: string[]) { return arr.map((s) => encodeURIComponent(s)).join(","); }
 function decodeArr(s: string | null): string[] { if (!s) return []; return s.split(",").map((x) => decodeURIComponent(x)).filter(Boolean); }
 
@@ -208,6 +185,8 @@ function buildQueryFromState(state: {
   mode: PlannerMode; startDate: string; yachtType: YachtType; speed: number; lph: number;
   start: string; end: string; days: number; regionMode: "Auto" | RegionKey; vias: string[];
   customStart: string; customDays: number; customDayStops: string[];
+  fuelPrice: number; depTime: string; weatherAwareWin: boolean;
+  notesPayload?: any;
 }) {
   const q = new URLSearchParams();
   q.set("mode", state.mode);
@@ -215,6 +194,9 @@ function buildQueryFromState(state: {
   q.set("yt", state.yachtType);
   q.set("speed", String(state.speed));
   if (state.yachtType === "Motor") q.set("lph", String(state.lph));
+  q.set("fuel", String(state.fuelPrice));
+  q.set("dep", state.depTime);
+  q.set("wx", state.weatherAwareWin ? "1" : "0");
   if (state.mode === "Region") {
     q.set("start", state.start);
     q.set("end", state.end);
@@ -226,6 +208,7 @@ function buildQueryFromState(state: {
     q.set("cdays", String(state.customDays));
     if (state.customDayStops.length) q.set("cstops", encodeArr(state.customDayStops));
   }
+  if (state.notesPayload) q.set("notes", safeEncode(state.notesPayload));
   q.set("autogen", "1");
   return q.toString();
 }
@@ -236,6 +219,7 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
   setStart: (v: string) => void; setEnd: (v: string) => void; setDays: (v: number) => void;
   setRegionMode: (v: "Auto" | RegionKey) => void; setVias: (v: string[]) => void;
   setCustomStart: (v: string) => void; setCustomDays: (v: number) => void; setCustomDayStops: (v: string[]) => void;
+  setFuelPrice: (v: number) => void; setDepTime: (v: string) => void; setWeatherAwareWin: (v: boolean) => void;
 }) {
   const mode = (sp.get("mode") as PlannerMode) || "Region";
   setters.setMode(mode);
@@ -251,6 +235,15 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
 
   const lph = Number(sp.get("lph") || 180);
   setters.setLph(lph);
+
+  const fuelPrice = Number(sp.get("fuel") || 1.8);
+  setters.setFuelPrice(fuelPrice);
+
+  const dep = sp.get("dep") || "09:00";
+  setters.setDepTime(dep);
+
+  const wx = sp.get("wx") === "1";
+  setters.setWeatherAwareWin(wx);
 
   if (mode === "Region") {
     const start = sp.get("start") || "Alimos";
@@ -275,14 +268,12 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
   }
 
   const autogen = sp.get("autogen") === "1";
-  return { mode, autogen };
+  return { mode, autogen, rawNotes: sp.get("notes") || null };
 }
 
 /* ========= Route builders ========= */
 function nearestIndexInRing(
-  ring: string[],
-  target: PortCoord,
-  findPortStrict: (name: string) => PortCoord | null
+  ring: string[], target: PortCoord, findPortStrict: (name: string) => PortCoord | null
 ) {
   let best = 0, bestD = Number.POSITIVE_INFINITY;
   for (let i = 0; i < ring.length; i++) {
@@ -293,11 +284,7 @@ function nearestIndexInRing(
   return best;
 }
 function buildRouteRegion(
-  start: string,
-  end: string,
-  days: number,
-  region: RegionKey,
-  vias: string[],
+  start: string, end: string, days: number, region: RegionKey, vias: string[],
   findPortStrict: (name: string) => PortCoord | null
 ) {
   const ring = BANK[region] ?? [];
@@ -347,42 +334,109 @@ function buildRouteRegion(
   while (path.length < days + 1) path.push(last);
   return path;
 }
-function buildRouteCustomByDays(
-  start: string,
-  dayStops: string[],
-  findPortStrict: (name: string) => PortCoord | null
-) {
+function buildRouteCustomByDays(start: string, dayStops: string[], findPortStrict: (name: string) => PortCoord | null) {
   const seq = [start, ...dayStops].map(s => s.trim()).filter(Boolean);
   const allValid = seq.every(s => !!findPortStrict(s));
   if (!allValid || seq.length < 2) return null;
   return seq;
 }
+function formatHoursHM(hours: number) {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}h ${m}m`;
+}
 
-/* ========= Wikipedia helper ========= */
-async function fetchWikiCard(placeName: string): Promise<{
-  title: string; summary: string; imageUrl?: string; sourceUrl?: string;
-}> {
-  const enc = (s: string) => encodeURIComponent(s.replace(/\s+/g, "_"));
-  const tries = [
-    `https://el.wikipedia.org/api/rest_v1/page/summary/${enc(placeName)}`,
-    `https://en.wikipedia.org/api/rest_v1/page/summary/${enc(placeName)}`
-  ];
-  for (const url of tries) {
+/* ========= Practical facilities (seed) ========= */
+const PORT_FACTS: Record<string, { fuel?: boolean; water?: boolean; provisions?: boolean; berth?: boolean }> = {
+  "Alimos": { fuel: true, water: true, provisions: true, berth: true },
+  "Aegina": { fuel: true, water: true, provisions: true, berth: true },
+  "Agistri": { fuel: false, water: true, provisions: true, berth: true },
+  "Poros": { fuel: true, water: true, provisions: true, berth: true },
+  "Hydra": { fuel: false, water: true, provisions: true, berth: true },
+  "Spetses": { fuel: true, water: true, provisions: true, berth: true },
+  "Ermioni": { fuel: true, water: true, provisions: true, berth: true },
+  "Porto Cheli": { fuel: true, water: true, provisions: true, berth: true },
+  "Lavrio": { fuel: true, water: true, provisions: true, berth: true },
+  "Kea": { fuel: true, water: true, provisions: true, berth: true },
+  "Kythnos": { fuel: false, water: true, provisions: true, berth: true },
+  "Syros": { fuel: true, water: true, provisions: true, berth: true },
+  "Mykonos": { fuel: true, water: true, provisions: true, berth: true },
+  "Paros": { fuel: true, water: true, provisions: true, berth: true },
+  "Naxos": { fuel: true, water: true, provisions: true, berth: true },
+  "Ios": { fuel: true, water: true, provisions: true, berth: true },
+  "Milos": { fuel: true, water: true, provisions: true, berth: true },
+  "Sifnos": { fuel: false, water: true, provisions: true, berth: true },
+  "Serifos": { fuel: false, water: true, provisions: true, berth: true },
+};
+
+/* ========= Wikipedia helper (richer) ========= */
+type WikiCard = {
+  title: string; summary: string; imageUrl?: string; gallery?: string[];
+  coords?: { lat: number; lon: number }; sourceUrl?: string;
+  related?: { title: string; thumb?: string }[];
+};
+async function fetchWikiJSON(url: string) {
+  const r = await fetch(url, { headers: { accept: "application/json" } });
+  if (!r.ok) throw new Error("wiki fetch");
+  return r.json();
+}
+function encTitle(s: string) { return encodeURIComponent(s.replace(/\s+/g, "_")); }
+async function fetchWikiCard(placeName: string): Promise<WikiCard> {
+  const langs = ["el", "en"];
+  const base = (lang: string) => `https://${lang}.wikipedia.org/api/rest_v1`;
+
+  // summary
+  let summaryData: any = null;
+  for (const lang of langs) {
     try {
-      const r = await fetch(url, { headers: { accept: "application/json" } });
-      if (!r.ok) continue;
-      const j = await r.json();
-      // πιο πλούσιο summary αν υπάρχει
-      const summary = j.extract ?? j.description ?? "";
-      return {
-        title: j.title ?? placeName,
-        summary,
-        imageUrl: j.thumbnail?.source,
-        sourceUrl: j.content_urls?.desktop?.page
-      };
+      summaryData = await fetchWikiJSON(`${base(lang)}/page/summary/${encTitle(placeName)}`);
+      if (summaryData?.title) break;
     } catch {}
   }
-  return { title: placeName, summary: "" };
+
+  const card: WikiCard = {
+    title: summaryData?.title ?? placeName,
+    summary: summaryData?.extract ?? "",
+    imageUrl: summaryData?.thumbnail?.source,
+    coords: summaryData?.coordinates ? { lat: summaryData.coordinates.lat, lon: summaryData.coordinates.lon } : undefined,
+    sourceUrl: summaryData?.content_urls?.desktop?.page,
+    gallery: [],
+    related: [],
+  };
+
+  // media
+  try {
+    const lang = summaryData?.lang ?? "en";
+    const media = await fetchWikiJSON(`${base(lang)}/page/media/${encTitle(card.title)}`);
+    const pics: string[] = [];
+    for (const item of media?.items ?? []) {
+      if (item?.type === "image") {
+        const src = item?.srcset?.[item.srcset.length - 1]?.src || item?.src || item?.thumbnail?.source;
+        if (src) pics.push(src);
+      }
+    }
+    card.gallery = Array.from(new Set([...(card.imageUrl ? [card.imageUrl] : []), ...pics])).slice(0, 8);
+    if (!card.imageUrl && card.gallery?.length) card.imageUrl = card.gallery[0];
+  } catch {}
+
+  // related
+  try {
+    const lang = summaryData?.lang ?? "en";
+    const rel = await fetchWikiJSON(`${base(lang)}/page/related/${encTitle(card.title)}`);
+    card.related = (rel?.pages ?? []).map((p: any) => ({
+      title: p?.titles?.display ?? p?.title,
+      thumb: p?.thumbnail?.source,
+    })).filter((x: any) => !!x.title).slice(0, 8);
+  } catch {}
+
+  return card;
+}
+
+/* ========= Best-time & ETA ========= */
+function suggestWindow(region: RegionKey, hours: number, weatherAware: boolean) {
+  if (region === "Cyclades") return weatherAware ? "07:30–11:00" : (hours <= 2.5 ? "08:00–11:00" : "08:00–12:30");
+  if (region === "Saronic" || region === "Ionian") return weatherAware ? "08:00–10:30" : (hours <= 1.8 ? "09:00–10:45" : "09:00–12:00");
+  return weatherAware ? "08:00–12:00" : (hours <= 2 ? "09:00–11:00" : "09:00–12:30");
 }
 
 /* ========= Main ========= */
@@ -395,9 +449,7 @@ function AIPlannerInner() {
   const findPort = (input: string): PortCoord | null => {
     if (!input) return null;
     const p = findPortRaw(input);
-    return p
-      ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases })
-      : null;
+    return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
   };
 
   const PORT_OPTIONS = useMemo(() => {
@@ -414,13 +466,15 @@ function AIPlannerInner() {
   const [yachtType, setYachtType] = useState<YachtType>("Motor");
   const [speed, setSpeed] = useState<number>(20);
   const [lph, setLph] = useState<number>(180);
+  const [fuelPrice, setFuelPrice] = useState<number>(1.8); // €/L
+  const [depTime, setDepTime] = useState<string>("09:00");
+  const [weatherAwareWin, setWeatherAwareWin] = useState<boolean>(false);
   const [prefs, setPrefs] = useState<string[]>([]);
   const [plan, setPlan] = useState<DayCard[] | null>(null);
   const yacht: Yacht = { type: yachtType, speed, lph };
 
-  // weather control for map (opt-in from page)
-  const [weatherAwareWin, setWeatherAwareWin] = useState<boolean>(false);
-  const [legMeteo, setLegMeteo] = useState<Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }>>([]);
+  // thumbs cache
+  const [thumbs, setThumbs] = useState<Record<string, string | undefined>>({});
 
   // Region mode
   const [start, setStart] = useState<string>("Alimos");
@@ -432,9 +486,7 @@ function AIPlannerInner() {
 
   const [vias, setVias] = useState<string[]>([]);
   const effectiveVias = useMemo(() => {
-    return [...vias]
-      .filter(Boolean)
-      .filter(v => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
+    return [...vias].filter(Boolean).filter(v => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
   }, [vias, start, end]);
 
   // Custom mode
@@ -457,16 +509,21 @@ function AIPlannerInner() {
   const [mapPickMode, setMapPickMode] = useState<MapPick>("Via");
   const [customPickIndex, setCustomPickIndex] = useState<number>(1);
 
+  // Notes parsed from URL (to apply after plan generation)
+  const pendingNotesRef = useRef<any | null>(null);
+
   // Load from URL
   useEffect(() => {
     if (!searchParams || !ready) return;
-    const { autogen } = loadStateFromQuery(searchParams, {
+    const loaded = loadStateFromQuery(searchParams, {
       setMode, setStartDate, setYachtType, setSpeed, setLph,
       setStart, setEnd, setDays, setRegionMode, setVias,
       setCustomStart, setCustomDays, setCustomDayStops,
+      setFuelPrice, setDepTime, setWeatherAwareWin
     });
+    pendingNotesRef.current = safeDecode<any>(loaded.rawNotes || null);
     const hasParams = Array.from(searchParams.keys()).length > 0;
-    if (hasParams && autogen) {
+    if (hasParams && loaded.autogen) {
       try { document.getElementById("generate-btn")?.dispatchEvent(new Event("click", { bubbles: true })); } catch {}
     }
   }, [ready, searchParams]);
@@ -479,6 +536,7 @@ function AIPlannerInner() {
   function removeVia(i: number) { setVias((v) => v.filter((_, idx) => idx !== i)); }
   function setCustomStopAt(i: number, val: string) { setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x))); }
 
+  /* ======= Generate ======= */
   function handleGenerate(e?: React.FormEvent) {
     e?.preventDefault?.();
     if (!ready) { alert("Φορτώνω ports… δοκίμασε ξανά σε λίγο."); return; }
@@ -502,7 +560,11 @@ function AIPlannerInner() {
     for (let i = 0; i < coords.length - 1; i++) {
       const nm = Math.max(1, Math.round(haversineNM(coords[i], coords[i + 1])));
       const { hours, fuelL } = legStats(nm, yacht);
-      legs.push({ from: namesSeq![i], to: namesSeq![i + 1], nm, hours, fuelL });
+      const window = suggestWindow(region, hours, weatherAwareWin);
+      const dep = depTime || "09:00";
+      const arr = addHoursToTime(dep, hours);
+      const cost = yachtType === "Motor" ? Math.round(fuelL * fuelPrice) : 0;
+      legs.push({ from: namesSeq![i], to: namesSeq![i + 1], nm, hours, fuelL, cost, eta: { dep, arr, window } });
     }
 
     const totalDays = (namesSeq?.length ?? 1) - 1;
@@ -522,81 +584,81 @@ function AIPlannerInner() {
         prefs.includes("family")    ? "Αμμουδιές & μικρότερα σκέλη." : "",
         prefs.includes("gastronomy")? "Κράτηση σε παραθαλάσσια ταβέρνα." : "",
       ].filter(Boolean).join(" ");
-      cards.push({ day: d + 1, date, leg, notes });
+      cards.push({ day: d + 1, date, leg, notes, userNotes: {} });
     }
+
+    // apply pending notes from URL (if any)
+    const pending = pendingNotesRef.current as Record<string, any> | null;
+    if (pending && cards.length) {
+      cards.forEach((c, idx) => {
+        const key = String(idx + 1);
+        if (pending[key]) {
+          c.userNotes = { ...(c.userNotes ?? {}), ...pending[key] };
+        }
+      });
+      pendingNotesRef.current = null;
+    }
+
     setPlan(cards);
+
+    // prefetch thumbs for destinations
+    (async () => {
+      const uniq = Array.from(new Set(legs.map(l => l.to)));
+      const next: Record<string, string | undefined> = {};
+      for (const t of uniq) {
+        try { const c = await fetchWikiCard(t); next[t] = c.imageUrl; }
+        catch { next[t] = undefined; }
+      }
+      setThumbs(next);
+    })();
 
     const qs = buildQueryFromState({
       mode, startDate, yachtType, speed, lph,
       start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
+      fuelPrice, depTime, weatherAwareWin,
+      notesPayload: null, // αρχικά χωρίς notes
     });
     router.replace(`/ai?${qs}`, { scroll: false });
   }
 
   function handlePrint() { window.print(); }
 
+  function buildNotesPayload() {
+    if (!plan?.length) return null;
+    const obj: Record<string, any> = {};
+    plan.forEach((c) => { if (c.userNotes && (c.userNotes.marina || c.userNotes.food || c.userNotes.beach)) obj[String(c.day)] = c.userNotes; });
+    return Object.keys(obj).length ? obj : null;
+  }
+
   async function handleCopyLink() {
+    const notesPayload = buildNotesPayload();
     const qs = buildQueryFromState({
       mode, startDate, yachtType, speed, lph,
       start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
+      fuelPrice, depTime, weatherAwareWin,
+      notesPayload
     });
     const url = `${window.location.origin}/ai?${qs}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      alert("Link copied!");
-    } catch {
+    try { await navigator.clipboard.writeText(url); alert("Link copied!"); }
+    catch {
       const tmp = document.createElement("textarea");
-      tmp.value = url;
-      document.body.appendChild(tmp);
-      tmp.select();
-      document.execCommand("copy");
-      document.body.removeChild(tmp);
+      tmp.value = url; document.body.appendChild(tmp); tmp.select();
+      document.execCommand("copy"); document.body.removeChild(tmp);
       alert("Link copied!");
     }
   }
-
-  // όταν έρχονται τα μετεωρολογικά ανά leg από το RouteMapClient, τα “δένουμε” στα DayCards
-  useEffect(() => {
-    if (!plan?.length) return;
-    if (!legMeteo?.length) return;
-    setPlan((old) => {
-      if (!old) return old;
-      const next = old.map((d, i) => {
-        const lm = legMeteo.find(x => x.index === i);
-        if (!d.leg || !lm) return d;
-        const avgKn = mpsToKn(lm.avgWind);
-        const maxKn = mpsToKn(lm.maxWind);
-        const win = suggestWindow(
-          Number.isFinite(avgKn) ? avgKn : undefined,
-          Number.isFinite(maxKn) ? maxKn : undefined,
-          Number.isFinite(lm.avgWave) ? lm.avgWave : undefined,
-          Number.isFinite(lm.maxWave) ? lm.maxWave : undefined
-        );
-        return {
-          ...d,
-          windowNote: win || d.windowNote,
-          meteo: {
-            avgWindKn: Number.isFinite(avgKn) ? +avgKn.toFixed(1) : undefined,
-            maxWindKn: Number.isFinite(maxKn) ? +maxKn.toFixed(1) : undefined,
-            avgWaveM:  Number.isFinite(lm.avgWave) ? +lm.avgWave.toFixed(1) : undefined,
-            maxWaveM:  Number.isFinite(lm.maxWave) ? +lm.maxWave.toFixed(1) : undefined,
-          }
-        };
-      });
-      return next;
-    });
-  }, [legMeteo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = useMemo(() => {
     if (!plan?.length) return null;
     const nm = plan.reduce((sum, d) => sum + (d.leg?.nm || 0), 0);
     const hrsNum = plan.reduce((sum, d) => sum + (d.leg?.hours || 0), 0);
     const fuel = plan.reduce((sum, d) => sum + (d.leg?.fuelL || 0), 0);
+    const cost = plan.reduce((sum, d) => sum + (d.leg?.cost || 0), 0);
     const hh = Math.floor(hrsNum);
     const mm = Math.round((hrsNum - hh) * 60);
-    return { nm, hrs: `${hh}h ${mm}m`, fuel };
+    return { nm, hrs: `${hh}h ${mm}m`, fuel, cost };
   }, [plan]);
 
   const mapPoints = useMemo(() => {
@@ -659,7 +721,7 @@ function AIPlannerInner() {
 
   /* ======= Wikipedia modal state + open ======= */
   const [infoOpen, setInfoOpen] = useState(false);
-  const [infoData, setInfoData] = useState<{title:string;summary:string;imageUrl?:string;sourceUrl?:string} | null>(null);
+  const [infoData, setInfoData] = useState<WikiCard | null>(null);
 
   async function openPortInfoByName(name: string) {
     const card = await fetchWikiCard(name);
@@ -667,12 +729,24 @@ function AIPlannerInner() {
     setInfoOpen(true);
   }
 
+  // update user notes per day
+  function setUserNote(dayIdx: number, key: keyof NonNullable<DayCard["userNotes"]>, value: string) {
+    setPlan((old) => {
+      if (!old) return old;
+      const next = old.map((c) => ({ ...c }));
+      const obj = { ...(next[dayIdx].userNotes ?? {}) };
+      (obj as any)[key] = value;
+      next[dayIdx].userNotes = obj;
+      return next;
+    });
+  }
+
   return (
     <div className="bg-white text-slate-900">
       <section className="mx-auto max-w-7xl px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight text-brand-navy no-print">AI Itinerary Draft</h1>
         <p className="mt-2 max-w-2xl text-slate-600 no-print">
-          <b>Auto AI Planner</b> ή πλήρως Custom. Βάλε ημερομηνία &amp; στοιχεία σκάφους, πρόσθεσε στάσεις και κάνε generate.
+          <b>Auto AI Planner</b> ή πλήρως Custom. Βάλε ημερομηνία & στοιχεία σκάφους, πρόσθεσε στάσεις και κάνε generate.
         </p>
 
         {/* FORM */}
@@ -689,8 +763,8 @@ function AIPlannerInner() {
           </div>
 
           {/* Common controls */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="flex flex-col">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-7">
+            <div className="flex flex-col md:col-span-2">
               <label htmlFor="date" className="mb-1 text-xs font-medium text-gray-600">Ημερομηνία αναχώρησης</label>
               <input id="date" type="date" value={startDate || ""} onChange={(e) => setStartDate(e.target.value)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" />
             </div>
@@ -705,11 +779,25 @@ function AIPlannerInner() {
               <input id="speed" type="number" min={4} value={speed} onChange={(e) => setSpeed(parseFloat(e.target.value || "10"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 20" />
             </div>
             {yachtType === "Motor" && (
-              <div className="flex flex-col">
-                <label htmlFor="lph" className="mb-1 text-xs font-medium text-gray-600">Κατανάλωση (L/h)</label>
-                <input id="lph" type="number" min={5} value={lph} onChange={(e) => setLph(parseFloat(e.target.value || "120"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 180" />
-              </div>
+              <>
+                <div className="flex flex-col">
+                  <label htmlFor="lph" className="mb-1 text-xs font-medium text-gray-600">Κατανάλωση (L/h)</label>
+                  <input id="lph" type="number" min={5} value={lph} onChange={(e) => setLph(parseFloat(e.target.value || "120"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 180" />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="fuel" className="mb-1 text-xs font-medium text-gray-600">Τιμή καυσίμου (€/L)</label>
+                  <input id="fuel" type="number" min={0} step="0.01" value={fuelPrice} onChange={(e) => setFuelPrice(parseFloat(e.target.value || "1.8"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 1.80" />
+                </div>
+              </>
             )}
+            <div className="flex flex-col">
+              <label htmlFor="dep" className="mb-1 text-xs font-medium text-gray-600">Ώρα αναχώρησης</label>
+              <input id="dep" type="time" value={depTime} onChange={(e) => setDepTime(e.target.value || "09:00")} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" />
+            </div>
+            <label className="mt-7 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={weatherAwareWin} onChange={(e)=>setWeatherAwareWin(e.target.checked)} />
+              Weather-aware window
+            </label>
           </div>
 
           {/* REGION MODE */}
@@ -788,17 +876,11 @@ function AIPlannerInner() {
             </div>
           )}
 
-          {/* Preferences + Weather toggle */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-wrap gap-2">
-              {["family", "nightlife", "gastronomy"].map((p) => (
-                <button key={p} type="button" onClick={() => onTogglePref(p)} className={`rounded-full border px-3 py-1 text-sm ${prefs.includes(p) ? "border-brand-navy bg-brand-navy text-white" : "border-slate-300 hover:bg-slate-50"}`}>{p}</button>
-              ))}
-            </div>
-            <label className="ml-auto flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-1 text-sm">
-              <input type="checkbox" checked={weatherAwareWin} onChange={(e)=> setWeatherAwareWin(e.target.checked)} />
-              Weather-aware routing
-            </label>
+          {/* Preferences */}
+          <div className="flex flex-wrap gap-2">
+            {["family", "nightlife", "gastronomy"].map((p) => (
+              <button key={p} type="button" onClick={() => onTogglePref(p)} className={`rounded-full border px-3 py-1 text-sm ${prefs.includes(p) ? "border-brand-navy bg-brand-navy text-white" : "border-slate-300 hover:bg-slate-50"}`}>{p}</button>
+            ))}
           </div>
 
           {/* Κουμπί Generate */}
@@ -821,7 +903,7 @@ function AIPlannerInner() {
               <div className="text-sm text-slate-500">
                 Mode: <span className="font-medium text-brand-navy">{mode === "Region" ? "Auto AI Planner" : "Custom"}</span>
                 {mode === "Region" && <> • Region: <span className="font-medium text-brand-navy">{regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region}</span></>}
-                {weatherAwareWin && <> • <span className="font-medium text-brand-navy">Weather-aware</span></>}
+                {weatherAwareWin && <> • <span className="font-medium text-amber-700">WX-aware</span></>}
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={handleCopyLink} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50">
@@ -875,8 +957,6 @@ function AIPlannerInner() {
                     markers={markers}
                     activeNames={activeNames}
                     onMarkerClick={handleMarkerClick}
-                    weatherAwareProp={weatherAwareWin}
-                    onLegMeteo={(legs) => setLegMeteo(legs)}
                   />
                 </div>
                 <div className="mt-2 text-xs text-slate-500">
@@ -889,117 +969,180 @@ function AIPlannerInner() {
             {totals && (
               <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium text-brand-navy">Trip summary</div>
-                <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-5">
                   <div><div className="text-xs print-subtle">Route</div><div className="font-medium">{mode === "Region" ? `${start} → ${end}` : `${customStart}`}</div></div>
                   <div><div className="text-xs print-subtle">Region</div><div className="font-medium">{mode === "Region" ? (regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region) : "Custom"}</div></div>
                   <div><div className="text-xs print-subtle">Distance</div><div className="font-medium">{totals.nm} nm</div></div>
                   <div><div className="text-xs print-subtle">Underway</div><div className="font-medium">{totals.hrs}</div></div>
+                  {yachtType === "Motor" && (
+                    <div><div className="text-xs print-subtle">Fuel / Cost</div><div className="font-medium">~{totals.fuel} L • ~€{totals.cost}</div></div>
+                  )}
                 </div>
-                {yachtType === "Motor" && (
-                  <div className="mt-2 text-sm print-subtle">
-                    Estimated fuel: <b>~{totals.fuel} L</b> (speed {speed} kn • {lph} L/h)
-                  </div>
-                )}
               </div>
             )}
 
             {/* DAY CARDS */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 print-grid">
-              {plan.map((d) => (
-                <div key={d.day} className="rounded-2xl bg-white p-4 shadow-sm print-card">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-slate-500">Day {d.day} • {d.date}</div>
-                    {d.leg && <div className="text-xs rounded-full bg-brand-gold/20 px-2 py-1 text-brand-navy">{d.leg.nm} nm</div>}
-                  </div>
-                  {d.leg ? (
-                    <>
-                      <div className="mt-1 text-lg font-semibold text-brand-navy">
-                        {d.leg.from} →{" "}
-                        <button
-                          type="button"
-                          className="underline decoration-dotted underline-offset-4 hover:text-brand-gold"
-                          onClick={() => openPortInfoByName(d.leg!.to)}
-                          title="Πληροφορίες προορισμού (Wikipedia)"
-                        >
-                          {d.leg.to}
-                        </button>
+              {plan.map((d, idx) => {
+                const facilities = PORT_FACTS[d.leg?.to ?? ""] || {};
+                const destName = d.leg?.to ?? "";
+                return (
+                  <div key={d.day} className="rounded-2xl bg-white p-4 shadow-sm print-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm text-slate-500">Day {d.day} • {d.date}</div>
+                        {d.leg && <div className="text-xs rounded-full bg-brand-gold/20 inline-block mt-1 px-2 py-1 text-brand-navy">{d.leg.nm} nm</div>}
                       </div>
-                      <p className="mt-1 text-sm text-slate-600">
-                        ~{formatHoursHM(d.leg.hours)} underway
-                        {yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel</>} • {speed} kn
-                      </p>
+                      {thumbs[destName] && (
+                        <img src={thumbs[destName]} alt={destName} className="h-16 w-24 rounded-md object-cover" />
+                      )}
+                    </div>
 
-                      {/* Meteo chips (αν υπάρχουν από τον χάρτη) */}
-                      {d.meteo && (d.meteo.avgWindKn || d.meteo.avgWaveM) && (
+                    {d.leg ? (
+                      <>
+                        <div className="mt-2 text-lg font-semibold text-brand-navy">
+                          {d.leg.from} →{" "}
+                          <button
+                            type="button"
+                            className="underline decoration-dotted underline-offset-4 hover:text-brand-gold"
+                            onClick={() => openPortInfoByName(destName)}
+                            title="Πληροφορίες προορισμού (Wikipedia)"
+                          >
+                            {destName}
+                          </button>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          ~{formatHoursHM(d.leg.hours)} underway
+                          {yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel • ~€{d.leg.cost}</>} • {speed} kn
+                        </p>
+
+                        {/* Best window & ETA */}
+                        {d.leg.eta && (
+                          <div className="mt-2 text-xs text-slate-600">
+                            Suggested window: <b>{d.leg.eta.window}</b> • Depart <b>{d.leg.eta.dep}</b> → Arrive <b>{d.leg.eta.arr}</b>
+                          </div>
+                        )}
+
+                        {/* Facilities chips */}
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                          {d.meteo.avgWindKn != null && !Number.isNaN(d.meteo.avgWindKn) && (
-                            <span className="rounded-full border px-2 py-1">Avg wind: {d.meteo.avgWindKn} kn</span>
-                          )}
-                          {d.meteo.maxWindKn != null && !Number.isNaN(d.meteo.maxWindKn) && (
-                            <span className="rounded-full border px-2 py-1">Max wind: {d.meteo.maxWindKn} kn</span>
-                          )}
-                          {d.meteo.avgWaveM != null && !Number.isNaN(d.meteo.avgWaveM) && (
-                            <span className="rounded-full border px-2 py-1">Avg wave: {d.meteo.avgWaveM} m</span>
-                          )}
-                          {d.meteo.maxWaveM != null && !Number.isNaN(d.meteo.maxWaveM) && (
-                            <span className="rounded-full border px-2 py-1">Max wave: {d.meteo.maxWaveM} m</span>
-                          )}
+                          {facilities.fuel && <span className="rounded-full bg-slate-100 px-2 py-1">⛽ Fuel</span>}
+                          {facilities.water && <span className="rounded-full bg-slate-100 px-2 py-1">🚰 Water</span>}
+                          {facilities.provisions && <span className="rounded-full bg-slate-100 px-2 py-1">🛒 Provisions</span>}
+                          {facilities.berth && <span className="rounded-full bg-slate-100 px-2 py-1">⚓ Berths</span>}
                         </div>
-                      )}
+                      </>
+                    ) : (
+                      <div className="mt-1 text-lg font-semibold text-brand-navy">Leisure / Lay Day</div>
+                    )}
 
-                      {/* Suggested window */}
-                      {d.windowNote && (
-                        <div className="mt-2 text-sm">
-                          <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-900 border border-amber-300">
-                            Suggested window: {d.windowNote}
-                          </span>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="mt-1 text-lg font-semibold text-brand-navy">Leisure / Lay Day</div>
-                  )}
-                  {d.notes && <p className="mt-2 text-sm text-slate-600">{d.notes}</p>}
-                </div>
-              ))}
+                    {d.notes && <p className="mt-3 text-sm text-slate-600">{d.notes}</p>}
+
+                    {/* Actions/Notes */}
+                    <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="w-28 text-slate-500">Marina booking</span>
+                        <input
+                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
+                          placeholder="π.χ. call Port Police / marina office"
+                          value={d.userNotes?.marina ?? ""}
+                          onChange={(e) => setUserNote(idx, "marina", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-28 text-slate-500">Food</span>
+                        <input
+                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
+                          placeholder="εστιατόριο/ταβέρνα"
+                          value={d.userNotes?.food ?? ""}
+                          onChange={(e) => setUserNote(idx, "food", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-28 text-slate-500">Beach / POI</span>
+                        <input
+                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
+                          placeholder="παραλία / αξιοθέατο"
+                          value={d.userNotes?.beach ?? ""}
+                          onChange={(e) => setUserNote(idx, "beach", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
       </section>
 
-      {/* ===== Wikipedia Modal ===== */}
+      {/* ===== Wikipedia Modal (rich) ===== */}
       {infoOpen && infoData && (
         <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/40 p-4" onClick={() => setInfoOpen(false)}>
-          <div
-            className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <h3 className="text-lg font-semibold">{infoData.title}</h3>
-              <button onClick={() => setInfoOpen(false)} className="rounded-md border px-2 py-1 text-sm">Close</button>
-            </div>
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             {infoData.imageUrl && (
-              <img
-                src={infoData.imageUrl}
-                alt={infoData.title}
-                className="mt-3 w-full rounded-lg object-cover"
-              />
+              <div className="h-56 w-full overflow-hidden bg-slate-100">
+                <img src={infoData.imageUrl} alt={infoData.title} className="h-full w-full object-cover" />
+              </div>
             )}
-            {infoData.summary && (
-              <p className="mt-3 text-sm text-slate-700">
-                {infoData.summary}
-              </p>
-            )}
-            {infoData.sourceUrl && (
-              <a
-                href={infoData.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-block text-xs text-slate-500 underline"
-              >
-                Source: Wikipedia
-              </a>
-            )}
+
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <h3 className="text-xl font-semibold">{infoData.title}</h3>
+                <button onClick={() => setInfoOpen(false)} className="rounded-md border px-2 py-1 text-sm">Close</button>
+              </div>
+
+              {infoData.summary && (
+                <p className="mt-2 text-sm leading-relaxed text-slate-700">{infoData.summary}</p>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                {infoData.coords && (
+                  <>
+                    <span className="rounded-full bg-slate-100 px-2 py-1">
+                      {infoData.coords.lat.toFixed(4)}°, {infoData.coords.lon.toFixed(4)}°
+                    </span>
+                    <a className="rounded-full border px-2 py-1 hover:bg-slate-50" href={`https://www.google.com/maps?q=${infoData.coords.lat},${infoData.coords.lon}`} target="_blank" rel="noreferrer">
+                      View on map
+                    </a>
+                  </>
+                )}
+                {infoData.sourceUrl && (
+                  <a className="rounded-full border px-2 py-1 hover:bg-slate-50" href={infoData.sourceUrl} target="_blank" rel="noreferrer">
+                    Source: Wikipedia
+                  </a>
+                )}
+              </div>
+
+              {infoData.gallery && infoData.gallery.length > 1 && (
+                <div className="mt-4">
+                  <div className="mb-2 text-sm font-medium text-slate-700">Gallery</div>
+                  <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+                    {infoData.gallery.slice(0, 8).map((g, i) => (
+                      <img key={`${g}-${i}`} src={g} alt={`img-${i}`} className="h-20 w-full rounded-md object-cover" loading="lazy" />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {infoData.related && infoData.related.length > 0 && (
+                <div className="mt-4">
+                  <div className="mb-2 text-sm font-medium text-slate-700">Nearby / Related</div>
+                  <div className="flex flex-wrap gap-2">
+                    {infoData.related.map((r, i) => (
+                      <button
+                        key={`${r.title}-${i}`}
+                        onClick={() => openPortInfoByName(r.title)}
+                        className="flex items-center gap-2 rounded-full border px-2 py-1 text-sm hover:bg-slate-50"
+                        title="Άνοιγμα προεπισκόπησης"
+                      >
+                        {r.thumb && <img src={r.thumb} alt="" className="h-5 w-5 rounded-full object-cover" />}
+                        <span>{r.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
