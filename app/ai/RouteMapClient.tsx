@@ -1,3 +1,4 @@
+// components/RouteMapClient.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,7 +15,7 @@ const GeoJSON      = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),
 const Pane         = dynamic(() => import("react-leaflet").then(m => m.Pane),         { ssr: false });
 const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle),    { ssr: false });
 
-/* Παιδί που μας δίνει το map instance */
+/* Map instance helper */
 const CaptureMap = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -50,7 +51,7 @@ export type Marker = { name: string; lat: number; lon: number };
 type Ring = [number, number][]; // [lon,lat]
 type PolyRings = { outer: Ring; holes: Ring[] };
 
-type WeatherCell = { lat: number; lon: number; wind: number; wave: number }; // wind m/s, wave m
+type WeatherCell = { lat: number; lon: number; wind: number; wave: number };
 type WeatherField = { get(lat:number, lon:number): { wind:number; wave:number } | null };
 
 /* ---- consts ---- */
@@ -124,7 +125,7 @@ function collectPolys(geo: any): PolyRings[] {
   return polys;
 }
 
-/* -------- Adaptive cell size για κάθε leg -------- */
+/* -------- Adaptive cell size -------- */
 function pickCellDegForLeg(a: Point, b: Point) {
   const dLat = Math.abs(a.lat - b.lat);
   const dLon = Math.abs(a.lon - b.lon);
@@ -179,7 +180,6 @@ function buildGridForBounds(minLat:number,maxLat:number,minLon:number,maxLon:num
 
 /* ---- Weather (Open-Meteo Marine) ---- */
 const _weatherCache = new Map<string, WeatherField>();
-
 async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLon:number): Promise<WeatherField|null> {
   const step = 0.3;
   const lats:number[] = []; const lons:number[] = [];
@@ -225,7 +225,7 @@ async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLo
   }
 }
 
-/* ---- A* ---- */
+/* ---- A* water routing ---- */
 function nearestWaterNode(grid: GridNode[][], start: GridNode) {
   if (start.walkable) return start;
   const q: GridNode[] = [start];
@@ -343,64 +343,41 @@ function AnimatedDot({ center,label,active,onClick,appearAtMs,baseRadius=5 }:{
   );
 }
 
-/* ---------------------- Region suggestions ---------------------- */
-type RegionKey = "ionio" | "cyclades" | "sporades";
-
-const REGION_SEEDS: Record<RegionKey, Point[][]> = {
-  ionio: [
-    [{ name:"Corfu",lat:39.624,lon:19.922 },{ name:"Paxoi",lat:39.198,lon:20.184 },{ name:"Lefkada",lat:38.833,lon:20.706 },{ name:"Kefalonia",lat:38.176,lon:20.489 },{ name:"Zakynthos",lat:37.787,lon:20.897 }],
-    [{ name:"Igoumenitsa",lat:39.503,lon:20.262 },{ name:"Parga",lat:39.285,lon:20.400 },{ name:"Preveza",lat:38.960,lon:20.750 },{ name:"Meganisi",lat:38.650,lon:20.783 },{ name:"Ithaki",lat:38.370,lon:20.716 }],
-    [{ name:"Corfu",lat:39.624,lon:19.922 },{ name:"Sivota",lat:39.408,lon:20.242 },{ name:"Paxoi",lat:39.198,lon:20.184 },{ name:"Antipaxoi",lat:39.121,lon:20.231 },{ name:"Lefkada",lat:38.833,lon:20.706 }]
-  ],
-  cyclades: [
-    [{ name:"Athens",lat:37.942,lon:23.646 },{ name:"Kythnos",lat:37.390,lon:24.416 },{ name:"Serifos",lat:37.145,lon:24.527 },{ name:"Sifnos",lat:36.980,lon:24.720 },{ name:"Milos",lat:36.733,lon:24.430 }],
-    [{ name:"Lavrio",lat:37.713,lon:24.055 },{ name:"Kea",lat:37.636,lon:24.321 },{ name:"Syros",lat:37.445,lon:24.941 },{ name:"Mykonos",lat:37.450,lon:25.328 },{ name:"Paros",lat:37.083,lon:25.150 }],
-    [{ name:"Athens",lat:37.942,lon:23.646 },{ name:"Andros",lat:37.833,lon:24.933 },{ name:"Tinos",lat:37.540,lon:25.167 },{ name:"Naxos",lat:37.104,lon:25.374 },{ name:"Ios",lat:36.720,lon:25.281 }]
-  ],
-  sporades: [
-    [{ name:"Volos",lat:39.360,lon:22.937 },{ name:"Trikeri",lat:39.135,lon:23.078 },{ name:"Skiathos",lat:39.162,lon:23.490 },{ name:"Skopelos",lat:39.121,lon:23.730 },{ name:"Alonissos",lat:39.146,lon:23.864 }],
-    [{ name:"Volos",lat:39.360,lon:22.937 },{ name:"Skiathos",lat:39.162,lon:23.490 },{ name:"Skopelos",lat:39.121,lon:23.730 },{ name:"Kyra Panagia",lat:39.344,lon:24.041 },{ name:"Alonissos",lat:39.146,lon:23.864 }],
-    [{ name:"Volos",lat:39.360,lon:22.937 },{ name:"Trikeri",lat:39.135,lon:23.078 },{ name:"Skiathos",lat:39.162,lon:23.490 },{ name:"Skopelos",lat:39.121,lon:23.730 },{ name:"Skiros",lat:38.906,lon:24.566 }]
-  ]
-};
-
-function pickRegionSeeds(region: RegionKey): Point[][] {
-  const seed = REGION_SEEDS[region];
-  const arr = [...seed];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random()*(i+1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr.slice(0,3);
-}
-
 /* ===================================================== */
 export default function RouteMapClient({
   points, markers, activeNames, onMarkerClick,
-  /** Optional: control weather-aware from parent (AI page) */
   weatherAwareProp,
-  /** Optional: push back per-leg meteo stats to parent */
+  followShipProp,
   onLegMeteo
 }:{
-  points: Point[]; markers?: Marker[]; activeNames?: string[]; onMarkerClick?: (portName: string) => void;
+  points: Point[];
+  markers?: Marker[];
+  activeNames?: string[];
+  onMarkerClick?: (portName: string) => void;
+  /** Control routing penalty from parent (no in-map UI) */
   weatherAwareProp?: boolean;
+  /** Control follow-ship from parent (no in-map UI) */
+  followShipProp?: boolean;
   onLegMeteo?: (legs: Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }>) => void;
 }) {
   const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
-  /* UI: region + suggestions */
-  const [region, setRegion] = useState<RegionKey>("ionio");
-  const [suggestions, setSuggestions] = useState<Point[][]>([]);
-  const [current, setCurrent] = useState<Point[] | null>(null);
+  /* Effective points: μόνο ό,τι έρχεται απ’ τον parent */
+  const effPoints = (points?.length ?? 0) >= 2 ? points : [];
 
-  const effPoints = (points?.length ?? 0) >= 2 ? points : (current ?? []);
-
-  /* Weather toggle (controlled or uncontrolled) */
+  /* Weather toggle (controlled/uncontrolled) */
   const [weatherAwareInternal, setWeatherAwareInternal] = useState(false);
   const weatherAware = (typeof weatherAwareProp === "boolean") ? weatherAwareProp : weatherAwareInternal;
   useEffect(() => {
     if (typeof weatherAwareProp === "boolean") setWeatherAwareInternal(weatherAwareProp);
   }, [weatherAwareProp]);
+
+  /* Follow ship (controlled/uncontrolled) */
+  const [followShipInternal, setFollowShipInternal] = useState(false);
+  const followShip = (typeof followShipProp === "boolean") ? followShipProp : followShipInternal;
+  useEffect(() => {
+    if (typeof followShipProp === "boolean") setFollowShipInternal(followShipProp);
+  }, [followShipProp]);
 
   /* coast */
   const [coast, setCoast] = useState<any | null>(null);
@@ -442,7 +419,7 @@ export default function RouteMapClient({
     return () => { cancelled = true; };
   }, [weatherAware, effPoints]);
 
-  /* === Route compute (also keep per-leg segments) === */
+  /* === Route compute === */
   const { waterLatLngs, legEndIdx, legSegments } = useMemo(() => {
     const result: { waterLatLngs: LatLngExpression[]; legEndIdx: number[]; legSegments: [number,number][][] } = { waterLatLngs: [], legEndIdx: [], legSegments: [] };
     const pts = effPoints;
@@ -473,7 +450,6 @@ export default function RouteMapClient({
       }
       if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
 
-      // dedup
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -499,7 +475,7 @@ export default function RouteMapClient({
     return result;
   }, [effPoints, coastPolys, weatherAware, weatherFieldsForLeg]);
 
-  /* === Compute & emit meteo metrics per leg to parent === */
+  /* === Meteo metrics emit === */
   useEffect(() => {
     if (!onLegMeteo) return;
     if (!effPoints.length || !legSegments.length) { onLegMeteo([]); return; }
@@ -512,7 +488,6 @@ export default function RouteMapClient({
         out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
         continue;
       }
-      // sample κάθε ~5ο σημείο για οικονομία
       let windSum = 0, waveSum = 0, n = 0, maxW = 0, maxH = 0;
       for (let k = 0; k < seg.length; k += 5) {
         const [lat, lon] = seg[k];
@@ -566,8 +541,7 @@ export default function RouteMapClient({
     return legEndIdx.length - 1;
   }, [drawCount, legEndIdx]);
 
-  /* follow ship / auto-zoom */
-  const [followShip, setFollowShip] = useState(false);
+  /* follow ship / auto-zoom (controlled by followShip) */
   const lastFollowedPointRef = useRef<string>("");
   const prevLegRef = useRef<number>(-999);
 
@@ -601,7 +575,7 @@ export default function RouteMapClient({
     map.flyTo(tip as any, targetZoom, { duration: 0.5 });
   }, [animatedLatLngs, followShip, map]);
 
-  /* markers από effPoints */
+  /* markers */
   const markerStart = effPoints[0] ?? null;
   const markerMids  = effPoints.slice(1, -1);
   const markerEnd   = effPoints.at(-1) ?? null;
@@ -620,55 +594,8 @@ export default function RouteMapClient({
     onMarkerClick?.(name);
   }
 
-  /* ---- UI: generate suggestions ---- */
-  function handleGenerate() {
-    const list = pickRegionSeeds(region);
-    setSuggestions(list);
-    setCurrent(list[0]);
-  }
-
   return (
     <div className="w-full h-[520px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* Controls */}
-      <div className="absolute left-3 top-3 z-[1000] flex flex-wrap items-center gap-2 no-print">
-        <select value={region} onChange={(e)=>setRegion(e.target.value as RegionKey)} className="rounded-xl bg-white/90 px-2 py-[6px] text-xs shadow border border-slate-200" title="Region">
-          <option value="ionio">Ionio</option>
-          <option value="cyclades">Cyclades</option>
-          <option value="sporades">Sporades</option>
-        </select>
-        <button onClick={handleGenerate} className="rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200" title="Generate suggestions">Generate</button>
-
-        {/* Weather-aware routing: αν ελέγχεται από parent, γίνεται disabled */}
-        <label className={`flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200 ${typeof weatherAwareProp === "boolean" ? "opacity-60 pointer-events-none" : ""}`}>
-          <input
-            type="checkbox"
-            checked={weatherAware}
-            onChange={(e)=> setWeatherAwareInternal(e.target.checked)}
-            disabled={typeof weatherAwareProp === "boolean"}
-          />
-          Weather-aware routing
-        </label>
-
-        <label className="flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs shadow border border-slate-200">
-          <input type="checkbox" checked={followShip} onChange={(e)=>setFollowShip(e.target.checked)} />
-          Follow ship
-        </label>
-      </div>
-
-      {/* Suggestions list */}
-      {suggestions.length > 0 && (
-        <div className="absolute right-3 top-3 z-[1000] w-[220px] max-h-[60%] overflow-auto rounded-xl bg-white/92 p-2 text-xs shadow border border-slate-200">
-          <div className="font-medium mb-1">Suggestions ({region})</div>
-          <div className="grid gap-2">
-            {suggestions.map((sug, idx) => (
-              <button key={idx} onClick={()=>setCurrent(sug)} className={`text-left rounded-lg border px-2 py-1 hover:bg-slate-50 ${current===sug ? "border-amber-400 bg-amber-50" : "border-slate-200"}`}>
-                {sug.map(p => p.name).join(" → ")}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <style jsx global>{`
         .leaflet-tile[src*="tiles.gebco.net"] { filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06); }
         .leaflet-pane.pane-labels img.leaflet-tile { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; filter: brightness(0.9) contrast(1.35); }
