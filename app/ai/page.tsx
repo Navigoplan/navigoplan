@@ -1,3 +1,4 @@
+// app/ai/page.tsx
 "use client";
 
 import RouteMapClient from "./RouteMapClient";
@@ -24,6 +25,7 @@ type RegionKey =
   | "Saronic" | "Cyclades" | "Ionian" | "Dodecanese"
   | "Sporades" | "NorthAegean" | "Crete";
 type PlannerMode = "Region" | "Custom";
+type Audience = "Captain" | "VIP";
 
 type PortCoord = { id?: string; name: string; lat: number; lon: number; aliases?: string[] };
 
@@ -185,7 +187,7 @@ function buildQueryFromState(state: {
   mode: PlannerMode; startDate: string; yachtType: YachtType; speed: number; lph: number;
   start: string; end: string; days: number; regionMode: "Auto" | RegionKey; vias: string[];
   customStart: string; customDays: number; customDayStops: string[];
-  fuelPrice: number; depTime: string; weatherAwareWin: boolean;
+  fuelPrice: number; depTime: string; weatherAwareWin: boolean; audience: Audience;
   notesPayload?: any;
 }) {
   const q = new URLSearchParams();
@@ -197,6 +199,7 @@ function buildQueryFromState(state: {
   q.set("fuel", String(state.fuelPrice));
   q.set("dep", state.depTime);
   q.set("wx", state.weatherAwareWin ? "1" : "0");
+  q.set("aud", state.audience);
   if (state.mode === "Region") {
     q.set("start", state.start);
     q.set("end", state.end);
@@ -220,6 +223,7 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
   setRegionMode: (v: "Auto" | RegionKey) => void; setVias: (v: string[]) => void;
   setCustomStart: (v: string) => void; setCustomDays: (v: number) => void; setCustomDayStops: (v: string[]) => void;
   setFuelPrice: (v: number) => void; setDepTime: (v: string) => void; setWeatherAwareWin: (v: boolean) => void;
+  setAudience: (v: Audience) => void;
 }) {
   const mode = (sp.get("mode") as PlannerMode) || "Region";
   setters.setMode(mode);
@@ -244,6 +248,9 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
 
   const wx = sp.get("wx") === "1";
   setters.setWeatherAwareWin(wx);
+
+  const aud = (sp.get("aud") as Audience) || "Captain";
+  setters.setAudience(aud);
 
   if (mode === "Region") {
     const start = sp.get("start") || "Alimos";
@@ -511,6 +518,9 @@ function AIPlannerInner() {
 
   const [mode, setMode] = useState<PlannerMode>("Region");
 
+  // NEW: audience (Captain or VIP)
+  const [audience, setAudience] = useState<Audience>("Captain");
+
   // Common
   const [startDate, setStartDate] = useState<string>("");
   useEffect(() => { const d = new Date(); setStartDate(d.toISOString().slice(0, 10)); }, []);
@@ -573,26 +583,27 @@ function AIPlannerInner() {
       setMode, setStartDate, setYachtType, setSpeed, setLph,
       setStart, setEnd, setDays, setRegionMode, setVias,
       setCustomStart, setCustomDays, setCustomDayStops,
-      setFuelPrice, setDepTime, setWeatherAwareWin
+      setFuelPrice, setDepTime, setWeatherAwareWin, setAudience
     });
     pendingNotesRef.current = safeDecode<any>(loaded.rawNotes || null);
     const hasParams = Array.from(searchParams.keys()).length > 0;
     if (hasParams && loaded.autogen) {
-      try { document.getElementById("generate-btn")?.dispatchEvent(new Event("click", { bubbles: true })); } catch {}
+      try { document.getElementById("generate-captain")?.dispatchEvent(new Event("click", { bubbles: true })); } catch {}
     }
   }, [ready, searchParams]);
 
   function onTogglePref(value: string) {
     setPrefs((prev) => (prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]));
   }
-  function addVia() { setVias((v) => [...v, ""]);}
+  function addVia() { setVias((v) => [...v, ""]); }
   function setViaAt(i: number, val: string) { setVias((v) => v.map((x, idx) => (idx === i ? val : x))); }
   function removeVia(i: number) { setVias((v) => v.filter((_, idx) => idx !== i)); }
   function setCustomStopAt(i: number, val: string) { setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x))); }
 
   /* ======= Generate ======= */
-  function handleGenerate(e?: React.FormEvent) {
+  function handleGenerate(e?: React.FormEvent, aud: Audience = audience) {
     e?.preventDefault?.();
+    setAudience(aud);
     if (!ready) { alert("Φορτώνω ports… δοκίμασε ξανά σε λίγο."); return; }
 
     let namesSeq: string[] | null = null;
@@ -626,18 +637,40 @@ function AIPlannerInner() {
     for (let d = 0; d < totalDays; d++) {
       const date = startDate ? addDaysISO(startDate, d) : "";
       const leg = legs[d];
-      const notes = [
-        mode === "Region" && region === "Cyclades"   ? "Meltemi possible· προτίμησε πρωινές μετακινήσεις." : "",
-        mode === "Region" && region === "Saronic"    ? "Προστατευμένα νερά· ιδανικό για οικογένειες." : "",
-        mode === "Region" && region === "Ionian"     ? "Ήρεμα κανάλια & πράσινες ακτές· εξαιρετικά αγκυροβόλια." : "",
-        mode === "Region" && region === "Dodecanese" ? "Ιστορικά λιμάνια· πιο μεγάλα ανοικτά σκέλη." : "",
-        mode === "Region" && region === "Sporades"   ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά." : "",
-        mode === "Region" && region === "NorthAegean"? "Αυθεντικά λιμάνια (incl. Χαλκιδική)." : "",
-        mode === "Region" && region === "Crete"      ? "Μεγαλύτερα σκέλη· οργάνωσε καύσιμα & θέσεις." : "",
-        prefs.includes("nightlife") ? "Άφιξη αργά για βραδινό/μπαρ." : "",
-        prefs.includes("family")    ? "Αμμουδιές & μικρότερα σκέλη." : "",
-        prefs.includes("gastronomy")? "Κράτηση σε παραθαλάσσια ταβέρνα." : "",
+
+      // Different tone/content per audience
+      const baseRegionNote =
+        mode === "Region" && region === "Cyclades"   ? "Meltemi possible· προτίμησε πρωινές μετακινήσεις." :
+        mode === "Region" && region === "Saronic"    ? "Προστατευμένα νερά· ιδανικό για οικογένειες." :
+        mode === "Region" && region === "Ionian"     ? "Ήρεμα κανάλια & πράσινες ακτές· εξαιρετικά αγκυροβόλια." :
+        mode === "Region" && region === "Dodecanese" ? "Ιστορικά λιμάνια· πιο μεγάλα ανοικτά σκέλη." :
+        mode === "Region" && region === "Sporades"   ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά." :
+        mode === "Region" && region === "NorthAegean"? "Αυθεντικά λιμάνια (incl. Χαλκιδική)." :
+        mode === "Region" && region === "Crete"      ? "Μεγαλύτερα σκέλη· οργάνωσε καύσιμα & θέσεις." : "";
+
+      const prefsNote = [
+        prefs.includes("nightlife") ? "Βραδινή έξοδος / bar hopping." : "",
+        prefs.includes("family")    ? "Αμμουδιές & ήρεμα νερά για οικογένειες." : "",
+        prefs.includes("gastronomy")? "Κάνε κράτηση σε καλό ψαρομεζεδοπωλείο." : "",
       ].filter(Boolean).join(" ");
+
+      const captainRisk = [
+        region === "Cyclades" ? "Έλεγχος ανέμου 6-7Bf· plan B σε υπήνεμο." : "",
+        leg && leg.nm >= 35 ? "Μεγάλο σκέλος· κάλυψη καυσίμων & daylight margin." : "",
+        weatherAwareWin ? "Start εντός προτεινόμενου παραθύρου." : "",
+      ].filter(Boolean).join(" ");
+
+      const vipVibes = [
+        "Concierge: beach/club κράτηση & sunset spot.",
+        "Fine dining / wine pairing – προτείνεται early reservation.",
+        "Swim stop σε τιρκουάζ όρμο πριν την άφιξη.",
+      ].join(" ");
+
+      const notes =
+        audience === "Captain"
+          ? [baseRegionNote, prefsNote, captainRisk].filter(Boolean).join(" ")
+          : [prefsNote || baseRegionNote, vipVibes].filter(Boolean).join(" ");
+
       cards.push({ day: d + 1, date, leg, notes, userNotes: {} });
     }
 
@@ -670,8 +703,8 @@ function AIPlannerInner() {
       mode, startDate, yachtType, speed, lph,
       start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
-      fuelPrice, depTime, weatherAwareWin,
-      notesPayload: null, // αρχικά χωρίς notes
+      fuelPrice, depTime, weatherAwareWin, audience: aud,
+      notesPayload: null,
     });
     router.replace(`/ai?${qs}`, { scroll: false });
   }
@@ -691,7 +724,7 @@ function AIPlannerInner() {
       mode, startDate, yachtType, speed, lph,
       start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
-      fuelPrice, depTime, weatherAwareWin,
+      fuelPrice, depTime, weatherAwareWin, audience,
       notesPayload
     });
     const url = `${window.location.origin}/ai?${qs}`;
@@ -812,6 +845,10 @@ function AIPlannerInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan]);
 
+  const audienceChip = (audience === "Captain")
+    ? <span className="rounded-full bg-blue-50 text-blue-800 px-2 py-0.5 text-xs">Captain</span>
+    : <span className="rounded-full bg-purple-50 text-purple-800 px-2 py-0.5 text-xs">VIP Guests</span>;
+
   return (
     <div className="bg-white text-slate-900">
       <section className="mx-auto max-w-7xl px-6 py-12">
@@ -821,7 +858,7 @@ function AIPlannerInner() {
         </p>
 
         {/* FORM */}
-        <form onSubmit={handleGenerate} className="mt-6 grid grid-cols-1 gap-4 no-print">
+        <form className="mt-6 grid grid-cols-1 gap-4 no-print" onSubmit={(e)=>{e.preventDefault();}}>
           {/* Mode selector */}
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-brand-navy">Planner Mode</label>
@@ -831,6 +868,18 @@ function AIPlannerInner() {
             </select>
             {!ready && <span className="text-xs text-slate-500">Φορτώνω ports…</span>}
             {error && <span className="text-xs text-red-600">Σφάλμα dataset</span>}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-sm font-medium text-brand-navy">Audience</span>
+              <select
+                value={audience}
+                onChange={(e)=>setAudience(e.target.value as Audience)}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                title="Audience"
+              >
+                <option value="Captain">Captain</option>
+                <option value="VIP">VIP Guests</option>
+              </select>
+            </div>
           </div>
 
           {/* Common controls */}
@@ -954,16 +1003,29 @@ function AIPlannerInner() {
             ))}
           </div>
 
-          {/* Κουμπί Generate */}
-          <button
-            id="generate-btn"
-            type="submit"
-            disabled={!ready}
-            className="rounded-xl border px-4 py-2 text-sm font-semibold shadow-sm border-[#c4a962] text-[#0b1220] bg-white/90 hover:bg-[#c4a962] hover:text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#c4a962]"
-            title="Generate itinerary"
-          >
-            Generate
-          </button>
+          {/* NEW: Dual Generate buttons */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              id="generate-captain"
+              type="button"
+              disabled={!ready}
+              onClick={(e)=>handleGenerate(e, "Captain")}
+              className="rounded-xl border px-4 py-2 text-sm font-semibold shadow-sm border-blue-600 text-white bg-blue-600/90 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              title="Generate itinerary for Captain"
+            >
+              Generate for Captain
+            </button>
+            <button
+              id="generate-vip"
+              type="button"
+              disabled={!ready}
+              onClick={(e)=>handleGenerate(e, "VIP")}
+              className="rounded-xl border px-4 py-2 text-sm font-semibold shadow-sm border-purple-600 text-white bg-purple-600/90 hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-300"
+              title="Generate itinerary for VIP Guests"
+            >
+              Generate for VIP Guests
+            </button>
+          </div>
         </form>
 
         {/* ====== OUTPUT ====== */}
@@ -975,6 +1037,7 @@ function AIPlannerInner() {
                 Mode: <span className="font-medium text-brand-navy">{mode === "Region" ? "Auto AI Planner" : "Custom"}</span>
                 {mode === "Region" && <> • Region: <span className="font-medium text-brand-navy">{regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region}</span></>}
                 {weatherAwareWin && <> • <span className="text-sm font-medium text-amber-700">WX-aware</span></>}
+                {" "}• Audience: {audienceChip}
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={handleCopyLink} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50">
@@ -1028,6 +1091,7 @@ function AIPlannerInner() {
                     markers={markers}
                     activeNames={activeNames}
                     onMarkerClick={handleMarkerClick}
+                    weatherAwareProp={audience === "Captain" ? weatherAwareWin : false}
                   />
                 </div>
                 <div className="mt-2 text-xs text-slate-500">
@@ -1045,7 +1109,7 @@ function AIPlannerInner() {
                   <div><div className="text-xs print-subtle">Region</div><div className="font-medium">{mode === "Region" ? (regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region) : "Custom"}</div></div>
                   <div><div className="text-xs print-subtle">Distance</div><div className="font-medium">{totals.nm} nm</div></div>
                   <div><div className="text-xs print-subtle">Underway</div><div className="font-medium">{totals.hrs}</div></div>
-                  {yachtType === "Motor" && (
+                  {yachtType === "Motor" && audience === "Captain" && (
                     <div><div className="text-xs print-subtle">Fuel / Cost</div><div className="font-medium">~{totals.fuel} L • ~€{totals.cost}</div></div>
                   )}
                 </div>
@@ -1059,11 +1123,11 @@ function AIPlannerInner() {
                 const destName = d.leg?.to ?? "";
                 const wx = destWeather[destName];
                 return (
-                  <div key={d.day} className="rounded-2xl bg-white p-4 shadow-sm print-card">
+                  <div key={d.day} className={`rounded-2xl bg-white p-4 shadow-sm print-card ${audience === "VIP" ? "border-purple-100" : "border-blue-100"}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-sm text-slate-500">Day {d.day} • {d.date}</div>
-                        {d.leg && <div className="text-xs rounded-full bg-brand-gold/20 inline-block mt-1 px-2 py-1 text-brand-navy">{d.leg.nm} nm</div>}
+                        {d.leg && <div className={`text-xs rounded-full inline-block mt-1 px-2 py-1 ${audience==="VIP" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-900"}`}>{d.leg.nm} nm</div>}
                       </div>
                       {thumbs[destName] && (
                         <img src={thumbs[destName]} alt={destName} className="h-16 w-24 rounded-md object-cover" />
@@ -1083,74 +1147,85 @@ function AIPlannerInner() {
                             {destName}
                           </button>
                         </div>
+
+                        {/* Captain shows full tech line; VIP hides fuel/cost */}
                         <p className="mt-1 text-sm text-slate-600">
                           ~{formatHoursHM(d.leg.hours)} underway
-                          {yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel • ~€{d.leg.cost}</>} • {speed} kn
+                          {audience === "Captain" && yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel • ~€{d.leg.cost}</>}
+                          {" "}• {speed} kn
                         </p>
 
                         {/* Best window & ETA */}
                         {d.leg.eta && (
                           <div className="mt-2 text-xs text-slate-600">
-                            Suggested window: <b>{d.leg.eta.window}</b> • Depart <b>{d.leg.eta.dep}</b> → Arrive <b>{d.leg.eta.arr}</b>
+                            {audience === "Captain" ? "Suggested window" : "Best time to go"}: <b>{d.leg.eta.window}</b> • Depart <b>{d.leg.eta.dep}</b> → Arrive <b>{d.leg.eta.arr}</b>
                           </div>
                         )}
 
-                        {/* LIVE Weather chips */}
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                          <span className="rounded-full border px-2 py-1">
-                            Live weather{wx?.label ? `: ${wx.label}` : ""}
-                          </span>
-                          {wx?.tempC != null && (
-                            <span className="rounded-full border px-2 py-1">🌡 {wx.tempC}°C</span>
-                          )}
-                          {wx?.cloudPct != null && (
-                            <span className="rounded-full border px-2 py-1">☁️ {wx.cloudPct}%</span>
-                          )}
-                          {wx?.precipMM != null && (
-                            <span className="rounded-full border px-2 py-1">🌧 {wx.precipMM} mm/h</span>
-                          )}
-                          {!wx && <span className="text-slate-500">…</span>}
-                        </div>
+                        {/* LIVE Weather chips (Captain only) */}
+                        {audience === "Captain" && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                            <span className="rounded-full border px-2 py-1">
+                              Live weather{wx?.label ? `: ${wx.label}` : ""}
+                            </span>
+                            {wx?.tempC != null && (
+                              <span className="rounded-full border px-2 py-1">🌡 {wx.tempC}°C</span>
+                            )}
+                            {wx?.cloudPct != null && (
+                              <span className="rounded-full border px-2 py-1">☁️ {wx.cloudPct}%</span>
+                            )}
+                            {wx?.precipMM != null && (
+                              <span className="rounded-full border px-2 py-1">🌧 {wx.precipMM} mm/h</span>
+                            )}
+                            {!wx && <span className="text-slate-500">…</span>}
+                          </div>
+                        )}
 
-                        {/* Facilities chips */}
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                          {facilities.fuel && <span className="rounded-full bg-slate-100 px-2 py-1">⛽ Fuel</span>}
-                          {facilities.water && <span className="rounded-full bg-slate-100 px-2 py-1">🚰 Water</span>}
-                          {facilities.provisions && <span className="rounded-full bg-slate-100 px-2 py-1">🛒 Provisions</span>}
-                          {facilities.berth && <span className="rounded-full bg-slate-100 px-2 py-1">⚓ Berths</span>}
-                        </div>
+                        {/* Facilities chips (Captain only) */}
+                        {audience === "Captain" && (
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            {facilities.fuel && <span className="rounded-full bg-slate-100 px-2 py-1">⛽ Fuel</span>}
+                            {facilities.water && <span className="rounded-full bg-slate-100 px-2 py-1">🚰 Water</span>}
+                            {facilities.provisions && <span className="rounded-full bg-slate-100 px-2 py-1">🛒 Provisions</span>}
+                            {facilities.berth && <span className="rounded-full bg-slate-100 px-2 py-1">⚓ Berths</span>}
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div className="mt-1 text-lg font-semibold text-brand-navy">Leisure / Lay Day</div>
                     )}
 
-                    {d.notes && <p className="mt-3 text-sm text-slate-600">{d.notes}</p>}
+                    {d.notes && (
+                      <p className={`mt-3 text-sm ${audience === "VIP" ? "text-purple-900" : "text-slate-600"}`}>
+                        {d.notes}
+                      </p>
+                    )}
 
                     {/* Actions/Notes */}
                     <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
                       <div className="flex items-center gap-2">
-                        <span className="w-28 text-slate-500">Marina booking</span>
+                        <span className="w-28 text-slate-500">{audience==="VIP" ? "Concierge (berth)" : "Marina booking"}</span>
                         <input
                           className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
-                          placeholder="π.χ. call Port Police / marina office"
+                          placeholder={audience==="VIP" ? "Κράτηση θέσης/assist" : "π.χ. call Port Police / marina office"}
                           value={d.userNotes?.marina ?? ""}
                           onChange={(e) => setUserNote(idx, "marina", e.target.value)}
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="w-28 text-slate-500">Food</span>
+                        <span className="w-28 text-slate-500">{audience==="VIP" ? "Restaurant" : "Food"}</span>
                         <input
                           className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
-                          placeholder="εστιατόριο/ταβέρνα"
+                          placeholder={audience==="VIP" ? "fine dining / beach club" : "εστιατόριο/ταβέρνα"}
                           value={d.userNotes?.food ?? ""}
                           onChange={(e) => setUserNote(idx, "food", e.target.value)}
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="w-28 text-slate-500">Beach / POI</span>
+                        <span className="w-28 text-slate-500">{audience==="VIP" ? "Beach / Experience" : "Beach / POI"}</span>
                         <input
                           className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
-                          placeholder="παραλία / αξιοθέατο"
+                          placeholder={audience==="VIP" ? "swim stop / massage / shopping" : "παραλία / αξιοθέατο"}
                           value={d.userNotes?.beach ?? ""}
                           onChange={(e) => setUserNote(idx, "beach", e.target.value)}
                         />
