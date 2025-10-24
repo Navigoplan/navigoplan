@@ -1,179 +1,163 @@
+// app/NavBar.tsx
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
-// Μπορεί να έρθει { email } ή null από το /api/auth/magic/session
-type SessUser = { email?: string } | null;
+type NavItem = {
+  label: string;
+  href: string;
+  external?: boolean;
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { label: "Features", href: "/features" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "AI Planner", href: "/ai" },
+  { label: "Login", href: "/login" },
+];
 
 export default function NavBar() {
-  const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<SessUser>(null);
-  const [loading, setLoading] = useState(true);
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/magic/session", { cache: "no-store" });
-        const data = await res.json();
-        if (alive) setUser(data?.user ?? null);
-      } catch {
-        // ignore
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const linkClass = (href: string) =>
-    pathname === href
-      ? "text-sm font-semibold text-[#d6bd78]"
-      : "text-sm text-[#c4a962] hover:text-[#d6bd78] transition";
+  useEffect(() => {
+    // κλείνει το mobile menu όταν αλλάζει route
+    setOpen(false);
+  }, [pathname]);
+
+  const isActive = (href: string) =>
+    href === "/"
+      ? pathname === "/"
+      : pathname.startsWith(href);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-[#c4a962]/30 bg-[#0b1220cc] backdrop-blur-sm shadow-[0_2px_6px_rgba(0,0,0,0.2)]">
-      <nav className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <img
-            src="/navigoplan-logo.png?v=1"
-            alt="Navigoplan Logo"
-            width={160}
-            height={45}
-            style={{ objectFit: "contain", display: "block" }}
-          />
-          <span className="sr-only">Navigoplan</span>
-        </Link>
+    <header
+      className={[
+        "sticky top-0 z-50",
+        "border-b border-slate-200/60",
+        scrolled ? "bg-white/90 backdrop-blur supports-[backdrop-filter]:backdrop-blur" : "bg-white/80 backdrop-blur",
+      ].join(" ")}
+    >
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:py-4">
+        {/* Logo / Brand */}
+        <div className="flex items-center gap-3">
+          <Link href="/" className="group inline-flex items-center gap-2">
+            {/* Μικρό “στίγμα” logo */}
+            <span
+              aria-hidden
+              className="inline-block h-6 w-6 rounded-full"
+              style={{ background: "var(--color-navy)" }}
+            />
+            <span className="text-lg font-semibold tracking-tight" style={{ color: "var(--color-navy)" }}>
+              Navigoplan
+            </span>
+          </Link>
+        </div>
 
-        {/* Desktop menu */}
-        <ul className="hidden items-center gap-6 md:flex">
-          <li><Link href="/features" className={linkClass("/features")}>Features</Link></li>
-          <li><Link href="/pricing"  className={linkClass("/pricing")}>Pricing</Link></li>
-          <li><Link href="/ai"       className={linkClass("/ai")}>AI Planner</Link></li>
-
-          {/* Auth (desktop) */}
-          <li className="flex items-center gap-3">
-            {loading ? (
-              <span className="text-xs text-[#c4a962] opacity-60">checking…</span>
-            ) : user && user.email ? (
-              <div className="relative group">
-                {/* Premium pill με αρχικό + email */}
-                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#c4a962] text-[#0b1220] text-xs font-bold">
-                    {user.email[0]?.toUpperCase() ?? "U"}
-                  </span>
-                  <span className="text-xs text-[#c4a962]">
-                    {user.email.length > 28 ? user.email.slice(0, 25) + "…" : user.email}
-                  </span>
-                </span>
-
-                {/* Dropdown on hover */}
-                <div className="absolute right-0 mt-2 hidden w-56 rounded-xl border border-white/10 bg-[#0b1220] p-2 shadow-lg group-hover:block">
-                  <div className="px-3 py-2 text-xs text-white/70">
-                    Signed in as<br />
-                    <span className="text-white break-all">{user.email}</span>
-                  </div>
-                  <form action="/api/auth/logout" method="post">
-                    <button className="mt-1 w-full rounded-lg border border-[#c4a962] px-3 py-2 text-sm text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition">
-                      Logout
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ) : (
-              <Link
-                href="/login"
-                className="rounded-full border border-[#c4a962] px-4 py-2 text-sm font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition shadow-sm"
-              >
-                Login
-              </Link>
-            )}
-          </li>
-
-          <li>
+        {/* Desktop Nav */}
+        <nav className="hidden items-center gap-1 md:flex">
+          {NAV_ITEMS.map((item) => (
             <Link
-              href="/#trial"
-              className="rounded-full border border-[#c4a962] px-4 py-2 text-sm font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition shadow-sm"
+              key={item.href}
+              href={item.href}
+              className={[
+                "px-3 py-2 text-sm font-medium rounded-lg transition",
+                "hover:bg-[var(--color-cloud)]",
+                isActive(item.href)
+                  ? "text-[var(--color-navy)]"
+                  : "text-slate-600 hover:text-[var(--color-navy)]",
+              ].join(" ")}
             >
-              Start Planning
+              {item.label}
             </Link>
-          </li>
-        </ul>
+          ))}
 
-        {/* Mobile button */}
+          {/* CTA */}
+          <Link
+            href="/#trial"
+            className="ml-2 btn-cta"
+            aria-label="Start Planning"
+          >
+            Start Planning
+          </Link>
+        </nav>
+
+        {/* Mobile toggler */}
         <button
-          aria-label="Toggle menu"
-          onClick={() => setOpen(!open)}
-          className="md:hidden inline-flex items-center gap-2 rounded-md border border-[#c4a962] bg-[#0b1220] px-3 py-2 text-sm text-[#c4a962] hover:text-[#d6bd78]"
+          type="button"
+          aria-expanded={open}
+          aria-controls="mobile-menu"
+          aria-label="Toggle Menu"
+          onClick={() => setOpen((v) => !v)}
+          className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200/70 bg-white/70 hover:bg-white transition"
         >
-          {open ? "Close" : "Menu"}
+          {/* Hamburger / X */}
+          <svg
+            className={`h-5 w-5 ${open ? "hidden" : "block"}`}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path strokeWidth="2" strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+          <svg
+            className={`h-5 w-5 ${open ? "block" : "hidden"}`}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path strokeWidth="2" strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
-      </nav>
+      </div>
 
-      {/* Mobile dropdown */}
-      {open && (
-        <div className="md:hidden bg-[#0b1220f2] backdrop-blur-md border-t border-[#c4a962]/30">
-          <ul className="flex flex-col divide-y divide-[#c4a962]/10">
-            {[
-              { href: "/features", label: "Features" },
-              { href: "/pricing",  label: "Pricing" },
-              { href: "/ai",       label: "AI Planner" },
-            ].map((item) => (
+      {/* Mobile menu */}
+      <div
+        id="mobile-menu"
+        className={`md:hidden overflow-hidden transition-[max-height,opacity] duration-300 ${
+          open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        <div className="px-4 pb-4">
+          <ul className="divide-y divide-slate-200/60 rounded-xl border border-slate-200/60 bg-white">
+            {NAV_ITEMS.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
                   onClick={() => setOpen(false)}
-                  className={`block px-6 py-3 text-[#c4a962] hover:text-[#d6bd78] ${pathname === item.href ? "font-semibold" : ""}`}
+                  className={[
+                    "block px-4 py-3 text-sm",
+                    isActive(item.href)
+                      ? "text-[var(--color-navy)]"
+                      : "text-slate-700 hover:text-[var(--color-navy)]",
+                  ].join(" ")}
                 >
                   {item.label}
                 </Link>
               </li>
             ))}
-
-            {/* Auth (mobile) */}
-            <li className="px-6 py-3 flex items-center justify-between">
-              {loading ? (
-                <span className="text-xs text-[#c4a962] opacity-60">checking…</span>
-              ) : user && user.email ? (
-                <>
-                  <span className="text-xs text-[#c4a962] opacity-80">
-                    {user.email.length > 28 ? user.email.slice(0, 25) + "…" : user.email}
-                  </span>
-                  <form action="/api/auth/logout" method="post" onSubmit={() => setOpen(false)}>
-                    <button className="rounded-xl border border-[#c4a962] px-4 py-2 text-sm font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition">
-                      Logout
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <Link
-                  href="/login"
-                  onClick={() => setOpen(false)}
-                  className="rounded-xl border border-[#c4a962] px-4 py-2 text-sm font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition"
-                >
-                  Login
-                </Link>
-              )}
-            </li>
-
             <li className="p-3">
               <Link
                 href="/#trial"
                 onClick={() => setOpen(false)}
-                className="block w-full rounded-xl border border-[#c4a962] px-4 py-3 text-center font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition"
+                className="btn-cta block w-full text-center"
               >
                 Start Planning
               </Link>
             </li>
           </ul>
         </div>
-      )}
+      </div>
     </header>
   );
 }
