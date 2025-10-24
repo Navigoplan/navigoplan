@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
-type SessUser = { email: string } | null;
+// Χαλαρός τύπος: επιτρέπει {email} ή {uid} ή οποιοδήποτε αντικείμενο
+type SessUser = any;
 
 export default function NavBar() {
   const [open, setOpen] = useState(false);
@@ -25,7 +26,9 @@ export default function NavBar() {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const linkClass = (href: string) =>
@@ -33,12 +36,18 @@ export default function NavBar() {
       ? "text-sm font-semibold text-[#d6bd78]"
       : "text-sm text-[#c4a962] hover:text-[#d6bd78] transition";
 
-  const EmailBadge = () =>
-    user ? (
-      <span className="text-xs text-[#c4a962] opacity-80">
-        {user.email.length > 28 ? user.email.slice(0, 25) + "…" : user.email}
-      </span>
-    ) : null;
+  // Fallback: πρώτα email, μετά uid, αλλιώς τίποτα
+  const EmailBadge = () => {
+    const label: string | null =
+      (user && typeof user === "object" && typeof user.email === "string" && user.email) ||
+      (user && typeof user === "object" && typeof user.uid === "string" && user.uid) ||
+      null;
+
+    if (!label) return null;
+
+    const short = label.length > 28 ? label.slice(0, 25) + "…" : label;
+    return <span className="text-xs text-[#c4a962] opacity-80">{short}</span>;
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[#c4a962]/30 bg-[#0b1220cc] backdrop-blur-sm shadow-[0_2px_6px_rgba(0,0,0,0.2)]">
