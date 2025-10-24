@@ -1,6 +1,3 @@
-// app/lib/ports/ports.ts
-export type CrewType = "marina" | "harbour" | "anchorage" | "pier" | "fuel" | (string & {});
-
 export type Port = {
   id: string;
   region?: string;
@@ -17,7 +14,7 @@ export type Port = {
   };
 
   crew?: {
-    type?: CrewType;
+    type?: "marina" | "harbour" | "anchorage" | "pier" | "fuel" | string;
     lat?: number | null;
     lon?: number | null;
     datum?: string;

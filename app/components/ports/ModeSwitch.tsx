@@ -1,19 +1,23 @@
 "use client";
-import { usePortMode } from "@/components/ports/PortModeContext";
+
+import { usePortMode } from "./PortModeContext";
 
 export default function ModeSwitch() {
   const { mode, setMode } = usePortMode();
   return (
-    <div className="inline-flex items-center gap-2">
-      <span className="text-sm opacity-70">View:</span>
-      <select
-        value={mode}
-        onChange={(e) => setMode(e.target.value as "guest" | "captain")}
-        className="rounded-lg border p-2"
+    <div className="inline-flex overflow-hidden rounded-xl border">
+      <button
+        className={`px-3 py-1 text-sm ${mode === "guest" ? "bg-black text-white" : ""}`}
+        onClick={() => setMode("guest")}
       >
-        <option value="guest">VIP Guest</option>
-        <option value="captain">Captain/Crew</option>
-      </select>
+        VIP Guest
+      </button>
+      <button
+        className={`px-3 py-1 text-sm ${mode === "captain" ? "bg-black text-white" : ""}`}
+        onClick={() => setMode("captain")}
+      >
+        Captain
+      </button>
     </div>
   );
 }
