@@ -11,19 +11,19 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String?
-  passwordHash String?  // για μελλοντική μετάβαση σε password (μένει null τώρα)
+  passwordHash String? // για μελλοντική μετάβαση σε password (μένει null τώρα)
   createdAt    DateTime @default(now())
 
   // σχέσεις
-  tokens       MagicLinkToken[]
+  tokens MagicLinkToken[]
 }
 
 model MagicLinkToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   email     String
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
-  tokenHash String   @unique
+  user      User?     @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
 
