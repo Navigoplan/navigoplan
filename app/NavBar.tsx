@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
-// Χαλαρός τύπος: επιτρέπει {email} ή {uid} ή οποιοδήποτε αντικείμενο
-type SessUser = any;
+// Μπορεί να έρθει { email } ή null από το /api/auth/magic/session
+type SessUser = { email?: string } | null;
 
 export default function NavBar() {
   const [open, setOpen] = useState(false);
@@ -36,19 +36,6 @@ export default function NavBar() {
       ? "text-sm font-semibold text-[#d6bd78]"
       : "text-sm text-[#c4a962] hover:text-[#d6bd78] transition";
 
-  // Fallback: πρώτα email, μετά uid, αλλιώς τίποτα
-  const EmailBadge = () => {
-    const label: string | null =
-      (user && typeof user === "object" && typeof user.email === "string" && user.email) ||
-      (user && typeof user === "object" && typeof user.uid === "string" && user.uid) ||
-      null;
-
-    if (!label) return null;
-
-    const short = label.length > 28 ? label.slice(0, 25) + "…" : label;
-    return <span className="text-xs text-[#c4a962] opacity-80">{short}</span>;
-  };
-
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[#c4a962]/30 bg-[#0b1220cc] backdrop-blur-sm shadow-[0_2px_6px_rgba(0,0,0,0.2)]">
       <nav className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
@@ -74,15 +61,31 @@ export default function NavBar() {
           <li className="flex items-center gap-3">
             {loading ? (
               <span className="text-xs text-[#c4a962] opacity-60">checking…</span>
-            ) : user ? (
-              <>
-                <EmailBadge />
-                <form action="/api/auth/logout" method="post">
-                  <button className="rounded-full border border-[#c4a962] px-4 py-2 text-sm font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition shadow-sm">
-                    Logout
-                  </button>
-                </form>
-              </>
+            ) : user && user.email ? (
+              <div className="relative group">
+                {/* Premium pill με αρχικό + email */}
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#c4a962] text-[#0b1220] text-xs font-bold">
+                    {user.email[0]?.toUpperCase() ?? "U"}
+                  </span>
+                  <span className="text-xs text-[#c4a962]">
+                    {user.email.length > 28 ? user.email.slice(0, 25) + "…" : user.email}
+                  </span>
+                </span>
+
+                {/* Dropdown on hover */}
+                <div className="absolute right-0 mt-2 hidden w-56 rounded-xl border border-white/10 bg-[#0b1220] p-2 shadow-lg group-hover:block">
+                  <div className="px-3 py-2 text-xs text-white/70">
+                    Signed in as<br />
+                    <span className="text-white break-all">{user.email}</span>
+                  </div>
+                  <form action="/api/auth/logout" method="post">
+                    <button className="mt-1 w-full rounded-lg border border-[#c4a962] px-3 py-2 text-sm text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition">
+                      Logout
+                    </button>
+                  </form>
+                </div>
+              </div>
             ) : (
               <Link
                 href="/login"
@@ -137,9 +140,11 @@ export default function NavBar() {
             <li className="px-6 py-3 flex items-center justify-between">
               {loading ? (
                 <span className="text-xs text-[#c4a962] opacity-60">checking…</span>
-              ) : user ? (
+              ) : user && user.email ? (
                 <>
-                  <EmailBadge />
+                  <span className="text-xs text-[#c4a962] opacity-80">
+                    {user.email.length > 28 ? user.email.slice(0, 25) + "…" : user.email}
+                  </span>
                   <form action="/api/auth/logout" method="post" onSubmit={() => setOpen(false)}>
                     <button className="rounded-xl border border-[#c4a962] px-4 py-2 text-sm font-semibold text-[#c4a962] hover:bg-[#c4a962] hover:text-[#0b1220] transition">
                       Logout
