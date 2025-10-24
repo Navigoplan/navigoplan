@@ -5,11 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type NavItem = {
-  label: string;
-  href: string;
-  external?: boolean;
-};
+type NavItem = { label: string; href: string };
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Features", href: "/features" },
@@ -30,62 +26,61 @@ export default function NavBar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
-    // κλείνει το mobile menu όταν αλλάζει route
-    setOpen(false);
-  }, [pathname]);
+  useEffect(() => setOpen(false), [pathname]);
 
   const isActive = (href: string) =>
-    href === "/"
-      ? pathname === "/"
-      : pathname.startsWith(href);
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  const linkClass = (active: boolean) =>
+    [
+      "px-3 py-2 text-sm font-medium rounded-lg transition",
+      scrolled
+        ? active
+          ? "text-[var(--color-brand-gold)]"
+          : "text-[var(--color-navy)] hover:text-[var(--color-brand-gold)]"
+        : active
+          ? "text-[var(--color-brand-gold)]"
+          : "text-white hover:text-[var(--color-brand-gold)]",
+    ].join(" ");
 
   return (
     <header
       className={[
-        "sticky top-0 z-50",
-        "border-b border-slate-200/60",
-        scrolled ? "bg-white/90 backdrop-blur supports-[backdrop-filter]:backdrop-blur" : "bg-white/80 backdrop-blur",
+        "fixed top-0 left-0 right-0 z-50 transition",
+        scrolled
+          ? "bg-white/85 backdrop-blur-md border-b border-slate-200/60"
+          : "bg-transparent border-transparent",
       ].join(" ")}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:py-4">
-        {/* Logo / Brand */}
-        <div className="flex items-center gap-3">
-          <Link href="/" className="group inline-flex items-center gap-2">
-            {/* Μικρό “στίγμα” logo */}
-            <span
-              aria-hidden
-              className="inline-block h-6 w-6 rounded-full"
-              style={{ background: "var(--color-navy)" }}
-            />
-            <span className="text-lg font-semibold tracking-tight" style={{ color: "var(--color-navy)" }}>
-              Navigoplan
-            </span>
-          </Link>
-        </div>
+        {/* Brand */}
+        <Link href="/" className="group inline-flex items-center gap-2">
+          <span
+            aria-hidden
+            className="inline-block h-6 w-6 rounded-full"
+            style={{ background: "var(--color-brand-gold)" }}
+          />
+          <span
+            className={[
+              "text-lg font-semibold tracking-tight",
+              scrolled ? "text-[var(--color-navy)]" : "text-white",
+            ].join(" ")}
+          >
+            Navigoplan
+          </span>
+        </Link>
 
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-1 md:flex">
           {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={[
-                "px-3 py-2 text-sm font-medium rounded-lg transition",
-                "hover:bg-[var(--color-cloud)]",
-                isActive(item.href)
-                  ? "text-[var(--color-navy)]"
-                  : "text-slate-600 hover:text-[var(--color-navy)]",
-              ].join(" ")}
-            >
+            <Link key={item.href} href={item.href} className={linkClass(isActive(item.href))}>
               {item.label}
             </Link>
           ))}
-
           {/* CTA */}
           <Link
             href="/#trial"
-            className="ml-2 btn-cta"
+            className={["ml-2", scrolled ? "btn-cta-solid" : "btn-cta"].join(" ")}
             aria-label="Start Planning"
           >
             Start Planning
@@ -99,7 +94,12 @@ export default function NavBar() {
           aria-controls="mobile-menu"
           aria-label="Toggle Menu"
           onClick={() => setOpen((v) => !v)}
-          className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200/70 bg-white/70 hover:bg-white transition"
+          className={[
+            "md:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg border transition",
+            scrolled
+              ? "border-slate-200/70 bg-white/80 text-slate-800"
+              : "border-white/30 bg-white/10 text-white",
+          ].join(" ")}
         >
           {/* Hamburger / X */}
           <svg
@@ -129,17 +129,26 @@ export default function NavBar() {
         }`}
       >
         <div className="px-4 pb-4">
-          <ul className="divide-y divide-slate-200/60 rounded-xl border border-slate-200/60 bg-white">
+          <ul
+            className={[
+              "rounded-xl border",
+              scrolled
+                ? "border-slate-200/60 bg-white text-slate-800"
+                : "border-white/30 bg-white/10 text-white backdrop-blur",
+            ].join(" ")}
+          >
             {NAV_ITEMS.map((item) => (
-              <li key={item.href}>
+              <li key={item.href} className="border-b last:border-none border-current/15">
                 <Link
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className={[
                     "block px-4 py-3 text-sm",
                     isActive(item.href)
-                      ? "text-[var(--color-navy)]"
-                      : "text-slate-700 hover:text-[var(--color-navy)]",
+                      ? "text-[var(--color-brand-gold)]"
+                      : scrolled
+                        ? "hover:text-[var(--color-navy)]"
+                        : "hover:text-[var(--color-brand-gold)]",
                   ].join(" ")}
                 >
                   {item.label}
@@ -150,7 +159,7 @@ export default function NavBar() {
               <Link
                 href="/#trial"
                 onClick={() => setOpen(false)}
-                className="btn-cta block w-full text-center"
+                className="block w-full text-center btn-cta"
               >
                 Start Planning
               </Link>
