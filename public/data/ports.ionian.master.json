@@ -1,0 +1,112 @@
+[
+  {
+    "id": "gr-kerkyra-gouvia-marina",
+    "region": "Ionian",
+    "area": "Corfu",
+    "name_gr": "Μαρίνα Γουβιών",
+    "name_en": "Gouvia Marina",
+    "guest": {
+      "vibe": ["Scenic","Marina","Family","Premium"],
+      "luxury_score": 8.5,
+      "highlight_photo": "/media/corfu/gouvia-hero.jpg",
+      "experience_notes": "Full-service marina with promenade & restaurants.",
+      "recommended_spots": ["Old Corfu Town", "Marina strip dining"]
+    },
+    "crew": {
+      "type": "marina",
+      "lat": null,
+      "lon": null,
+      "datum": "WGS84",
+      "min_depth_m": 2.5,
+      "max_depth_m": 6,
+      "shelter_from": ["All"],
+      "mooring": "Stern-to, marina berths",
+      "holding": "mud/sand - good",
+      "vhf": "Ch 69 (marina), Ch 12 (Port)",
+      "dangers": "Traffic & wash near entrance",
+      "approach_notes": "Stay mid-channel; mind shallow W side",
+      "facilities": {
+        "water": true, "electricity": true, "fuel_diesel": true, "fuel_gasoline": true,
+        "wifi": true, "wc": true, "showers": true, "laundry": true, "atm": true,
+        "supermarket": true, "pharmacy": true, "haul_out": true, "repair": true,
+        "customs": false, "anchorage_only": false, "waste_oil": true, "pump_out": true
+      }
+    },
+    "source": "Sea Guide Vol.3 p.116"
+  },
+
+  {
+    "id": "gr-paxoi-gaios",
+    "region": "Ionian",
+    "area": "Paxoi",
+    "name_gr": "Γάιος",
+    "name_en": "Gaios",
+    "guest": {
+      "vibe": ["Romantic","Scenic","Canal","Boutique"],
+      "luxury_score": 8.2,
+      "highlight_photo": "/media/paxoi/gaios-hero.jpg",
+      "experience_notes": "Photogenic canal town; sunset promenade & cafés.",
+      "recommended_spots": ["Blue Caves Tour", "Waterfront aperitivo"]
+    },
+    "crew": {
+      "type": "harbour",
+      "lat": null,
+      "lon": null,
+      "datum": "WGS84",
+      "min_depth_m": 2,
+      "max_depth_m": 6,
+      "shelter_from": ["N","NE","E","SE"],
+      "exposed_to": ["SW","W"],
+      "mooring": "Stern-to / alongside main quay",
+      "holding": "sand/mud - good",
+      "vhf": "Ch 12",
+      "dangers": "Ferry wash; narrow channel",
+      "approach_notes": "Follow canal; mind cross-current in summer",
+      "facilities": {
+        "water": true, "electricity": true, "fuel_diesel": true, "fuel_gasoline": true,
+        "wifi": true, "wc": true, "showers": false, "laundry": false, "atm": true,
+        "supermarket": true, "pharmacy": true, "haul_out": false, "repair": false,
+        "customs": false, "anchorage_only": false, "waste_oil": false, "pump_out": false
+      }
+    },
+    "source": "Sea Guide Vol.3 p.109–110"
+  },
+
+  {
+    "id": "gr-epirus-preveza",
+    "region": "Ionian",
+    "area": "Epirus coast",
+    "name_gr": "Πρέβεζα",
+    "name_en": "Preveza",
+    "guest": {
+      "vibe": ["Town","Marina","Historic"],
+      "luxury_score": 7.8,
+      "highlight_photo": "/media/epirus/preveza-hero.jpg",
+      "experience_notes": "Gateway to Amvrakikos with marinas & city vibe.",
+      "recommended_spots": ["Ancient Nikopolis"]
+    },
+    "crew": {
+      "type": "harbour",
+      "lat": null,
+      "lon": null,
+      "datum": "WGS84",
+      "min_depth_m": 4,
+      "max_depth_m": 9,
+      "shelter_from": ["SE","S","SW","W","NW"],
+      "exposed_to": ["NE"],
+      "mooring": "Stern-to / alongside",
+      "holding": "mud - good",
+      "vhf": "Ch 12",
+      "dangers": "Strong cross-winds in Alexandros channel",
+      "approach_notes": "Follow buoys closely",
+      "facilities": {
+        "water": true, "electricity": true, "fuel_diesel": true, "fuel_gasoline": true,
+        "wifi": true, "wc": true, "showers": true, "laundry": false, "atm": true,
+        "supermarket": true, "pharmacy": true, "haul_out": true, "repair": true,
+        "customs": true, "anchorage_only": false, "waste_oil": true, "pump_out": true
+      }
+    },
+    "source": "Sea Guide Vol.3 p.97–99"
+  }
+
+]
