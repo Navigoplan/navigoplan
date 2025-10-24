@@ -1,4 +1,3 @@
-// app/ai/RouteMapClient.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -11,10 +10,11 @@ const TileLayer    = dynamic(() => import("react-leaflet").then(m => m.TileLayer
 const Polyline     = dynamic(() => import("react-leaflet").then(m => m.Polyline),     { ssr: false });
 const CircleMarker = dynamic(() => import("react-leaflet").then(m => m.CircleMarker), { ssr: false });
 const Tooltip      = dynamic(() => import("react-leaflet").then(m => m.Tooltip),      { ssr: false });
-// Δεν ζωγραφίζουμε GeoJSON στο χάρτη, αλλά το φορτώνουμε για τον αλγόριθμο
+const GeoJSON      = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),      { ssr: false });
 const Pane         = dynamic(() => import("react-leaflet").then(m => m.Pane),         { ssr: false });
+const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle),    { ssr: false });
 
-/* Παιδί που μας δίνει το map instance */
+/* Map instance helper */
 const CaptureMap = dynamic(async () => {
   const RL = await import("react-leaflet");
   const { useEffect } = await import("react");
@@ -50,10 +50,14 @@ export type Marker = { name: string; lat: number; lon: number };
 type Ring = [number, number][]; // [lon,lat]
 type PolyRings = { outer: Ring; holes: Ring[] };
 
-type WeatherCell = { lat: number; lon: number; wind: number; wave: number }; // wind m/s, wave m
+type WeatherCell = { lat: number; lon: number; wind: number; wave: number };
 type WeatherField = { get(lat:number, lon:number): { wind:number; wave:number } | null };
 
 /* ---- consts ---- */
+const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
+const TRANSPARENT_1PX = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+
+/* Tunables */
 const BASE_CELL_DEG = 0.03;
 const GRID_MARGIN_DEG = 0.75;
 const NEAR_LAND_PENALTY = 1.2;
@@ -67,6 +71,7 @@ const WEATHER_PENALTY  = 0.45;
 /* Animation */
 const DRAW_POINTS_PER_SEC = 3;
 const DRAW_INTERVAL_MS = Math.max(20, Math.round(1000 / DRAW_POINTS_PER_SEC));
+const FOLLOW_ZOOM_MIN = 9;
 const LEG_VIEW_ZOOM_MAX = 10;
 const MARKER_FADE_MS = 280;
 
@@ -119,7 +124,7 @@ function collectPolys(geo: any): PolyRings[] {
   return polys;
 }
 
-/* -------- Adaptive cell size για κάθε leg -------- */
+/* -------- Adaptive cell size -------- */
 function pickCellDegForLeg(a: Point, b: Point) {
   const dLat = Math.abs(a.lat - b.lat);
   const dLon = Math.abs(a.lon - b.lon);
@@ -174,7 +179,6 @@ function buildGridForBounds(minLat:number,maxLat:number,minLon:number,maxLon:num
 
 /* ---- Weather (Open-Meteo Marine) ---- */
 const _weatherCache = new Map<string, WeatherField>();
-
 async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLon:number): Promise<WeatherField|null> {
   const step = 0.3;
   const lats:number[] = []; const lons:number[] = [];
@@ -220,7 +224,7 @@ async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLo
   }
 }
 
-/* ---- A* ---- */
+/* ---- A* water routing ---- */
 function nearestWaterNode(grid: GridNode[][], start: GridNode) {
   if (start.walkable) return start;
   const q: GridNode[] = [start];
@@ -342,18 +346,39 @@ function AnimatedDot({ center,label,active,onClick,appearAtMs,baseRadius=5 }:{
 export default function RouteMapClient({
   points, markers, activeNames, onMarkerClick,
   weatherAwareProp,
+  followShipProp,
   onLegMeteo
 }:{
-  points: Point[]; markers?: Marker[]; activeNames?: string[]; onMarkerClick?: (portName: string) => void;
+  points: Point[];
+  markers?: Marker[];
+  activeNames?: string[];
+  onMarkerClick?: (portName: string) => void;
+  /** Control routing penalty from parent (no in-map UI) */
   weatherAwareProp?: boolean;
+  /** Control follow-ship from parent (no in-map UI) */
+  followShipProp?: boolean;
   onLegMeteo?: (legs: Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }>) => void;
 }) {
   const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
-  const effPoints = points ?? [];
-  const weatherAware = !!weatherAwareProp;
+  /* Effective points: μόνο ό,τι έρχεται απ’ τον parent */
+  const effPoints = (points?.length ?? 0) >= 2 ? points : [];
 
-  /* coast (ΜΟΝΟ για τον αλγόριθμο – δεν το ζωγραφίζουμε) */
+  /* Weather toggle (controlled/uncontrolled) */
+  const [weatherAwareInternal, setWeatherAwareInternal] = useState(false);
+  const weatherAware = (typeof weatherAwareProp === "boolean") ? weatherAwareProp : weatherAwareInternal;
+  useEffect(() => {
+    if (typeof weatherAwareProp === "boolean") setWeatherAwareInternal(weatherAwareProp);
+  }, [weatherAwareProp]);
+
+  /* Follow ship (controlled/uncontrolled) */
+  const [followShipInternal, setFollowShipInternal] = useState(false);
+  const followShip = (typeof followShipProp === "boolean") ? followShipProp : followShipInternal;
+  useEffect(() => {
+    if (typeof followShipProp === "boolean") setFollowShipInternal(followShipProp);
+  }, [followShipProp]);
+
+  /* coast */
   const [coast, setCoast] = useState<any | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -424,7 +449,6 @@ export default function RouteMapClient({
       }
       if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
 
-      // dedup
       const cleaned: [number, number][] = [];
       for (const pt of seg) {
         if (!cleaned.length) cleaned.push(pt);
@@ -450,7 +474,7 @@ export default function RouteMapClient({
     return result;
   }, [effPoints, coastPolys, weatherAware, weatherFieldsForLeg]);
 
-  /* === Meteo metrics === */
+  /* === Meteo metrics emit === */
   useEffect(() => {
     if (!onLegMeteo) return;
     if (!effPoints.length || !legSegments.length) { onLegMeteo([]); return; }
@@ -507,7 +531,7 @@ export default function RouteMapClient({
     return (waterLatLngs as [number, number][]).slice(0, Math.max(2, drawCount)) as LatLngExpression[];
   }, [waterLatLngs, drawCount]);
 
-  /* current leg + auto-zoom */
+  /* current leg */
   const currentLegIndex = useMemo(() => {
     if (!legEndIdx.length) return -1;
     for (let i = 0; i < legEndIdx.length; i++) {
@@ -516,9 +540,13 @@ export default function RouteMapClient({
     return legEndIdx.length - 1;
   }, [drawCount, legEndIdx]);
 
+  /* follow ship / auto-zoom (controlled by followShip) */
+  const lastFollowedPointRef = useRef<string>("");
   const prevLegRef = useRef<number>(-999);
+
   useEffect(() => {
     if (!map) return;
+    if (followShip) return;
     if (currentLegIndex < 0) return;
     if (currentLegIndex === prevLegRef.current) return;
     prevLegRef.current = currentLegIndex;
@@ -534,7 +562,17 @@ export default function RouteMapClient({
         if (map.getZoom() > LEG_VIEW_ZOOM_MAX) map.setZoom(LEG_VIEW_ZOOM_MAX);
       }, 500);
     }
-  }, [map, currentLegIndex, effPoints]);
+  }, [map, currentLegIndex, effPoints, followShip]);
+
+  useEffect(() => {
+    if (!map || !followShip || animatedLatLngs.length < 2) return;
+    const tip = animatedLatLngs[animatedLatLngs.length - 1] as [number, number];
+    const key = `${tip[0].toFixed(5)},${tip[1].toFixed(5)}`;
+    if (lastFollowedPointRef.current === key) return;
+    lastFollowedPointRef.current = key;
+    const targetZoom = Math.max(map.getZoom(), FOLLOW_ZOOM_MIN);
+    map.flyTo(tip as any, targetZoom, { duration: 0.5 });
+  }, [animatedLatLngs, followShip, map]);
 
   /* markers */
   const markerStart = effPoints[0] ?? null;
@@ -557,34 +595,50 @@ export default function RouteMapClient({
 
   return (
     <div className="w-full h-[520px] overflow-hidden rounded-2xl border border-slate-200 relative">
-      {/* Λιτός χάρτης χωρίς overlays/filters */}
-      <MapContainer
-        center={center}
-        zoom={7}
-        minZoom={3}
-        maxZoom={14}
-        scrollWheelZoom
-        zoomControl={false}             // κρύβει τα +/−
-        style={{ height:"100%", width:"100%" }}
-      >
+      <style jsx global>{`
+        .leaflet-tile[src*="tiles.gebco.net"] { filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06); }
+        .leaflet-pane.pane-labels img.leaflet-tile { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; filter: brightness(0.9) contrast(1.35); }
+        .leaflet-pane.pane-labels img[src*="voyager_labels_over"]{ filter: brightness(0.88) contrast(1.45); }
+      `}</style>
+
+      <MapContainer center={center} zoom={7} minZoom={3} maxZoom={14} scrollWheelZoom style={{ height:"100%", width:"100%" }}>
         <CaptureMap onReady={setMap} />
 
-        {/* Ένας και μοναδικός ελαφρύς basemap */}
-        <Pane name="pane-base" style={{ zIndex: 150 }}>
-          <TileLayer
-            attribution="&copy; OpenStreetMap & CARTO"
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
-            opacity={1}
-          />
+        {/* GEBCO */}
+        <Pane name="pane-gebco" style={{ zIndex: 200 }}>
+          <TileLayer attribution="&copy; GEBCO" url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png" opacity={0.9} />
         </Pane>
 
-        {/* Route (shadow + dashed) */}
+        {/* water tint */}
+        <Pane name="pane-water" style={{ zIndex: 305 }}>
+          <Rectangle bounds={WORLD_BOUNDS} pathOptions={{ color:"transparent", weight:0, fillColor:"#7fa8d8", fillOpacity:0.35 }} interactive={false} />
+        </Pane>
+
+        {/* land */}
+        <Pane name="pane-land" style={{ zIndex: 310 }}>
+          {coast && (<GeoJSON data={coast} style={() => ({ color:"#0b1220", weight:2, opacity:1, fillColor:"#ffffff", fillOpacity:1 })} />)}
+        </Pane>
+
+        {/* labels */}
+        <Pane name="pane-labels" style={{ zIndex: 360 }}>
+          <TileLayer attribution="&copy; OpenStreetMap contributors, &copy; CARTO" url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.75} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.25} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png" tileSize={256} zoomOffset={0} detectRetina opacity={0.55} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
+        </Pane>
+
+        {/* seamarks */}
+        <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
+          <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
+        </Pane>
+
+        {/* full route shadow */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline pane="pane-route-shadow" positions={waterLatLngs} pathOptions={{ color:"#9aa3b2", weight:2, opacity:0.6, lineJoin:"round", lineCap:"round" }} />
           )}
         </Pane>
 
+        {/* progressive dashed route */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {animatedLatLngs.length >= 2 && (
             <Polyline pane="pane-route" positions={animatedLatLngs} pathOptions={{ color:"#0b1220", weight:3, opacity:0.95, dashArray:"6 8", lineJoin:"round", lineCap:"round" }} />
@@ -611,6 +665,17 @@ export default function RouteMapClient({
             <AnimatedDot center={[markerEnd.lat, markerEnd.lon] as LatLngExpression} label={`End: ${effPoints.at(-1)?.name}`} active appearAtMs={(legEndIdx[legEndIdx.length - 1] ?? 0) * DRAW_INTERVAL_MS} onClick={() => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon)} baseRadius={8} />
           )}
         </Pane>
+
+        {/* dataset markers */}
+        {markers?.length ? (
+          <Pane name="pane-dataset" style={{ zIndex: 430 }}>
+            {markers.map((m, i) => (
+              <CircleMarker key={`${m.name}-${i}`} pane="pane-dataset" center={[m.lat, m.lon] as LatLngExpression} radius={3.5} eventHandlers={{ click: () => flyTo(m.name, m.lat, m.lon) }} pathOptions={{ color: isActive(m.name) ? "#c4a962" : "#0b122033", fillColor: isActive(m.name) ? "#c4a962" : "#0b122033", fillOpacity: isActive(m.name) ? 0.95 : 0.5, weight: isActive(m.name) ? 2 : 1 }}>
+                {isActive(m.name) && (<Tooltip direction="top" offset={[0,-6]} opacity={0.95}>{m.name}</Tooltip>)}
+              </CircleMarker>
+            ))}
+          </Pane>
+        ) : null}
 
         {/* initial fit */}
         {bounds && <FitBounds bounds={bounds} />}
