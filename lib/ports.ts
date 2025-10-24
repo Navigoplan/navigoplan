@@ -1,7 +1,11 @@
+// app/lib/ports/ports.ts
+
 export type Port = {
   id: string;
+
   region?: string;
   area?: string;
+
   name_gr?: string;
   name_en?: string;
 
@@ -15,12 +19,14 @@ export type Port = {
 
   crew?: {
     type?: "marina" | "harbour" | "anchorage" | "pier" | "fuel" | string;
+
     lat?: number | null;
     lon?: number | null;
     datum?: string;
 
     min_depth_m?: number;
     max_depth_m?: number;
+
     shelter_from?: string[] | string;
     mooring?: string;
     holding?: string;
