@@ -1,0 +1,164 @@
+{
+  "version": "1",
+  "facts": [
+    {
+      "id": "alimos",
+      "names": { "en": "Alimos", "el": "Άλιμος", "aliases": ["Kalamaki","Alimos Marina"] },
+      "vhf": ["71"],
+      "vhfNote": "Marina office on 71; Port Authority on 12/16 (confirm on arrival).",
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "approach": [
+        "Busy Saronic hub; watch for traffic, ferries & wake.",
+        "Preferred approach from SE; observe speed limits close to breakwater."
+      ],
+      "anchorage": { "holding": "sand/mud", "quality": "good" },
+      "wx": { "exposure": ["S"], "shelter": ["N-NE-E"], "notes": "Local sea breeze PM; meltemi less pronounced than Cyclades." },
+      "hazards": [
+        { "code": "FERRY_WASH", "label": "Ferry/RIB wash close to entrance", "severity": 1 },
+        { "code": "SURGE", "label": "Occasional surge near outer berths", "severity": 1 }
+      ]
+    },
+    {
+      "id": "aegina",
+      "names": { "en": "Aegina", "el": "Αίγινα", "aliases": ["Aigina Port"] },
+      "vhf": [],
+      "vhfNote": "Small port; Port Authority typically on 12/16—confirm locally.",
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "approach": ["Heavy ferry traffic; call before entry when busy."],
+      "anchorage": { "holding": "sand", "quality": "good" },
+      "wx": { "exposure": ["E-SE swell into basin"], "shelter": ["W-NW"], "notes": "Generally protected for Saronic." },
+      "hazards": [
+        { "code": "FERRY_WASH", "label": "Frequent ferries; wake & prop wash", "severity": 2 },
+        { "code": "TIGHT_BERTH", "label": "Crowded; stern-to med moor with short room", "severity": 2 }
+      ]
+    },
+    {
+      "id": "agistri",
+      "names": { "en": "Agistri", "el": "Αγκίστρι", "aliases": ["Skala","Megalochori"] },
+      "services": { "fuel": false, "water": true, "power": false, "provisions": true, "berth": true },
+      "anchorage": { "holding": "sand", "quality": "good" },
+      "wx": { "exposure": ["E-SE"], "shelter": ["W-NW"] },
+      "hazards": [{ "code": "WEED_PATCHES", "label": "Weed patches—test set twice", "severity": 2 }]
+    },
+    {
+      "id": "poros",
+      "names": { "en": "Poros", "el": "Πόρος", "aliases": ["Poros Town"] },
+      "vhf": ["12"],
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "approach": ["Narrow channel with cross-set; keep to starboard, mind current."],
+      "anchorage": { "holding": "sand/weed", "quality": "fair" },
+      "wx": { "exposure": ["NE gusts down channel"], "shelter": ["Most directions within channel"] },
+      "hazards": [
+        { "code": "CROSS_CURRENT", "label": "Cross current in channel", "severity": 2 },
+        { "code": "WEED_PATCHES", "label": "Weed—back down longer to set", "severity": 2 }
+      ]
+    },
+    {
+      "id": "hydra",
+      "names": { "en": "Hydra", "el": "Ύδρα", "aliases": ["Idra"] },
+      "services": { "fuel": false, "water": true, "power": true, "provisions": true, "berth": true },
+      "approach": ["Very tight basin; rafting common; strong surge with swell."],
+      "anchorage": { "holding": "rock/sand", "quality": "poor", "cautions": ["Trip line recommended"] },
+      "wx": { "exposure": ["S-SE swell into harbour"], "shelter": ["N"], "notes": "Surge from traffic & swell common." },
+      "hazards": [
+        { "code": "SURGE", "label": "Harbour surge & wash", "severity": 3 },
+        { "code": "TIGHT_BERTH", "label": "Tight manoeuvring/rafting", "severity": 3 },
+        { "code": "FOUL_GROUND", "label": "Foul bottom & chains", "severity": 2 }
+      ]
+    },
+    {
+      "id": "spetses",
+      "names": { "en": "Spetses", "el": "Σπέτσες", "aliases": ["Dapia"] },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "anchorage": { "holding": "sand/mud", "quality": "good" },
+      "wx": { "exposure": ["S-SE swell in weather"], "shelter": ["W-NW"] },
+      "hazards": [{ "code": "TRAFFIC", "label": "Water-taxis/ferries frequent", "severity": 2 }]
+    },
+    {
+      "id": "ermioni",
+      "names": { "en": "Ermioni", "el": "Ερμιόνη" },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "anchorage": { "holding": "mud/sand", "quality": "good" },
+      "wx": { "exposure": ["E-SE"], "shelter": ["W-NW"] },
+      "hazards": []
+    },
+    {
+      "id": "porto-cheli",
+      "names": { "en": "Porto Cheli", "el": "Πόρτο Χέλι" },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "anchorage": { "holding": "mud/sand", "quality": "excellent" },
+      "wx": { "exposure": ["S"], "shelter": ["Most directions"], "notes": "Large enclosed bay; excellent holding." },
+      "hazards": []
+    },
+    {
+      "id": "kea",
+      "names": { "en": "Kea", "el": "Κέα", "aliases": ["Korissia"] },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "wx": { "exposure": ["Meltemi"], "shelter": ["Inside basin"], "notes": "Meltemi acceleration at entrance." },
+      "hazards": [{ "code": "MELTEMI", "label": "Meltemi funnel & gusts", "severity": 2 }]
+    },
+    {
+      "id": "kythnos-loutra",
+      "names": { "en": "Kythnos (Loutra)", "el": "Κύθνος (Λουτρά)" },
+      "services": { "fuel": false, "water": true, "power": true, "provisions": true, "berth": true },
+      "anchorage": { "holding": "sand/weed", "quality": "fair" },
+      "wx": { "exposure": ["Meltemi NE-N"], "shelter": ["Inside basin"] },
+      "hazards": [{ "code": "WEED_PATCHES", "label": "Weed—ensure good set", "severity": 2 }]
+    },
+    {
+      "id": "mykonos-tourlos",
+      "names": { "en": "Mykonos (Tourlos)", "el": "Μύκονος (Τούρλος)", "aliases": ["New Port"] },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "approach": ["Ferry basin—strict traffic control; expect cross-winds."],
+      "wx": { "exposure": ["Strong Meltemi"], "shelter": ["Inner berths"] },
+      "hazards": [
+        { "code": "MELTEMI", "label": "Very strong Meltemi; gusts & cross-wind berthing", "severity": 3 },
+        { "code": "FERRY_WASH", "label": "Ferry movements & wash", "severity": 2 }
+      ]
+    },
+    {
+      "id": "paros-parikia",
+      "names": { "en": "Paros (Parikia)", "el": "Πάρος (Παροικιά)" },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "wx": { "exposure": ["Meltemi W-N"], "shelter": ["Inner quay"], "notes": "Swell with strong N winds." },
+      "hazards": [{ "code": "SURGE", "label": "Swell/surge with strong N", "severity": 2 }]
+    },
+    {
+      "id": "naxos",
+      "names": { "en": "Naxos", "el": "Νάξος" },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "wx": { "exposure": ["Meltemi NW-N"], "shelter": ["Inner basin"] },
+      "hazards": [{ "code": "MELTEMI", "label": "Meltemi gusts & surge at outer quay", "severity": 2 }]
+    },
+    {
+      "id": "ios",
+      "names": { "en": "Ios", "el": "Ίος" },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "wx": { "exposure": ["N"], "shelter": ["SE"], "notes": "Bora-like gusts into the bay in meltemi." },
+      "hazards": [{ "code": "GUSTS", "label": "Down-gusts into bay in meltemi", "severity": 2 }]
+    },
+    {
+      "id": "milos-adamas",
+      "names": { "en": "Milos (Adamas)", "el": "Μήλος (Αδάμας)" },
+      "services": { "fuel": true, "water": true, "power": true, "provisions": true, "berth": true },
+      "anchorage": { "holding": "sand/mud", "quality": "good" },
+      "wx": { "exposure": ["W-SW swell with strong winds at entrance"], "shelter": ["Inner bay"] },
+      "hazards": []
+    },
+    {
+      "id": "sifnos-kamares",
+      "names": { "en": "Sifnos (Kamares)", "el": "Σίφνος (Καμάρες)" },
+      "services": { "fuel": false, "water": true, "power": true, "provisions": true, "berth": true },
+      "wx": { "exposure": ["W swell"], "shelter": ["Inner quay"] },
+      "hazards": [{ "code": "SURGE", "label": "Swell/surge with W winds", "severity": 2 }]
+    },
+    {
+      "id": "serifos-livadi",
+      "names": { "en": "Serifos (Livadi)", "el": "Σέριφος (Λιβάδι)" },
+      "services": { "fuel": false, "water": true, "power": true, "provisions": true, "berth": true },
+      "anchorage": { "holding": "sand", "quality": "good" },
+      "wx": { "exposure": ["N-NW meltemi"], "shelter": ["SE corner"] },
+      "hazards": []
+    }
+  ]
+}
