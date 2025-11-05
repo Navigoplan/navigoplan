@@ -69,20 +69,33 @@ export default function Home() {
           >
             Built for modern charter operations
           </h2>
-          <p className="mt-2 text-slate-600">Plan, price and present high-end itineraries.</p>
+          {/* stronger NAVY subcopy */}
+          <p
+            className="mt-2 font-medium"
+            style={{ color: "var(--color-brand-navy)" }}
+          >
+            Plan, price and present high-end itineraries.
+          </p>
         </div>
       </section>
 
       {/* Pricing */}
       <section id="pricing" className="border-t bg-slate-50 py-16">
         <div className="mx-auto max-w-7xl px-6 text-center">
+          {/* GOLD “Simple Pricing” */}
           <h2
-            className="text-2xl font-semibold mb-2"
-            style={{ color: "var(--color-brand-navy)" }}
+            className="text-2xl font-semibold mb-2 drop-shadow-[0_1px_6px_rgba(0,0,0,0.25)]"
+            style={{ color: "var(--color-brand-gold)" }}
           >
             Simple Pricing
           </h2>
-          <p className="mt-2 text-slate-600">Transparent plans to get you started.</p>
+          {/* stronger NAVY subcopy */}
+          <p
+            className="mt-2 font-medium"
+            style={{ color: "var(--color-brand-navy)" }}
+          >
+            Transparent plans to get you started.
+          </p>
         </div>
       </section>
 
@@ -92,8 +105,10 @@ export default function Home() {
         className="border-t py-16"
         style={{ backgroundColor: "var(--color-brand-navy)" }}
       >
-        <div className="mx-auto max-w-xl rounded-2xl border p-6 text-center shadow-sm"
-             style={{ borderColor: "var(--color-brand-gold)", background: "#fff" }}>
+        <div
+          className="mx-auto max-w-xl rounded-2xl border p-6 text-center shadow-sm"
+          style={{ borderColor: "var(--color-brand-gold)", background: "#fff" }}
+        >
           <h3
             className="text-xl font-semibold"
             style={{ color: "var(--color-brand-navy)" }}
