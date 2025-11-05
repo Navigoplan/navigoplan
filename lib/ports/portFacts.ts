@@ -1,20 +1,20 @@
 /* ========= Port Facts Master =========
    Used by CaptainCrewToolkit & QuickFacts
-   Source: Sea Guide / OSM / Wikidata / internal notes
+   Source: Sea Guide / OSM / Wikidata / official marina docs / internal notes
    ===================================== */
 
 export type PortHazard = { label: string; note?: string; sev?: 0 | 1 | 2 }; // sev 0=info,1=warn,2=alert
 
 export type PortFact = {
-  vhf?: string;                                 // primary working channel (marina/Port Auth)
-  vhfVerified?: boolean;                        // true when verified against Sea Guide / official doc
-  marina?: string;                              // marina/port name
+  vhf?: string;                 // primary working channel (marina/Port Auth)
+  vhfVerified?: boolean;        // true when verified against official/Sea Guide
+  marina?: string;              // marina/port name
   anchorage?: { holding?: string; notes?: string };
-  shelter?: string;                             // from which winds it shelters
-  exposure?: string;                            // to which winds/swell it’s exposed
-  hazards?: PortHazard[];                       // local hazards / seamanship notes
-  notes?: string[];                             // misc operational notes
-  sources?: string[];                           // provenance (e.g., "Sea Guide Vol.3 p.xx")
+  shelter?: string;             // from which winds it shelters
+  exposure?: string;            // to which winds/swell it’s exposed
+  hazards?: PortHazard[];       // local hazards / seamanship notes
+  notes?: string[];             // misc operational notes
+  sources?: string[];           // provenance (e.g., "Olympic Marine PDF 2024")
 };
 
 /* ========= Main Facts Dataset =========
@@ -30,20 +30,20 @@ const FACTS: Record<string, PortFact> = {
     marina: "Alimos Marina",
     notes: [
       "Πολύ traffic σε change-over Παρασκευή/Σάββατο.",
-      "Fuel berth κατόπιν συνεννόησης / Port Office VHF 71.",
+      "Fuel berth κατόπιν συνεννόησης / Port Office.",
     ],
-    sources: ["Sea Guide (scan provided)"],
+    sources: ["Dockwalk Superports: Alimos Marina (lists VHF 71)"],
   },
   Aegina: {
-    vhf: "12",
-    vhfVerified: true,
+    vhf: "12",  // Port Authority working channel (seed)
+    vhfVerified: false,
     anchorage: { holding: "sand/mud", notes: "Καλή κράτηση· απόφυγε weed patches." },
     exposure: "Ferry wash στην είσοδο λιμένα",
     hazards: [
       { label: "Traffic density", sev: 1 },
       { label: "Ferry wash", sev: 1, note: "Είσοδος/έξοδος ferries" },
     ],
-    sources: ["Sea Guide (scan provided)"],
+    sources: ["Sea Guide (user scans)"],
   },
   Agistri: {
     vhf: "—",
@@ -52,7 +52,7 @@ const FACTS: Record<string, PortFact> = {
     exposure: "Ν–ΝΔ",
   },
   Poros: {
-    vhf: "12",
+    vhf: "09",
     vhfVerified: true,
     anchorage: { holding: "sand/weed", notes: "Patchy· δοκίμασε δύο φορές για set." },
     shelter: "W–NW",
@@ -61,17 +61,17 @@ const FACTS: Record<string, PortFact> = {
       { label: "Cross current", sev: 1, note: "Ρεύματα στο στενό" },
       { label: "Weed patches", sev: 1 },
     ],
-    sources: ["Sea Guide (scan provided)"],
+    sources: ["Grecosailor pilotage: Poros (VHF 09)"],
   },
   Hydra: {
-    vhf: "12",
-    vhfVerified: true,
+    vhf: "12", // Port Police often monitor 12 (seed)
+    vhfVerified: false,
     anchorage: { holding: "rock/sand", notes: "Πολύ περιορισμένος χώρος, surge." },
     hazards: [
-      { label: "Tight harbor", sev: 2, note: "Περιορισμένοι ελιγμοί σε στενό λιμένα" },
+      { label: "Tight harbor", sev: 2, note: "Περιορισμένοι ελιγμοί" },
       { label: "Surge", sev: 2, note: "Από ferries/traffic" },
     ],
-    sources: ["Sea Guide (scan provided)"],
+    sources: ["Sea Guide (user scans)"],
   },
   Spetses: {
     vhf: "—",
@@ -105,9 +105,11 @@ const FACTS: Record<string, PortFact> = {
 
   /* ======== CYCLADES ======== */
   Lavrio: {
-    vhf: "—",
+    vhf: "09",
+    vhfVerified: true,
     marina: "Olympic Marine",
     notes: ["Base για Cyclades· συχνός Β-ΒΑ άνεμος στην έξοδο."],
+    sources: ["Olympic Marine — Official Marina Guide PDF (VHF 09)"],
   },
   Kea: {
     vhf: "—",
@@ -125,15 +127,16 @@ const FACTS: Record<string, PortFact> = {
     hazards: [{ label: "Ferry wash (Ermoupoli)", sev: 1 }],
   },
   Mykonos: {
-    vhf: "—",
+    vhf: "—", // Tourlos/Port Control varies; to be verified
     marina: "Tourlos",
     anchorage: { holding: "sand", notes: "Ρηχά, ριπές Meltemi." },
     hazards: [{ label: "Meltemi gusts", sev: 2 }, { label: "Ferry wash", sev: 1 }],
   },
   Paros: {
-    vhf: "—",
+    vhf: "—", // Port Police commonly on 12; charter base often uses 73 (needs verify)
     anchorage: { holding: "sand", notes: "Naoussa: καλή προστασία· πρόσεχε ferry wash." },
     hazards: [{ label: "Meltemi funneling", sev: 2, note: "Κανάλι Πάρου–Νάξου." }],
+    sources: ["Charter base notes (VHF 73) — needs official confirmation"],
   },
   Naxos: {
     vhf: "—",
@@ -165,7 +168,7 @@ const FACTS: Record<string, PortFact> = {
     anchorage: { holding: "sand/weed", notes: "Καλύτερα σε καθαρό άμμο." },
     exposure: "Μελτέμι",
   },
-  Andros: { vhf: "—", exposure: "Strong Meltemi funneling (B–ΒΑ)" },
+  Andros: { vhf: "—", exposure: "Strong Meltemi funneling (Β–ΒΑ)" },
   Tinos: { vhf: "—", exposure: "Μελτέμι/ριπές στο λιμάνι" },
   Folegandros: {
     vhf: "—",
@@ -185,14 +188,16 @@ const FACTS: Record<string, PortFact> = {
   Amorgos: {
     vhf: "—",
     anchorage: { holding: "sand/weed", notes: "Μελτέμι δημιουργεί swell." },
-    exposure: "B–ΒΑ",
+    exposure: "Β–ΒΑ",
   },
 
   /* ======== IONIAN ======== */
   Corfu: {
-    vhf: "—",
+    vhf: "69", // common listing for D-Marin Gouvia; confirm with official
+    vhfVerified: false,
     marina: "Gouvia Marina",
     anchorage: { holding: "mud/sand", notes: "Καλή κράτηση σε κολπίσκους." },
+    sources: ["D-Marin Gouvia listings (to be cross-checked on official page)"],
   },
   Paxos: {
     vhf: "—",
@@ -279,9 +284,7 @@ const FACTS: Record<string, PortFact> = {
   Sitia: { vhf: "—", anchorage: { holding: "sand" }, exposure: "E–NE" },
 };
 
-/* ========= Aliases (EN/GR/alt spellings) =========
-   Map any alias -> canonical FACTS key (after normalize)
-*/
+/* ========= Aliases (EN/GR/alt spellings) ========= */
 const ALIASES: Record<string, string> = {
   // Saronic
   "αιγινα": "Aegina",
@@ -294,11 +297,11 @@ const ALIASES: Record<string, string> = {
   "μεθανα": "Methana",
   "επιδαυρος": "Epidaurus",
   "λαυριο": "Lavrio",
-  // Cyclades (samples)
+  // Cyclades
   "μυκονος": "Mykonos",
   "παρος": "Paros",
   "ναξος": "Naxos",
-  "ιoς": "Ios",
+  "ιος": "Ios",
   "σαντορινη": "Santorini",
   "μηλος": "Milos",
   "σιφνος": "Sifnos",
@@ -310,7 +313,7 @@ const ALIASES: Record<string, string> = {
   "κουφονησια": "Koufonisia",
   "αμοργος": "Amorgos",
   "συρος": "Syros",
-  "κυνθος": "Kythnos",
+  "κυθνος": "Kythnos",
   "κεα": "Kea",
   // Ionian
   "κερκυρα": "Corfu",
@@ -335,15 +338,15 @@ const ALIASES: Record<string, string> = {
   "βολος": "Volos",
   "σκιαθος": "Skiathos",
   "σκοπελος": "Skopelos",
-  "αλoννησος": "Alonissos",
+  "αλοννησος": "Alonissos",
   // North Aegean / Halkidiki
   "θεσσαλονικη": "Thessaloniki",
-  "νeα μoυδανια": "Nea Moudania",
+  "νεα μουδανια": "Nea Moudania",
   "σανη": "Sani Marina",
   "νικητη": "Nikiti",
   "βουρβουρου": "Vourvourou",
   "ορμος παναγιας": "Ormos Panagias",
-  "ουρανούπολη": "Ouranoupoli",
+  "ουρανουπολη": "Ouranoupoli",
   "καβαλα": "Kavala",
   "θασος": "Thassos",
   "σαμοθρακη": "Samothraki",
