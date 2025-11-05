@@ -11,6 +11,7 @@ export async function GET(req: Request) {
   const token = url.searchParams.get("token");
   const email = (url.searchParams.get("email") || "").trim().toLowerCase();
 
+  // appBase: βασικό origin για redirects (χωρίς τελικό /)
   const appBase = (process.env.APP_URL || "").replace(/\/+$/, "") || url.origin;
 
   if (!token || !email) {
@@ -40,8 +41,21 @@ export async function GET(req: Request) {
     // One-time use: σβήστο αμέσως
     await prisma.magicLinkToken.delete({ where: { id: rec.id } });
 
-    // Βεβαιώσου ότι υπάρχει user (στο send το είχες ήδη να τον δημιουργεί)
-    const user = rec.user ?? (await prisma.user.findUnique({ where: { id: rec.userId } }));
+    // Βεβαιώσου ότι υπάρχει user
+    // (αν δεν υπάρχει στο include, δοκίμασε lookup μόνο αν έχουμε έγκυρο string id)
+    let user = rec.user ?? null;
+
+    if (!user) {
+      const uid = rec.userId ?? undefined; // guard: ποτέ null προς Prisma
+      if (!uid) {
+        return NextResponse.redirect(new URL("/login?e=no_user", appBase));
+      }
+
+      user = await prisma.user.findUnique({
+        where: { id: uid },
+      });
+    }
+
     if (!user) {
       return NextResponse.redirect(new URL("/login?e=no_user", appBase));
     }
