@@ -1,3 +1,4 @@
+// app/components/HeroSection.tsx
 "use client";
 
 import HeroVideo from "@/app/components/HeroVideo";
@@ -8,19 +9,25 @@ export default function HeroSection() {
       {/* Background video */}
       <HeroVideo mp4="/hero.mp4" poster="/hero-poster.png" className="absolute inset-0" />
 
-      {/* Overlay */}
+      {/* Overlay (κρατά κοντράστ για το χρυσό κείμενο) */}
       <div className="absolute inset-0 z-0 bg-gradient-to-b from-black/60 via-black/35 to-black/40" />
 
       {/* Content */}
       <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center justify-center px-6 text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow md:text-5xl">
+        {/* GOLD HEADLINE */}
+        <h1
+          className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]"
+          style={{ color: "var(--color-brand-gold)" }}
+        >
           Luxury Yacht Charter Itinerary Software
         </h1>
-        <p className="mt-4 max-w-xl text-lg text-white/90 drop-shadow md:text-xl">
+
+        {/* κρατάμε το subcopy λευκό για αναγνωσιμότητα */}
+        <p className="mt-4 max-w-xl text-lg md:text-xl text-white/90 drop-shadow">
           Plan routes, estimate costs, and present stunning itineraries your clients will love.
         </p>
 
-        {/* CTAs: outlined gold (hex to avoid any token issues) */}
+        {/* CTAs: outlined gold */}
         <div className="mt-8 flex gap-4">
           <a
             href="/ai"
