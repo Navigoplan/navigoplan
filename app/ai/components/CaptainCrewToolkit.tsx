@@ -1,155 +1,136 @@
-// app/ai/components/CaptainCrewToolkit.tsx
 "use client";
 import React from "react";
-import type { DayCard, PlanResult, YachtType } from "../page";
 
-/** Αν δεν σταλεί seed από τον γονέα, χρησιμοποιούμε αυτό το μίνι seed */
-const DEFAULT_PORT_FACTS: Record<
-  string,
-  { anchorage?: { holding?: string; notes?: string }; vhf?: string; phone?: string; website?: string; fuel?: boolean; water?: boolean; provisions?: boolean; berth?: boolean }
-> = {
-  Poros: { anchorage: { holding: "sand/weed", notes: "Καλή προστασία από Β-ΒΔ" }, vhf: "12" },
-  Hydra: { anchorage: { holding: "rock/sand", notes: "Στενός λιμένας, surge" } },
-  "Porto Cheli": { anchorage: { holding: "mud/sand", notes: "Πολύ καλή κράτηση" } },
-  Kythnos: { anchorage: { holding: "sand/weed" } },
+/* ========= Local type definitions ========= */
+type YachtType = "Motor" | "Sailing";
+
+type Leg = {
+  from: string;
+  to: string;
+  nm: number;
+  hours: number;
+  fuelL: number;
+  cost?: number;
+  eta?: { dep: string; arr: string; window: string };
+};
+
+type DayCard = {
+  day: number;
+  date: string;
+  leg?: Leg;
+  notes?: string;
 };
 
 type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string };
 
-function anchorRisk(holding?: string) {
-  const h = (holding || "").toLowerCase();
-  let level: "LOW" | "MEDIUM" | "HIGH" = "LOW";
-  const hints: string[] = ["Scope 5:1–7:1; verify swing circle & UKC ≥20%.", "Set anchor alarm bearings; record transits."];
-
-  if (h.includes("weed") || h.includes("grass")) { hints.unshift("Weed patches: back-down longer; test set twice."); level = "MEDIUM"; }
-  if (h.includes("rock")) { hints.unshift("Rocky bottom: consider trip line & extra scope."); level = "HIGH"; }
-  if (h.includes("mud")) { hints.unshift("Mud/sand: good holding; avoid fouling with slow heave."); }
-
-  return { level, hints };
-}
-function badgeClass(level: "LOW" | "MEDIUM" | "HIGH") {
-  const map = {
-    LOW: "bg-emerald-100 text-emerald-800",
-    MEDIUM: "bg-amber-100 text-amber-800",
-    HIGH: "bg-rose-100 text-rose-800",
-  } as const;
-  return `text-xs px-2 py-1 rounded-full font-semibold ${map[level]}`;
-}
-
 type Props = {
-  plan: PlanResult;
+  plan: DayCard[];
   startDate: string;
   yachtType: YachtType;
   speed: number;
   lph: number;
-  thumbs: Record<string, string | undefined>;
-  destWeather: Record<string, SpotWeather>;
-  /** Προαιρετικό seed από τον γονέα – διορθώνει το error */
-  portFactsSeed?: typeof DEFAULT_PORT_FACTS;
+  thumbs?: Record<string, string | undefined>;
+  destWeather?: Record<string, SpotWeather>;
 };
 
+/* ========= Small helpers ========= */
+function formatHoursHM(hours: number) {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}h ${m.toString().padStart(2, "0")}m`;
+}
+
+function formatDate(d?: string) {
+  if (!d) return "";
+  try {
+    return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  } catch {
+    return d;
+  }
+}
+
+/* ========= Component ========= */
 export default function CaptainCrewToolkit({
   plan,
   startDate,
   yachtType,
   speed,
   lph,
-  thumbs,
-  destWeather,
-  portFactsSeed,
+  thumbs = {},
+  destWeather = {},
 }: Props) {
-  const PORT_FACTS = portFactsSeed ?? DEFAULT_PORT_FACTS;
-
   return (
-    <div className="grid grid-cols-1 gap-4">
-      {/* Voyage Summary */}
-      <div className="rounded-2xl border bg-white shadow-sm p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="font-semibold">Captain & Crew Multi-Tool</h3>
-          <span className="text-xs text-neutral-500">Auto-built from current plan</span>
-        </div>
-        <ul className="text-sm leading-6">
-          <li><b>Start:</b> {startDate}</li>
-          <li><b>Yacht:</b> {yachtType} • {speed} kn • {lph} L/h</li>
-          <li><b>Legs:</b> {plan.length}</li>
-        </ul>
-      </div>
-
-      {/* Anchor Risk Advisor */}
-      <div className="rounded-2xl border bg-white shadow-sm p-4">
-        <h3 className="font-semibold mb-2">Anchor Risk Advisor (per stop)</h3>
-        <div className="space-y-3">
-          {plan.map((d, idx) => {
-            const name = d.leg?.to ?? d.leg?.from ?? `Stop ${idx + 1}`;
-            const pf = PORT_FACTS[name] || {};
-            const risk = anchorRisk(pf.anchorage?.holding);
-            return (
-              <div key={idx} className="rounded-xl border p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium">{name}</h4>
-                  <span className={badgeClass(risk.level)}>{risk.level}</span>
-                </div>
-                <ul className="text-sm list-disc pl-5 space-y-1">
-                  {risk.hints.map((h, i) => <li key={i}>{h}</li>)}
-                  {pf.anchorage?.notes && <li>{pf.anchorage.notes}</li>}
-                </ul>
-              </div>
-            );
-          })}
+    <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="relative h-28 bg-gradient-to-r from-[#001428] via-[#012b55] to-[#001428]">
+        <div className="absolute inset-0 opacity-20 [background:radial-gradient(80%_60%_at_70%_30%,white,transparent)]" />
+        <div className="relative h-full px-6 flex items-center">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-neutral-300">Navigoplan • Captain & Crew Toolkit</div>
+            <h2 className="text-2xl font-semibold text-white">Operational Plan</h2>
+            <div className="text-neutral-300 text-sm">From {formatDate(startDate)} • {plan.length} days</div>
+          </div>
         </div>
       </div>
 
-      {/* Port & VHF Quick Facts */}
-      <div className="rounded-2xl border bg-white shadow-sm p-4">
-        <h3 className="font-semibold mb-2">Port & VHF Quick Facts</h3>
-        <div className="space-y-3">
-          {plan.map((d, idx) => {
-            const name = d.leg?.to ?? d.leg?.from ?? `Stop ${idx + 1}`;
-            const pf = PORT_FACTS[name] || {};
-            return (
-              <div key={idx} className="rounded-xl border p-3 text-sm">
-                <div className="font-medium flex items-center gap-2">
-                  {thumbs[name] && <img src={thumbs[name]} alt={name} className="h-10 w-16 object-cover rounded" />}
-                  <span>{name}</span>
-                </div>
-                {Object.keys(pf).length ? (
-                  <ul className="list-disc pl-5 mt-1">
-                    {"vhf" in pf && pf.vhf && <li>VHF: {pf.vhf}</li>}
-                    {"phone" in pf && pf.phone && <li>Phone: {pf.phone}</li>}
-                    {"website" in pf && pf.website && (
-                      <li>
-                        Website:{" "}
-                        <a href={pf.website} target="_blank" className="underline">
-                          {pf.website}
-                        </a>
-                      </li>
+      {/* Table */}
+      <div className="p-6 overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-neutral-100 text-neutral-700">
+              <th className="px-3 py-2 text-left font-semibold">Day</th>
+              <th className="px-3 py-2 text-left font-semibold">Date</th>
+              <th className="px-3 py-2 text-left font-semibold">From → To</th>
+              <th className="px-3 py-2 text-left font-semibold">NM</th>
+              <th className="px-3 py-2 text-left font-semibold">Hours</th>
+              <th className="px-3 py-2 text-left font-semibold">Depart</th>
+              <th className="px-3 py-2 text-left font-semibold">Arrive</th>
+              {yachtType === "Motor" && <th className="px-3 py-2 text-left font-semibold">Fuel (L)</th>}
+              {yachtType === "Motor" && <th className="px-3 py-2 text-left font-semibold">Cost (€)</th>}
+              <th className="px-3 py-2 text-left font-semibold">Weather</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.map((d) => {
+              const l = d.leg;
+              const wx = l ? destWeather[l.to] : undefined;
+              return (
+                <tr key={d.day} className="border-t hover:bg-neutral-50">
+                  <td className="px-3 py-2 font-medium">{d.day}</td>
+                  <td className="px-3 py-2">{formatDate(d.date)}</td>
+                  <td className="px-3 py-2 font-medium text-brand-navy">
+                    {l ? `${l.from} → ${l.to}` : "—"}
+                  </td>
+                  <td className="px-3 py-2">{l ? l.nm : "—"}</td>
+                  <td className="px-3 py-2">{l ? formatHoursHM(l.hours) : "—"}</td>
+                  <td className="px-3 py-2">{l?.eta?.dep ?? "—"}</td>
+                  <td className="px-3 py-2">{l?.eta?.arr ?? "—"}</td>
+                  {yachtType === "Motor" && <td className="px-3 py-2">{l?.fuelL ?? "—"}</td>}
+                  {yachtType === "Motor" && <td className="px-3 py-2">€{l?.cost ?? "—"}</td>}
+                  <td className="px-3 py-2 text-xs">
+                    {wx ? (
+                      <>
+                        {wx.label} ({wx.tempC ?? "–"}°C)
+                        {wx.cloudPct != null && <> • ☁ {wx.cloudPct}%</>}
+                        {wx.precipMM != null && <> • 🌧 {wx.precipMM}mm</>}
+                      </>
+                    ) : (
+                      "—"
                     )}
-                    {pf.fuel && <li>Fuel available</li>}
-                    {pf.water && <li>Water available</li>}
-                    {pf.provisions && <li>Provisions</li>}
-                    {pf.berth && <li>Berths</li>}
-                  </ul>
-                ) : (
-                  <div className="text-neutral-500 italic mt-1">No dataset match.</div>
-                )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-                {/* Live weather badges */}
-                {(() => {
-                  const wx = destWeather[name];
-                  if (!wx) return null;
-                  return (
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full border px-2 py-1">Live weather{wx.label ? `: ${wx.label}` : ""}</span>
-                      {wx.tempC != null && <span className="rounded-full border px-2 py-1">🌡 {wx.tempC}°C</span>}
-                      {wx.cloudPct != null && <span className="rounded-full border px-2 py-1">☁️ {wx.cloudPct}%</span>}
-                      {wx.precipMM != null && <span className="rounded-full border px-2 py-1">🌧 {wx.precipMM} mm/h</span>}
-                    </div>
-                  );
-                })()}
-              </div>
-            );
-          })}
-        </div>
+      {/* Notes */}
+      <div className="border-t bg-neutral-50 px-6 py-4 text-sm text-neutral-600">
+        <p>
+          ⚓ <b>Use this toolkit</b> για καθημερινές ενημερώσεις πληρώματος, καιρικά δεδομένα, υπολογισμό χρόνων
+          πλεύσης και κατανάλωσης. Ενδείκνυται για Bridge Briefing & Charter Handovers.
+        </p>
       </div>
     </div>
   );
