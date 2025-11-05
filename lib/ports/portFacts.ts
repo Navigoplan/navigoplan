@@ -39,7 +39,7 @@ const FACTS: Record<string, PortFact> = {
   },
   Agistri: {
     vhf: "—",
-    anchorage: { holding: "sand", notes: "Καλή κράτηση (SW τμήμα)."},
+    anchorage: { holding: "sand", notes: "Καλή κράτηση (SW τμήμα)." },
     shelter: "Β–ΒΑ",
     exposure: "Ν–ΝΔ",
   },
@@ -238,7 +238,9 @@ const FACTS: Record<string, PortFact> = {
   Nikiti: { vhf: "—", anchorage: { holding: "sand" } },
   Vourvourou: { vhf: "—", anchorage: { holding: "sand", notes: "Πολύ ρηχά κοντά στις ακτές." } },
   "Ormos Panagias": { vhf: "—", anchorage: { holding: "sand" } },
-  Ouranoupoli: { vhf: "—", anchorage: { holding: "sand", notes: "Αγ. Όρος ζώνη — περιορισμοί." },
+  Ouranoupoli: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Αγ. Όρος ζώνη — περιορισμοί." },
     hazards: [{ label: "Mt. Athos restricted waters", sev: 1 }],
   },
   Kavala: { vhf: "—", anchorage: { holding: "sand/mud" } },
@@ -262,16 +264,107 @@ const FACTS: Record<string, PortFact> = {
   Sitia: { vhf: "—", anchorage: { holding: "sand" }, exposure: "E–NE" },
 };
 
+/* ========= Aliases (EN/GR/alt spellings) =========
+   Map any alias -> canonical FACTS key (after normalize)
+*/
+const ALIASES: Record<string, string> = {
+  // Saronic
+  "αιγινα": "Aegina",
+  "αγκιστρι": "Agistri",
+  "πορος": "Poros",
+  "υδρα": "Hydra",
+  "σπετσες": "Spetses",
+  "ερμιονη": "Ermioni",
+  "πορτοχελι": "Porto Cheli",
+  "μεθανα": "Methana",
+  "επιδαυρος": "Epidaurus",
+  "λαυριο": "Lavrio",
+  // Cyclades (samples)
+  "μυκονος": "Mykonos",
+  "παρος": "Paros",
+  "ναξος": "Naxos",
+  "ιoς": "Ios",
+  "σαντορινη": "Santorini",
+  "μηλος": "Milos",
+  "σιφνος": "Sifnos",
+  "σεριφος": "Serifos",
+  "ανδρος": "Andros",
+  "τινος": "Tinos",
+  "φολεγανδρος": "Folegandros",
+  "κιμωλος": "Kimolos",
+  "κουφονησια": "Koufonisia",
+  "αμοργος": "Amorgos",
+  "συρος": "Syros",
+  "κυνθος": "Kythnos",
+  "κεα": "Kea",
+  // Ionian
+  "κερκυρα": "Corfu",
+  "παξοι": "Paxos",
+  "αντιπαξοι": "Antipaxos",
+  "λευκαδα": "Lefkada",
+  "πρεβεζα": "Preveza",
+  "μεγανησι": "Meganisi",
+  "καλαμος": "Kalamos",
+  "καστος": "Kastos",
+  "ιθακη": "Ithaca",
+  "κεφαλονια": "Kefalonia",
+  "ζακυνθος": "Zakynthos",
+  // Dodecanese
+  "ροδος": "Rhodes",
+  "συμη": "Symi",
+  "κως": "Kos",
+  "καλυμνος": "Kalymnos",
+  "πατμος": "Patmos",
+  "λερος": "Leros",
+  // Sporades
+  "βολος": "Volos",
+  "σκιαθος": "Skiathos",
+  "σκοπελος": "Skopelos",
+  "αλoννησος": "Alonissos",
+  // North Aegean / Halkidiki
+  "θεσσαλονικη": "Thessaloniki",
+  "νeα μoυδανια": "Nea Moudania",
+  "σανη": "Sani Marina",
+  "νικητη": "Nikiti",
+  "βουρβουρου": "Vourvourou",
+  "ορμος παναγιας": "Ormos Panagias",
+  "ουρανούπολη": "Ouranoupoli",
+  "καβαλα": "Kavala",
+  "θασος": "Thassos",
+  "σαμοθρακη": "Samothraki",
+  "λημνος": "Lemnos",
+  "λεσβος": "Lesvos",
+  "χιος": "Chios",
+  "σαμος": "Samos",
+  "ικαρια": "Ikaria",
+  // Crete
+  "χανια": "Chania",
+  "ρεθυμνο": "Rethymno",
+  "ηρακλειο": "Heraklion",
+  "αγιος νικολαος": "Agios Nikolaos",
+  "σιτια": "Sitia",
+};
+
 /* ========= Utility: normalize & lookup ========= */
 function normalize(s: string) {
   return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
+function resolveKey(name: string): string | undefined {
+  const key = normalize(name);
+  // direct
+  for (const k of Object.keys(FACTS)) {
+    if (normalize(k) === key) return k;
+  }
+  // alias
+  const aliased = ALIASES[key];
+  if (aliased) return aliased;
+  return undefined;
+}
 
 export function getPortFacts(name: string): PortFact | undefined {
   if (!name) return undefined;
-  const key = normalize(name);
-  const direct = Object.keys(FACTS).find((k) => normalize(k) === key);
-  return direct ? FACTS[direct] : undefined;
+  const k = resolveKey(name);
+  return k ? FACTS[k] : undefined;
 }
 
 export const PORT_FACTS_DATA = FACTS;
