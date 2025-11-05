@@ -7,17 +7,18 @@ export type PortHazard = { label: string; note?: string; sev?: 0 | 1 | 2 }; // s
 
 export type PortFact = {
   vhf?: string;                                 // primary working channel (marina/Port Auth)
+  vhfVerified?: boolean;                        // true when verified against Sea Guide / official doc
   marina?: string;                              // marina/port name
   anchorage?: { holding?: string; notes?: string };
   shelter?: string;                             // from which winds it shelters
   exposure?: string;                            // to which winds/swell it’s exposed
   hazards?: PortHazard[];                       // local hazards / seamanship notes
   notes?: string[];                             // misc operational notes
+  sources?: string[];                           // provenance (e.g., "Sea Guide Vol.3 p.xx")
 };
 
 /* ========= Main Facts Dataset =========
    NOTE:
-   - VHF left as "—" where not verified yet.
    - Hazards are conservative/seed level; expand with local charts/NTM.
    - Feel free to rename keys to match your canonical names in ports.v1.json.
 */
@@ -25,17 +26,24 @@ const FACTS: Record<string, PortFact> = {
   /* ======== SARONIC ======== */
   Alimos: {
     vhf: "71",
+    vhfVerified: true,
     marina: "Alimos Marina",
     notes: [
       "Πολύ traffic σε change-over Παρασκευή/Σάββατο.",
       "Fuel berth κατόπιν συνεννόησης / Port Office VHF 71.",
     ],
+    sources: ["Sea Guide (scan provided)"],
   },
   Aegina: {
     vhf: "12",
+    vhfVerified: true,
     anchorage: { holding: "sand/mud", notes: "Καλή κράτηση· απόφυγε weed patches." },
     exposure: "Ferry wash στην είσοδο λιμένα",
-    hazards: [{ label: "Traffic density", sev: 1 }, { label: "Ferry wash", sev: 1 }],
+    hazards: [
+      { label: "Traffic density", sev: 1 },
+      { label: "Ferry wash", sev: 1, note: "Είσοδος/έξοδος ferries" },
+    ],
+    sources: ["Sea Guide (scan provided)"],
   },
   Agistri: {
     vhf: "—",
@@ -45,18 +53,25 @@ const FACTS: Record<string, PortFact> = {
   },
   Poros: {
     vhf: "12",
+    vhfVerified: true,
     anchorage: { holding: "sand/weed", notes: "Patchy· δοκίμασε δύο φορές για set." },
     shelter: "W–NW",
     exposure: "SE ριπές στο στενό",
-    hazards: [{ label: "Cross current", sev: 1 }, { label: "Weed patches", sev: 1 }],
+    hazards: [
+      { label: "Cross current", sev: 1, note: "Ρεύματα στο στενό" },
+      { label: "Weed patches", sev: 1 },
+    ],
+    sources: ["Sea Guide (scan provided)"],
   },
   Hydra: {
     vhf: "12",
+    vhfVerified: true,
     anchorage: { holding: "rock/sand", notes: "Πολύ περιορισμένος χώρος, surge." },
     hazards: [
-      { label: "Tight harbor", sev: 2, note: "Περιορισμένοι ελιγμοί." },
-      { label: "Surge", sev: 2, note: "Από ferries/traffic." },
+      { label: "Tight harbor", sev: 2, note: "Περιορισμένοι ελιγμοί σε στενό λιμένα" },
+      { label: "Surge", sev: 2, note: "Από ferries/traffic" },
     ],
+    sources: ["Sea Guide (scan provided)"],
   },
   Spetses: {
     vhf: "—",
@@ -351,13 +366,9 @@ function normalize(s: string) {
 }
 function resolveKey(name: string): string | undefined {
   const key = normalize(name);
-  // direct
-  for (const k of Object.keys(FACTS)) {
-    if (normalize(k) === key) return k;
-  }
-  // alias
+  for (const k of Object.keys(FACTS)) if (normalize(k) === key) return k; // direct
   const aliased = ALIASES[key];
-  if (aliased) return aliased;
+  if (aliased) return aliased; // alias
   return undefined;
 }
 
