@@ -1,11 +1,34 @@
 // app/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import HeroVideo from "./components/HeroVideo";
+
+type SessUser = { email?: string } | null;
 
 export default function Home() {
   const [submitted, setSubmitted] = useState(false);
+  const [sessionUser, setSessionUser] = useState<SessUser>(null);
+  const [checking, setChecking] = useState(true);
+
+  // Διαβάζουμε session όπως στο NavBar
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/magic/session", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (alive) setSessionUser(data?.user ?? null);
+      } catch {
+        /* ignore */
+      } finally {
+        if (alive) setChecking(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -70,10 +93,7 @@ export default function Home() {
             Built for modern charter operations
           </h2>
           {/* stronger NAVY subcopy */}
-          <p
-            className="mt-2 font-medium"
-            style={{ color: "var(--color-brand-navy)" }}
-          >
+          <p className="mt-2 font-medium" style={{ color: "var(--color-brand-navy)" }}>
             Plan, price and present high-end itineraries.
           </p>
         </div>
@@ -90,10 +110,7 @@ export default function Home() {
             Simple Pricing
           </h2>
           {/* stronger NAVY subcopy */}
-          <p
-            className="mt-2 font-medium"
-            style={{ color: "var(--color-brand-navy)" }}
-          >
+          <p className="mt-2 font-medium" style={{ color: "var(--color-brand-navy)" }}>
             Transparent plans to get you started.
           </p>
         </div>
@@ -109,39 +126,80 @@ export default function Home() {
           className="mx-auto max-w-xl rounded-2xl border p-6 text-center shadow-sm"
           style={{ borderColor: "var(--color-brand-gold)", background: "#fff" }}
         >
-          <h3
-            className="text-xl font-semibold"
-            style={{ color: "var(--color-brand-navy)" }}
-          >
-            Start your free trial
-          </h3>
-          <p className="mt-1 text-sm text-slate-600">No credit card required. Cancel anytime.</p>
-
-          {!submitted ? (
-            <form
-              action="https://formspree.io/f/mjkenvdw"
-              method="POST"
-              onSubmit={() => setSubmitted(true)}
-              className="mt-4 flex flex-col gap-3 sm:flex-row"
-            >
-              <input
-                type="email"
-                name="email"
-                required
-                placeholder="you@company.com"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2"
-                style={{ boxShadow: "none" }}
-              />
-              <button
-                type="submit"
-                className="rounded-2xl px-6 py-3 text-sm font-medium hover:opacity-90"
-                style={{ background: "var(--color-brand-gold)", color: "var(--color-brand-navy)" }}
+          {/* Ανάλογα με το session, αλλάζει το περιεχόμενο */}
+          {checking ? (
+            <p className="text-slate-500 text-sm">Checking your session…</p>
+          ) : sessionUser && sessionUser.email ? (
+            <>
+              <h3
+                className="text-xl font-semibold"
+                style={{ color: "var(--color-brand-navy)" }}
               >
-                Create Account
-              </button>
-            </form>
+                You’re signed in
+              </h3>
+              <p className="mt-1 text-sm" style={{ color: "var(--color-brand-navy)" }}>
+                {sessionUser.email}
+              </p>
+
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <a
+                  href="/ai"
+                  className="rounded-2xl px-6 py-3 text-sm font-semibold text-white"
+                  style={{ background: "var(--color-brand-gold)" }}
+                >
+                  Go to AI Planner
+                </a>
+                <form action="/api/auth/logout" method="post">
+                  <button
+                    className="rounded-2xl px-6 py-3 text-sm font-semibold border"
+                    style={{ borderColor: "var(--color-brand-gold)", color: "var(--color-brand-navy)" }}
+                  >
+                    Manage account
+                  </button>
+                </form>
+              </div>
+            </>
           ) : (
-            <p className="mt-4 font-medium text-green-600">✅ Thank you! We’ll be in touch soon.</p>
+            <>
+              <h3
+                className="text-xl font-semibold"
+                style={{ color: "var(--color-brand-navy)" }}
+              >
+                Start your free trial
+              </h3>
+              <p className="mt-1 text-sm text-slate-600">
+                No credit card required. Cancel anytime.
+              </p>
+
+              {!submitted ? (
+                <form
+                  action="https://formspree.io/f/mjkenvdw"
+                  method="POST"
+                  onSubmit={() => setSubmitted(true)}
+                  className="mt-4 flex flex-col gap-3 sm:flex-row"
+                >
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    placeholder="you@company.com"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2"
+                    style={{ boxShadow: "none" }}
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-2xl px-6 py-3 text-sm font-medium hover:opacity-90"
+                    style={{ background: "var(--color-brand-gold)", color: "var(--color-brand-navy)" }}
+                  >
+                    Create Account
+                  </button>
+                </form>
+              ) : (
+                <p className="mt-4 font-medium text-green-600">
+                  ✅ Thank you! We’ll be in touch soon.
+                </p>
+              )}
+            </>
           )}
         </div>
       </section>
