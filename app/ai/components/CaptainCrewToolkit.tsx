@@ -25,17 +25,9 @@ type SpotWeather = {
   tempC?: number;
   precipMM?: number;
   cloudPct?: number;
-  label?: string; // Clear / Partly cloudy / Cloudy / Rain
-};
-
-type Props = {
-  plan: DayCard[];
-  startDate: string;
-  yachtType: YachtType;
-  speed: number;
-  lph: number;
-  thumbs?: Record<string, string | undefined>;
-  destWeather?: Record<string, SpotWeather>;
+  label?: string;
+  windKts?: number;       // <-- ζωντανός άνεμος σε kt (θα έρθει από page.tsx)
+  gustKts?: number;       // προαιρετικά
 };
 
 /* ========= Small helpers ========= */
@@ -44,7 +36,6 @@ function formatHoursHM(hours: number) {
   const m = Math.round((hours - h) * 60);
   return `${h}h ${m.toString().padStart(2, "0")}m`;
 }
-
 function formatDate(d?: string) {
   if (!d) return "";
   try {
@@ -57,9 +48,71 @@ function formatDate(d?: string) {
     return d;
   }
 }
+function ktToBeaufort(kt?: number) {
+  const v = kt ?? 0;
+  if (v < 1) return 0;
+  if (v <= 3) return 1;
+  if (v <= 6) return 2;
+  if (v <= 10) return 3;
+  if (v <= 16) return 4;
+  if (v <= 21) return 5;
+  if (v <= 27) return 6;
+  if (v <= 33) return 7;
+  if (v <= 40) return 8;
+  if (v <= 47) return 9;
+  if (v <= 55) return 10;
+  if (v <= 63) return 11;
+  return 12;
+}
+function bftLabel(b: number) {
+  return [
+    "Calm", "Light air", "Light breeze", "Gentle breeze", "Moderate breeze",
+    "Fresh breeze", "Strong breeze", "Near gale", "Gale", "Strong gale",
+    "Storm", "Violent storm", "Hurricane",
+  ][b] || "";
+}
+
+/* ========= VHF & Local Hazards (seed) ========= */
+const VHF_MAP: Record<string, string> = {
+  "Alimos": "71",
+  "Aegina": "12",
+  "Agistri": "—",
+  "Poros": "12",
+  "Hydra": "—",
+  "Spetses": "—",
+  "Ermioni": "—",
+  "Porto Cheli": "—",
+  "Lavrio": "—",
+  "Kea": "—",
+  "Kythnos": "—",
+  "Syros": "—",
+  "Mykonos": "—",
+  "Paros": "—",
+  "Naxos": "—",
+  "Ios": "—",
+  "Milos": "—",
+  "Sifnos": "—",
+  "Serifos": "—",
+  "Corfu": "—",
+  "Paxos": "—",
+  "Lefkada": "—",
+  "Zakynthos": "—",
+  // πρόσθεσε εδώ ό,τι άλλο θέλεις
+};
+
+const HAZARDS_MAP: Record<string, string[]> = {
+  "Hydra": ["Στενός λιμένας, συχνό surge", "Περιορισμένοι χειρισμοί μέσα στο λιμάνι"],
+  "Poros": ["Περάσματα με ρεύματα", "Αγκυροβολία σε sand/weed (δοκίμασε δύο φορές)"],
+  "Porto Cheli": ["Εκτεταμένο αγκυροβόλιο — κίνδυνος μπλεξίματος αλυσίδων"],
+  "Mykonos": ["Meltemi exposure — ισχυρές ριπές στα δεσίματα"],
+  "Paros": ["Meltemi funneling στο κανάλι Πάρου-Νάξου"],
+  "Naxos": ["Ferry wash και κυματισμοί στην προβλήτα"],
+  "Milos": ["Ρηχά έξω από κολπίσκους, προσοχή σε βράχια"],
+  "Aegina": ["Πολυκοσμία/traffic, ferry wash στην είσοδο"],
+  // συνέχισε το seed κατά βούληση
+};
 
 /* ========= Operational Warnings ========= */
-/** Severity scale used in UI */
 type Sev = "info" | "warn" | "alert";
 type Warn = { sev: Sev; text: string };
 
@@ -69,70 +122,58 @@ function warnClass(sev: Sev) {
   return "bg-sky-100 text-sky-900 border-sky-200";
 }
 
-/** Heuristics based on destination weather + leg timing/length */
 function computeWarnings(l?: Leg, wx?: SpotWeather): Warn[] {
   const out: Warn[] = [];
   if (!l) return out;
 
-  // Rain / precipitation
+  // Άνεμος / Beaufort
+  const bft = ktToBeaufort(wx?.windKts);
+  if (bft >= 7) {
+    out.push({ sev: "alert", text: `Strong winds: Bft ${bft} (${bftLabel(bft)}). Δεσίματα/ανέσεις αυξημένα.` });
+  } else if (bft >= 5) {
+    out.push({ sev: "warn", text: `Fresh breeze: Bft ${bft}. Πρόσεχε ριπές/πλευρικούς ανέμους σε χειρισμούς.` });
+  }
+
+  // Βροχή/ορατότητα/νεφοκάλυψη
   if ((wx?.precipMM ?? 0) >= 0.5 || (wx?.label ?? "").toLowerCase().includes("rain")) {
-    out.push({
-      sev: "alert",
-      text:
-        "Rain expected at destination — slippery decks, reduced visibility; consider early window & PPE.",
-    });
+    out.push({ sev: "alert", text: "Rain expected — slippery decks & reduced visibility." });
   }
-
-  // Heavy cloud = possible lower contrast/swell reading
   if ((wx?.cloudPct ?? 0) >= 85) {
-    out.push({
-      sev: "warn",
-      text:
-        "Low ceiling / heavy cloud — watch for reduced horizon contrast; verify bearings & lights by day.",
-    });
+    out.push({ sev: "warn", text: "Heavy cloud — μειωμένη αντίθεση ορίζοντα, τσέκαρε φώτα/σημαντήρες." });
   }
-
-  // Chilly temps comfort note
   if ((wx?.tempC ?? 99) <= 15) {
-    out.push({
-      sev: "info",
-      text: "Cool conditions — advise guests for layers; check tender spray covers.",
-    });
+    out.push({ sev: "info", text: "Χαμηλή θερμοκρασία — ενημέρωσε για ρουχισμό, tender spray covers." });
   }
 
-  // Long leg
+  // Μεγάλο σκέλος
   if (l.hours >= 3.5) {
-    out.push({
-      sev: "warn",
-      text:
-        `Long passage (~${formatHoursHM(l.hours)}) — plan crew rotations, snacks & toys secured.`,
-    });
+    out.push({ sev: "warn", text: `Long passage (~${formatHoursHM(l.hours)}) — rotations, snacks, securing.` });
   }
 
-  // Late arrival risk (very rough heuristic: arrival ≥ 18:30)
-  const mayBeNight =
+  // Άφιξη κοντά στη δύση
+  const late =
     !!l.eta?.arr &&
     (() => {
       const [hh, mm] = (l.eta!.arr ?? "00:00").split(":").map((n) => parseInt(n, 10));
       return hh > 18 || (hh === 18 && mm >= 30);
     })();
-  if (mayBeNight) {
-    out.push({
-      sev: "warn",
-      text: "Arrival near dusk — prepare extra crew on bow/stern, test deck lights & searchlight.",
-    });
-  }
-
-  // Wet conditions + arrivals: add line handling notice
-  if ((wx?.precipMM ?? 0) >= 0.1) {
-    out.push({
-      sev: "info",
-      text: "Wet quays possible — brief fender/line teams for safe footing & gloves.",
-    });
+  if (late) {
+    out.push({ sev: "warn", text: "Arrival near dusk — searchlight/deck lights check & extra hands." });
   }
 
   return out;
 }
+
+/* ========= Props ========= */
+type Props = {
+  plan: DayCard[];
+  startDate: string;
+  yachtType: YachtType;
+  speed: number;
+  lph: number;
+  thumbs?: Record<string, string | undefined>;
+  destWeather?: Record<string, SpotWeather>;
+};
 
 /* ========= Component ========= */
 export default function CaptainCrewToolkit({
@@ -144,7 +185,7 @@ export default function CaptainCrewToolkit({
   thumbs = {},
   destWeather = {},
 }: Props) {
-  // Build top-level warnings summary (first severe per day)
+  // Σύνοψη κορυφής
   const topSummary: { day: number; port?: string; sev: Sev; text: string }[] = [];
   for (const d of plan) {
     const l = d.leg;
@@ -179,7 +220,7 @@ export default function CaptainCrewToolkit({
       {topSummary.length > 0 && (
         <div className="px-6 pt-4">
           <div className="mb-2 text-sm font-semibold text-neutral-800">
-            Operational Warnings (auto)
+            Hazards & Advisories (auto)
           </div>
           <div className="flex flex-wrap gap-2">
             {topSummary.map((w) => (
@@ -216,7 +257,9 @@ export default function CaptainCrewToolkit({
                 <th className="px-3 py-2 text-left font-semibold">Cost (€)</th>
               )}
               <th className="px-3 py-2 text-left font-semibold">Weather</th>
-              <th className="px-3 py-2 text-left font-semibold">Ops</th>
+              <th className="px-3 py-2 text-left font-semibold">Wind / Bft</th>
+              <th className="px-3 py-2 text-left font-semibold">VHF</th>
+              <th className="px-3 py-2 text-left font-semibold">Hazards</th>
             </tr>
           </thead>
           <tbody>
@@ -224,26 +267,15 @@ export default function CaptainCrewToolkit({
               const l = d.leg;
               const wx = l ? destWeather[l.to] : undefined;
               const warns = computeWarnings(l, wx);
+              const bft = ktToBeaufort(wx?.windKts);
+              const local = l?.to ? (HAZARDS_MAP[l.to] ?? []) : [];
+
               return (
                 <tr key={d.day} className="border-t align-top hover:bg-neutral-50">
                   <td className="px-3 py-2 font-medium">{d.day}</td>
                   <td className="px-3 py-2">{formatDate(d.date)}</td>
                   <td className="px-3 py-2 font-medium text-brand-navy">
-                    {l ? (
-                      <div className="flex items-center gap-2">
-                        {/* optional thumbnail if you later pass thumbs[to] */}
-                        {l.to && (
-                          <img
-                            src={typeof window !== "undefined" && (window as any).__noop ? "" : (undefined as any)}
-                            alt=""
-                            className="hidden"
-                          />
-                        )}
-                        {l.from} → {l.to}
-                      </div>
-                    ) : (
-                      "—"
-                    )}
+                    {l ? `${l.from} → ${l.to}` : "—"}
                   </td>
                   <td className="px-3 py-2">{l ? l.nm : "—"}</td>
                   <td className="px-3 py-2">{l ? formatHoursHM(l.hours) : "—"}</td>
@@ -258,27 +290,36 @@ export default function CaptainCrewToolkit({
                         {wx.cloudPct != null && <> • ☁ {wx.cloudPct}%</>}
                         {wx.precipMM != null && <> • 🌧 {wx.precipMM}mm</>}
                       </>
-                    ) : (
-                      "—"
-                    )}
+                    ) : "—"}
                   </td>
+                  <td className="px-3 py-2 text-xs">
+                    {wx?.windKts != null ? (
+                      <>
+                        {Math.round(wx.windKts)} kt • Bft {bft} ({bftLabel(bft)})
+                        {wx.gustKts != null && <> • gust {Math.round(wx.gustKts)} kt</>}
+                      </>
+                    ) : "—"}
+                  </td>
+                  <td className="px-3 py-2">{l?.to ? (VHF_MAP[l.to] ?? "—") : "—"}</td>
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-1">
+                      {local.map((t, i) => (
+                        <span key={`loc-${i}`} className="inline-block border rounded-full px-2 py-0.5 text-xs bg-neutral-100 border-neutral-200">
+                          {t}
+                        </span>
+                      ))}
                       {warns.length ? (
                         warns.slice(0, 3).map((w, i) => (
                           <span
-                            key={i}
-                            className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(
-                              w.sev
-                            )}`}
-                            title={w.text}
+                            key={`w-${i}`}
+                            className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(w.sev)}`}
                           >
                             {w.text}
                           </span>
                         ))
-                      ) : (
+                      ) : local.length === 0 ? (
                         <span className="text-xs text-neutral-500">—</span>
-                      )}
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -291,10 +332,8 @@ export default function CaptainCrewToolkit({
       {/* Notes */}
       <div className="border-t bg-neutral-50 px-6 py-4 text-sm text-neutral-600">
         <p>
-          ⚓ <b>Use this toolkit</b> για καθημερινές ενημερώσεις πληρώματος, καιρικά
-          δεδομένα, υπολογισμό χρόνων πλεύσης και κατανάλωσης. Οι προειδοποιήσεις είναι
-          βοηθητικές και δεν αντικαθιστούν επίσημες μετεωρολογικές αναφορές / Notice to
-          Mariners.
+          ⚓ Οι προειδοποιήσεις είναι ενδεικτικές και δεν αντικαθιστούν επίσημες ναυτικές/μετεωρολογικές αναφορές.
+          Μπορούμε να επεκτείνουμε άμεσα VHF & hazards με πλήρη βάση (OSM/Wikidata/Sea Guide).
         </p>
       </div>
     </div>
