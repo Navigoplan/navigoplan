@@ -1,6 +1,9 @@
 "use client";
 
 import RouteMapClient from "./RouteMapClient";
+import CaptainCrewToolkit from "./components/CaptainCrewToolkit";
+import VipGuestsView from "./components/VipGuestsView";
+
 import { Suspense, useMemo, useState, useEffect, useId, useRef } from "react";
 import type React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -9,17 +12,19 @@ import { usePorts } from "../../lib/ports";
 
 export const dynamic = "force-dynamic";
 
-/* ========= Types ========= */
-type YachtType = "Motor" | "Sailing";
+/* ========= Types (EXPORTED for child components) ========= */
+export type YachtType = "Motor" | "Sailing";
 type Yacht = { type: YachtType; speed: number; lph: number };
-type Leg = {
+export type Leg = {
   from: string; to: string; nm: number; hours: number; fuelL: number;
-  cost?: number; eta?: { dep: string; arr: string; window: string }
+  cost?: number; eta?: { dep: string; arr: string; window: string };
 };
-type DayCard = {
+export type DayCard = {
   day: number; date: string; leg?: Leg; notes?: string;
   userNotes?: { marina?: string; food?: string; beach?: string };
 };
+export type PlanResult = DayCard[];
+
 type RegionKey =
   | "Saronic" | "Cyclades" | "Ionian" | "Dodecanese"
   | "Sporades" | "NorthAegean" | "Crete";
@@ -42,7 +47,7 @@ function haversineNM(a: PortCoord, b: PortCoord) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 function legStats(nm: number, yacht: Yacht) {
-  const hours = (nm / yacht.speed) * 1.15; // +15% περιθώριο
+  const hours = (nm / yacht.speed) * 1.15; // +15% buffer
   const fuelL = yacht.type === "Motor" ? hours * yacht.lph : 0;
   return { hours: +hours.toFixed(2), fuelL: Math.round(fuelL) };
 }
@@ -171,6 +176,7 @@ function AutoCompleteInput({
 /* ========= Query helpers ========= */
 const safeEncode = (obj: unknown) =>
   encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(obj)))));
+
 const safeDecode = <T,>(s: string | null): T | null => {
   if (!s) return null;
   try {
@@ -346,35 +352,16 @@ function formatHoursHM(hours: number) {
   return `${h}h ${m}m`;
 }
 
-/* ========= Practical facilities (seed) ========= */
-const PORT_FACTS: Record<string, { fuel?: boolean; water?: boolean; provisions?: boolean; berth?: boolean }> = {
-  "Alimos": { fuel: true, water: true, provisions: true, berth: true },
-  "Aegina": { fuel: true, water: true, provisions: true, berth: true },
-  "Agistri": { fuel: false, water: true, provisions: true, berth: true },
-  "Poros": { fuel: true, water: true, provisions: true, berth: true },
-  "Hydra": { fuel: false, water: true, provisions: true, berth: true },
-  "Spetses": { fuel: true, water: true, provisions: true, berth: true },
-  "Ermioni": { fuel: true, water: true, provisions: true, berth: true },
-  "Porto Cheli": { fuel: true, water: true, provisions: true, berth: true },
-  "Lavrio": { fuel: true, water: true, provisions: true, berth: true },
-  "Kea": { fuel: true, water: true, provisions: true, berth: true },
-  "Kythnos": { fuel: false, water: true, provisions: true, berth: true },
-  "Syros": { fuel: true, water: true, provisions: true, berth: true },
-  "Mykonos": { fuel: true, water: true, provisions: true, berth: true },
-  "Paros": { fuel: true, water: true, provisions: true, berth: true },
-  "Naxos": { fuel: true, water: true, provisions: true, berth: true },
-  "Ios": { fuel: true, water: true, provisions: true, berth: true },
-  "Milos": { fuel: true, water: true, provisions: true, berth: true },
-  "Sifnos": { fuel: false, water: true, provisions: true, berth: true },
-  "Serifos": { fuel: false, water: true, provisions: true, berth: true },
+/* ========= Port facts (seed minimal) ========= */
+const PORT_FACTS: Record<string, { anchorage?: { holding?: string; notes?: string } }> = {
+  Poros: { anchorage: { holding: "sand/weed", notes: "Καλή προστασία από Β-ΒΔ" } },
+  Hydra: { anchorage: { holding: "rock/sand", notes: "Στενός λιμένας, surge" } },
+  "Porto Cheli": { anchorage: { holding: "mud/sand", notes: "Πολύ καλή κράτηση" } },
+  Kythnos: { anchorage: { holding: "sand/weed" } },
 };
 
-/* ========= Wikipedia helper (richer) ========= */
-type WikiCard = {
-  title: string; summary: string; imageUrl?: string; gallery?: string[];
-  coords?: { lat: number; lon: number }; sourceUrl?: string;
-  related?: { title: string; thumb?: string }[];
-};
+/* ========= Wikipedia helper (thumbs only) ========= */
+type WikiCard = { imageUrl?: string };
 async function fetchWikiJSON(url: string) {
   const r = await fetch(url, { headers: { accept: "application/json" } });
   if (!r.ok) throw new Error("wiki fetch");
@@ -384,8 +371,6 @@ function encTitle(s: string) { return encodeURIComponent(s.replace(/\s+/g, "_"))
 async function fetchWikiCard(placeName: string): Promise<WikiCard> {
   const langs = ["el", "en"];
   const base = (lang: string) => `https://${lang}.wikipedia.org/api/rest_v1`;
-
-  // summary
   let summaryData: any = null;
   for (const lang of langs) {
     try {
@@ -393,87 +378,42 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard> {
       if (summaryData?.title) break;
     } catch {}
   }
-
-  const card: WikiCard = {
-    title: summaryData?.title ?? placeName,
-    summary: summaryData?.extract ?? "",
-    imageUrl: summaryData?.thumbnail?.source,
-    coords: summaryData?.coordinates ? { lat: summaryData.coordinates.lat, lon: summaryData.coordinates.lon } : undefined,
-    sourceUrl: summaryData?.content_urls?.desktop?.page,
-    gallery: [],
-    related: [],
-  };
-
-  // media
-  try {
-    const lang = summaryData?.lang ?? "en";
-    const media = await fetchWikiJSON(`${base(lang)}/page/media/${encTitle(card.title)}`);
-    const pics: string[] = [];
-    for (const item of media?.items ?? []) {
-      if (item?.type === "image") {
-        const src = item?.srcset?.[item.srcset.length - 1]?.src || item?.src || item?.thumbnail?.source;
-        if (src) pics.push(src);
-      }
-    }
-    card.gallery = Array.from(new Set([...(card.imageUrl ? [card.imageUrl] : []), ...pics])).slice(0, 8);
-    if (!card.imageUrl && card.gallery?.length) card.imageUrl = card.gallery[0];
-  } catch {}
-
-  // related
-  try {
-    const lang = summaryData?.lang ?? "en";
-    const rel = await fetchWikiJSON(`${base(lang)}/page/related/${encTitle(card.title)}`);
-    card.related = (rel?.pages ?? []).map((p: any) => ({
-      title: p?.titles?.display ?? p?.title,
-      thumb: p?.thumbnail?.source,
-    })).filter((x: any) => !!x.title).slice(0, 8);
-  } catch {}
-
+  const card: WikiCard = { imageUrl: summaryData?.thumbnail?.source };
+  if (!card.imageUrl) {
+    try {
+      const lang = summaryData?.lang ?? "en";
+      const media = await fetchWikiJSON(`${base(lang)}/page/media/${encTitle(summaryData?.title ?? placeName)}`);
+      const items: any[] = media?.items ?? [];
+      const src =
+        items.find((i: any) => i?.type === "image")?.thumbnail?.source ||
+        items.find((i: any) => i?.type === "image")?.src;
+      if (src) card.imageUrl = src;
+    } catch {}
+  }
   return card;
 }
 
-/* ========= LIVE Weather per-destination ========= */
+/* ========= LIVE Weather (Open-Meteo) ========= */
 type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string };
 const weatherCache = new Map<string, SpotWeather>();
-
 function labelFromWx(precipMM?: number, cloudPct?: number) {
   if ((precipMM ?? 0) > 0.1) return "Rain";
   if ((cloudPct ?? 0) >= 70) return "Cloudy";
   if ((cloudPct ?? 0) >= 30) return "Partly cloudy";
   return "Clear";
 }
-
 async function fetchSpotWeather(lat: number, lon: number): Promise<SpotWeather | null> {
   const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
   if (weatherCache.has(key)) return weatherCache.get(key)!;
-
-  const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,precipitation,cloud_cover,is_day,weather_code&timezone=auto`;
-  const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=precipitation,cloudcover&timezone=auto`;
-
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,precipitation,cloud_cover&timezone=auto`;
   try {
-    let tempC: number | undefined;
-    let precipMM: number | undefined;
-    let cloudPct: number | undefined;
-
-    let r = await fetch(url1);
-    if (r.ok) {
-      const j = await r.json();
-      tempC = j?.current?.temperature_2m;
-      precipMM = j?.current?.precipitation;
-      cloudPct = j?.current?.cloud_cover;
-    } else {
-      r = await fetch(url2);
-      if (!r.ok) throw new Error("open-meteo fail");
-      const j = await r.json();
-      tempC = j?.current_weather?.temperature;
-      if (Array.isArray(j?.hourly?.precipitation)) precipMM = j.hourly.precipitation[0];
-      if (Array.isArray(j?.hourly?.cloudcover)) cloudPct = j.hourly.cloudcover[0];
-    }
-
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("open-meteo fail");
+    const j = await r.json();
     const out: SpotWeather = {
-      tempC: tempC != null ? Math.round(tempC) : undefined,
-      precipMM: precipMM != null ? +Number(precipMM).toFixed(1) : undefined,
-      cloudPct: cloudPct != null ? Math.round(cloudPct) : undefined,
+      tempC: j?.current?.temperature_2m != null ? Math.round(j.current.temperature_2m) : undefined,
+      precipMM: j?.current?.precipitation != null ? +Number(j.current.precipitation).toFixed(1) : undefined,
+      cloudPct: j?.current?.cloud_cover != null ? Math.round(j.current.cloud_cover) : undefined,
     };
     out.label = labelFromWx(out.precipMM, out.cloudPct);
     weatherCache.set(key, out);
@@ -566,6 +506,10 @@ function AIPlannerInner() {
   // Notes parsed from URL (to apply after plan generation)
   const pendingNotesRef = useRef<any | null>(null);
 
+  // Tabs state
+  const [showTabs, setShowTabs] = useState(false);
+  const [activeTab, setActiveTab] = useState<"crew" | "vip">("crew");
+
   // Load from URL
   useEffect(() => {
     if (!searchParams || !ready) return;
@@ -585,7 +529,7 @@ function AIPlannerInner() {
   function onTogglePref(value: string) {
     setPrefs((prev) => (prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]));
   }
-  function addVia() { setVias((v) => [...v, ""]);}
+  function addVia() { setVias((v) => [...v, ""]); }
   function setViaAt(i: number, val: string) { setVias((v) => v.map((x, idx) => (idx === i ? val : x))); }
   function removeVia(i: number) { setVias((v) => v.filter((_, idx) => idx !== i)); }
   function setCustomStopAt(i: number, val: string) { setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x))); }
@@ -641,19 +585,9 @@ function AIPlannerInner() {
       cards.push({ day: d + 1, date, leg, notes, userNotes: {} });
     }
 
-    // apply pending notes from URL (if any)
-    const pending = pendingNotesRef.current as Record<string, any> | null;
-    if (pending && cards.length) {
-      cards.forEach((c, idx) => {
-        const key = String(idx + 1);
-        if (pending[key]) {
-          c.userNotes = { ...(c.userNotes ?? {}), ...pending[key] };
-        }
-      });
-      pendingNotesRef.current = null;
-    }
-
     setPlan(cards);
+    setShowTabs(true);
+    setActiveTab("crew");
 
     // prefetch thumbs for destinations
     (async () => {
@@ -671,9 +605,22 @@ function AIPlannerInner() {
       start, end, days, regionMode, vias,
       customStart, customDays, customDayStops,
       fuelPrice, depTime, weatherAwareWin,
-      notesPayload: null, // αρχικά χωρίς notes
+      notesPayload: null,
     });
     router.replace(`/ai?${qs}`, { scroll: false });
+
+    // fetch per-destination weather
+    (async () => {
+      const uniqueDest = Array.from(new Set(cards.map(d => d.leg?.to).filter(Boolean) as string[]));
+      const next: Record<string, SpotWeather> = {};
+      for (const name of uniqueDest) {
+        const p = findPort(name);
+        if (!p) continue;
+        const wx = await fetchSpotWeather(p.lat, p.lon);
+        if (wx) next[name] = wx;
+      }
+      setDestWeather(next);
+    })();
   }
 
   function handlePrint() { window.print(); }
@@ -773,45 +720,7 @@ function AIPlannerInner() {
     }
   }
 
-  /* ======= Wikipedia modal state + open ======= */
-  const [infoOpen, setInfoOpen] = useState(false);
-  const [infoData, setInfoData] = useState<WikiCard | null>(null);
-
-  async function openPortInfoByName(name: string) {
-    const card = await fetchWikiCard(name);
-    setInfoData(card);
-    setInfoOpen(true);
-  }
-
-  // update user notes per day
-  function setUserNote(dayIdx: number, key: keyof NonNullable<DayCard["userNotes"]>, value: string) {
-    setPlan((old) => {
-      if (!old) return old;
-      const next = old.map((c) => ({ ...c }));
-      const obj = { ...(next[dayIdx].userNotes ?? {}) };
-      (obj as any)[key] = value;
-      next[dayIdx].userNotes = obj;
-      return next;
-    });
-  }
-
-  /* ======= LIVE weather fetch per-destination (after plan gen) ======= */
-  useEffect(() => {
-    (async () => {
-      if (!plan || !plan.length) { setDestWeather({}); return; }
-      const uniqueDest = Array.from(new Set(plan.map(d => d.leg?.to).filter(Boolean) as string[]));
-      const next: Record<string, SpotWeather> = {};
-      for (const name of uniqueDest) {
-        const p = findPort(name);
-        if (!p) continue;
-        const wx = await fetchSpotWeather(p.lat, p.lon);
-        if (wx) next[name] = wx;
-      }
-      setDestWeather(next);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan]);
-
+  /* ========= UI ========= */
   return (
     <div className="bg-white text-slate-900">
       <section className="mx-auto max-w-7xl px-6 py-12">
@@ -954,7 +863,7 @@ function AIPlannerInner() {
             ))}
           </div>
 
-          {/* Κουμπί Generate */}
+          {/* Generate */}
           <button
             id="generate-btn"
             type="submit"
@@ -966,7 +875,7 @@ function AIPlannerInner() {
           </button>
         </form>
 
-        {/* ====== OUTPUT ====== */}
+        {/* ====== OUTPUT HEADER / ACTIONS ====== */}
         {plan && (
           <div className="mt-8" id="print-root">
             {/* Toolbar */}
@@ -1052,189 +961,54 @@ function AIPlannerInner() {
               </div>
             )}
 
-            {/* DAY CARDS */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 print-grid">
-              {plan.map((d, idx) => {
-                const facilities = PORT_FACTS[d.leg?.to ?? ""] || {};
-                const destName = d.leg?.to ?? "";
-                const wx = destWeather[destName];
-                return (
-                  <div key={d.day} className="rounded-2xl bg-white p-4 shadow-sm print-card">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm text-slate-500">Day {d.day} • {d.date}</div>
-                        {d.leg && <div className="text-xs rounded-full bg-brand-gold/20 inline-block mt-1 px-2 py-1 text-brand-navy">{d.leg.nm} nm</div>}
-                      </div>
-                      {thumbs[destName] && (
-                        <img src={thumbs[destName]} alt={destName} className="h-16 w-24 rounded-md object-cover" />
-                      )}
-                    </div>
-
-                    {d.leg ? (
-                      <>
-                        <div className="mt-2 text-lg font-semibold text-brand-navy">
-                          {d.leg.from} →{" "}
-                          <button
-                            type="button"
-                            className="underline decoration-dotted underline-offset-4 hover:text-brand-gold"
-                            onClick={() => openPortInfoByName(destName)}
-                            title="Πληροφορίες προορισμού (Wikipedia)"
-                          >
-                            {destName}
-                          </button>
-                        </div>
-                        <p className="mt-1 text-sm text-slate-600">
-                          ~{formatHoursHM(d.leg.hours)} underway
-                          {yachtType === "Motor" && <> • ~{d.leg.fuelL} L fuel • ~€{d.leg.cost}</>} • {speed} kn
-                        </p>
-
-                        {/* Best window & ETA */}
-                        {d.leg.eta && (
-                          <div className="mt-2 text-xs text-slate-600">
-                            Suggested window: <b>{d.leg.eta.window}</b> • Depart <b>{d.leg.eta.dep}</b> → Arrive <b>{d.leg.eta.arr}</b>
-                          </div>
-                        )}
-
-                        {/* LIVE Weather chips */}
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                          <span className="rounded-full border px-2 py-1">
-                            Live weather{wx?.label ? `: ${wx.label}` : ""}
-                          </span>
-                          {wx?.tempC != null && (
-                            <span className="rounded-full border px-2 py-1">🌡 {wx.tempC}°C</span>
-                          )}
-                          {wx?.cloudPct != null && (
-                            <span className="rounded-full border px-2 py-1">☁️ {wx.cloudPct}%</span>
-                          )}
-                          {wx?.precipMM != null && (
-                            <span className="rounded-full border px-2 py-1">🌧 {wx.precipMM} mm/h</span>
-                          )}
-                          {!wx && <span className="text-slate-500">…</span>}
-                        </div>
-
-                        {/* Facilities chips */}
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                          {facilities.fuel && <span className="rounded-full bg-slate-100 px-2 py-1">⛽ Fuel</span>}
-                          {facilities.water && <span className="rounded-full bg-slate-100 px-2 py-1">🚰 Water</span>}
-                          {facilities.provisions && <span className="rounded-full bg-slate-100 px-2 py-1">🛒 Provisions</span>}
-                          {facilities.berth && <span className="rounded-full bg-slate-100 px-2 py-1">⚓ Berths</span>}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="mt-1 text-lg font-semibold text-brand-navy">Leisure / Lay Day</div>
-                    )}
-
-                    {d.notes && <p className="mt-3 text-sm text-slate-600">{d.notes}</p>}
-
-                    {/* Actions/Notes */}
-                    <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="w-28 text-slate-500">Marina booking</span>
-                        <input
-                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
-                          placeholder="π.χ. call Port Police / marina office"
-                          value={d.userNotes?.marina ?? ""}
-                          onChange={(e) => setUserNote(idx, "marina", e.target.value)}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-28 text-slate-500">Food</span>
-                        <input
-                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
-                          placeholder="εστιατόριο/ταβέρνα"
-                          value={d.userNotes?.food ?? ""}
-                          onChange={(e) => setUserNote(idx, "food", e.target.value)}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-28 text-slate-500">Beach / POI</span>
-                        <input
-                          className="flex-1 rounded-lg border border-slate-300 px-2 py-1"
-                          placeholder="παραλία / αξιοθέατο"
-                          value={d.userNotes?.beach ?? ""}
-                          onChange={(e) => setUserNote(idx, "beach", e.target.value)}
-                        />
-                      </div>
-                    </div>
+            {/* ===== TABS ===== */}
+            {plan && (
+              <>
+                <div className="mb-3 no-print">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setActiveTab("crew")}
+                      className={`px-4 py-2 rounded-2xl text-sm font-medium border ${activeTab==="crew" ? "bg-black text-white border-black" : "bg-white hover:bg-neutral-100"}`}
+                    >
+                      For Captain & Crew
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("vip")}
+                      className={`px-4 py-2 rounded-2xl text-sm font-medium border ${activeTab==="vip" ? "bg-black text-white border-black" : "bg-white hover:bg-neutral-100"}`}
+                    >
+                      For VIP Guests
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+
+                {/* ===== TAB CONTENT via components ===== */}
+                {showTabs && activeTab === "crew" && plan && (
+                  <CaptainCrewToolkit
+                    plan={plan}
+                    startDate={startDate}
+                    yachtType={yachtType}
+                    speed={speed}
+                    lph={lph}
+                    thumbs={thumbs}
+                    destWeather={destWeather}
+                    portFactsSeed={PORT_FACTS}
+                  />
+                )}
+
+                {showTabs && activeTab === "vip" && plan && (
+                  <VipGuestsView
+                    plan={plan}
+                    mode={mode}
+                    startDate={startDate}
+                    start={mode === "Region" ? start : customStart}
+                    end={mode === "Region" ? end : undefined}
+                  />
+                )}
+              </>
+            )}
           </div>
         )}
       </section>
-
-      {/* ===== Wikipedia Modal (rich) ===== */}
-      {infoOpen && infoData && (
-        <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/40 p-4" onClick={() => setInfoOpen(false)}>
-          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            {infoData.imageUrl && (
-              <div className="h-56 w-full overflow-hidden bg-slate-100">
-                <img src={infoData.imageUrl} alt={infoData.title} className="h-full w-full object-cover" />
-              </div>
-            )}
-
-            <div className="p-4">
-              <div className="flex items-start justify-between gap-4">
-                <h3 className="text-xl font-semibold">{infoData.title}</h3>
-                <button onClick={() => setInfoOpen(false)} className="rounded-md border px-2 py-1 text-sm">Close</button>
-              </div>
-
-              {infoData.summary && (
-                <p className="mt-2 text-sm leading-relaxed text-slate-700">{infoData.summary}</p>
-              )}
-
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                {infoData.coords && (
-                  <>
-                    <span className="rounded-full bg-slate-100 px-2 py-1">
-                      {infoData.coords.lat.toFixed(4)}°, {infoData.coords.lon.toFixed(4)}°
-                    </span>
-                    <a className="rounded-full border px-2 py-1 hover:bg-slate-50" href={`https://www.google.com/maps?q=${infoData.coords.lat},${infoData.coords.lon}`} target="_blank" rel="noreferrer">
-                      View on map
-                    </a>
-                  </>
-                )}
-                {infoData.sourceUrl && (
-                  <a className="rounded-full border px-2 py-1 hover:bg-slate-50" href={infoData.sourceUrl} target="_blank" rel="noreferrer">
-                    Source: Wikipedia
-                  </a>
-                )}
-              </div>
-
-              {infoData.gallery && infoData.gallery.length > 1 && (
-                <div className="mt-4">
-                  <div className="mb-2 text-sm font-medium text-slate-700">Gallery</div>
-                  <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
-                    {infoData.gallery.slice(0, 8).map((g, i) => (
-                      <img key={`${g}-${i}`} src={g} alt={`img-${i}`} className="h-20 w-full rounded-md object-cover" loading="lazy" />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {infoData.related && infoData.related.length > 0 && (
-                <div className="mt-4">
-                  <div className="mb-2 text-sm font-medium text-slate-700">Nearby / Related</div>
-                  <div className="flex flex-wrap gap-2">
-                    {infoData.related.map((r, i) => (
-                      <button
-                        key={`${r.title}-${i}`}
-                        onClick={() => openPortInfoByName(r.title)}
-                        className="flex items-center gap-2 rounded-full border px-2 py-1 text-sm hover:bg-slate-50"
-                        title="Άνοιγμα προεπισκόπησης"
-                      >
-                        {r.thumb && <img src={r.thumb} alt="" className="h-5 w-5 rounded-full object-cover" />}
-                        <span>{r.title}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
