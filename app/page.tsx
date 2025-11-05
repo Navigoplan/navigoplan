@@ -1,3 +1,4 @@
+// app/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -12,29 +13,34 @@ export default function Home() {
       <section className="relative">
         <HeroVideo
           mp4="/hero.mp4"
-          // webm="/hero.webm" // αν το έχεις
+          // webm="/hero.webm"
           poster="/hero-poster.png"
           className="h-[70vh] md:h-[78vh]"
         >
           <div className="mx-auto flex h-full max-w-7xl flex-col items-center justify-center px-6 text-center">
-            <h1 className="animate-title text-4xl font-bold tracking-tight text-white drop-shadow md:text-5xl">
+            {/* GOLD HEADLINE */}
+            <h1
+              className="animate-title text-4xl md:text-5xl font-bold tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]"
+              style={{ color: "var(--color-brand-gold)" }}
+            >
               Luxury Yacht Charter Itinerary Software
             </h1>
+
             <p className="mt-4 mx-auto max-w-xl text-lg text-white/90 drop-shadow">
               Plan routes, estimate costs, and present stunning itineraries your clients will love.
             </p>
 
-            {/* CTAs: outlined gold (ίδιο στυλ και στα δύο) */}
+            {/* CTAs: outlined gold */}
             <div className="mt-6 flex justify-center gap-4">
               <a
                 href="#trial"
-                className="inline-flex items-center justify-center rounded-full border-2 border-[#c4a962] px-6 py-3 text-center text-sm font-semibold text-[#c4a962] bg-transparent hover:bg-[#c4a962]/10 transition"
+                className="inline-flex items-center justify-center rounded-full border-2 border-[var(--color-brand-gold)] px-6 py-3 text-center text-sm font-semibold text-[var(--color-brand-gold)] bg-transparent hover:bg-[color:rgba(196,169,98,0.10)] transition"
               >
                 Start Planning
               </a>
               <a
                 href="#features"
-                className="inline-flex items-center justify-center rounded-full border-2 border-[#c4a962] px-6 py-3 text-center text-sm font-semibold text-[#c4a962] bg-transparent hover:bg-[#c4a962]/10 transition"
+                className="inline-flex items-center justify-center rounded-full border-2 border-[var(--color-brand-gold)] px-6 py-3 text-center text-sm font-semibold text-[var(--color-brand-gold)] bg-transparent hover:bg-[color:rgba(196,169,98,0.10)] transition"
               >
                 See Features
               </a>
@@ -56,7 +62,13 @@ export default function Home() {
       {/* Features */}
       <section id="features" className="border-t bg-white py-16">
         <div className="mx-auto max-w-7xl px-6 text-center">
-          <h2 className="text-2xl font-semibold text-brand-navy">Built for modern charter operations</h2>
+          {/* GOLD SECTION TITLE */}
+          <h2
+            className="text-2xl font-semibold mb-2 drop-shadow-[0_1px_6px_rgba(0,0,0,0.25)]"
+            style={{ color: "var(--color-brand-gold)" }}
+          >
+            Built for modern charter operations
+          </h2>
           <p className="mt-2 text-slate-600">Plan, price and present high-end itineraries.</p>
         </div>
       </section>
@@ -64,15 +76,30 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="border-t bg-slate-50 py-16">
         <div className="mx-auto max-w-7xl px-6 text-center">
-          <h2 className="text-2xl font-semibold text-brand-navy">Simple Pricing</h2>
+          <h2
+            className="text-2xl font-semibold mb-2"
+            style={{ color: "var(--color-brand-navy)" }}
+          >
+            Simple Pricing
+          </h2>
           <p className="mt-2 text-slate-600">Transparent plans to get you started.</p>
         </div>
       </section>
 
       {/* Trial */}
-      <section id="trial" className="border-t bg-brand-navy py-16">
-        <div className="mx-auto max-w-xl rounded-2xl border border-brand-gold bg-white p-6 text-center shadow-sm">
-          <h3 className="text-xl font-semibold text-brand-navy">Start your free trial</h3>
+      <section
+        id="trial"
+        className="border-t py-16"
+        style={{ backgroundColor: "var(--color-brand-navy)" }}
+      >
+        <div className="mx-auto max-w-xl rounded-2xl border p-6 text-center shadow-sm"
+             style={{ borderColor: "var(--color-brand-gold)", background: "#fff" }}>
+          <h3
+            className="text-xl font-semibold"
+            style={{ color: "var(--color-brand-navy)" }}
+          >
+            Start your free trial
+          </h3>
           <p className="mt-1 text-sm text-slate-600">No credit card required. Cancel anytime.</p>
 
           {!submitted ? (
@@ -87,11 +114,13 @@ export default function Home() {
                 name="email"
                 required
                 placeholder="you@company.com"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2"
+                style={{ boxShadow: "none" }}
               />
               <button
                 type="submit"
-                className="rounded-2xl bg-brand-gold px-6 py-3 text-sm font-medium text-brand-navy hover:opacity-90"
+                className="rounded-2xl px-6 py-3 text-sm font-medium hover:opacity-90"
+                style={{ background: "var(--color-brand-gold)", color: "var(--color-brand-navy)" }}
               >
                 Create Account
               </button>
