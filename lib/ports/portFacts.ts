@@ -1,200 +1,265 @@
 /* ========= Port Facts Master =========
    Used by CaptainCrewToolkit & QuickFacts
-   Sources: Sea Guide / Port Authority notes / OSM / Wikidata / internal notes
-   Policy: Strict-truth. If an official VHF is not stable/announced, we leave "—".
+   Source: Sea Guide / OSM / Wikidata / internal notes
    ===================================== */
 
 export type PortHazard = { label: string; note?: string; sev?: 0 | 1 | 2 }; // sev 0=info,1=warn,2=alert
 
 export type PortFact = {
-  vhf?: string;                         // official marina/port working channel (if stably published)
-  marina?: string;
+  vhf?: string;                                 // primary working channel (marina/Port Auth)
+  marina?: string;                              // marina/port name
   anchorage?: { holding?: string; notes?: string };
-  shelter?: string;
-  exposure?: string;
-  hazards?: PortHazard[];
-  notes?: string[];
+  shelter?: string;                             // from which winds it shelters
+  exposure?: string;                            // to which winds/swell it’s exposed
+  hazards?: PortHazard[];                       // local hazards / seamanship notes
+  notes?: string[];                             // misc operational notes
 };
 
-/* ========= Main Facts Dataset ========= */
+/* ========= Main Facts Dataset =========
+   NOTE:
+   - VHF left as "—" where not verified yet.
+   - Hazards are conservative/seed level; expand with local charts/NTM.
+   - Feel free to rename keys to match your canonical names in ports.v1.json.
+*/
 const FACTS: Record<string, PortFact> = {
-  /* ======== SARONIC (strict-truth seed) ======== */
-
+  /* ======== SARONIC ======== */
   Alimos: {
-    vhf: "71", // Alimos Marina working channel
+    vhf: "71",
     marina: "Alimos Marina",
     notes: [
-      "Μεγάλη charter βάση — έντονο turnover Παρασκευή/Σάββατο.",
-      "Fuel/water με ραντεβού — επικοινωνία με Port Office στο VHF 71.",
-    ],
-    hazards: [
-      { label: "Traffic density", sev: 1, note: "Πολύς διάπλους/ελιγμοί στη λεκάνη." },
-      { label: "Ferry/ship wash", sev: 1, note: "Σαρωνικός: διερχόμενα προκαλούν κυματισμό." },
+      "Πολύ traffic σε change-over Παρασκευή/Σάββατο.",
+      "Fuel berth κατόπιν συνεννόησης / Port Office VHF 71.",
     ],
   },
-
   Aegina: {
-    vhf: "12", // Λιμεναρχείο Αίγινας
-    anchorage: {
-      holding: "sand/mud",
-      notes: "Μέτρια έως καλή κράτηση· απόφυγε weed patches & ράμπα ferry.",
-    },
+    vhf: "12",
+    anchorage: { holding: "sand/mud", notes: "Καλή κράτηση· απόφυγε weed patches." },
     exposure: "Ferry wash στην είσοδο λιμένα",
-    hazards: [
-      { label: "Traffic density", sev: 1, note: "Συχνές αφίξεις/αναχωρήσεις." },
-      { label: "Ferry wash", sev: 1 },
-    ],
-    notes: [
-      "Γνωστή για τα φιστίκια Αίγινας και τον Ναό της Αφαίας.",
-    ],
+    hazards: [{ label: "Traffic density", sev: 1 }, { label: "Ferry wash", sev: 1 }],
   },
-
   Agistri: {
-    vhf: "—", // δεν υπάρχει σταθερά ανακοινωμένο marina channel
-    anchorage: { holding: "sand", notes: "Καλή κράτηση σε SW όρμους (π.χ. Απονήσω/Δραγονέρα)." },
-    shelter: "Καλή ανάλογα με τον όρμο",
-    exposure: "Ν–ΝΔ σε ορισμένα σημεία",
-    hazards: [{ label: "Limited depth", sev: 1, note: "Ρηχά σε τμήματα της Σκάλας." }],
-    notes: ["Μικρά κρηπιδώματα — συχνά προτιμότερος ο όρμος."],
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Καλή κράτηση (SW τμήμα)."},
+    shelter: "Β–ΒΑ",
+    exposure: "Ν–ΝΔ",
   },
-
   Poros: {
-    vhf: "12", // Λιμεναρχείο Πόρου
-    anchorage: { holding: "sand/weed", notes: "Russian Bay & γύρω όρμοι. Δοκίμασε 2x για set αν πέσεις σε weed." },
-    shelter: "Πολύ καλή από μελτέμι",
-    exposure: "Όριο ταχύτητας & ρεύματα στο κανάλι",
-    hazards: [
-      { label: "Cross current", sev: 1, note: "Ρεύματα στο κανάλι — κράτα χαμηλή ταχύτητα." },
-      { label: "Speed limit", sev: 0 },
-      { label: "Weed patches", sev: 0 },
-    ],
-    notes: ["Ιδανικό για ανεφοδιασμό/προμήθειες."],
+    vhf: "12",
+    anchorage: { holding: "sand/weed", notes: "Patchy· δοκίμασε δύο φορές για set." },
+    shelter: "W–NW",
+    exposure: "SE ριπές στο στενό",
+    hazards: [{ label: "Cross current", sev: 1 }, { label: "Weed patches", sev: 1 }],
   },
-
   Hydra: {
-    vhf: "—", // δεν υπάρχει σταθερό dedicated marina channel (τοπικές οδηγίες/Port Police επί τόπου)
-    anchorage: { holding: "rock/sand", notes: "Μανδράκι/Βίδι: βαθιά, συχνό wake." },
+    vhf: "12",
+    anchorage: { holding: "rock/sand", notes: "Πολύ περιορισμένος χώρος, surge." },
     hazards: [
-      { label: "Tight harbor", sev: 2, note: "Πολύ στενός χώρος — συχνά «σταυρωτές» άγκυρες." },
-      { label: "Surge", sev: 1, note: "Wake/κυματισμός από διερχόμενα." },
-    ],
-    notes: [
-      "Εξαιρετικά περιορισμένες θέσεις — άφιξη πολύ νωρίς, long lines & extra fenders.",
+      { label: "Tight harbor", sev: 2, note: "Περιορισμένοι ελιγμοί." },
+      { label: "Surge", sev: 2, note: "Από ferries/traffic." },
     ],
   },
-
   Spetses: {
     vhf: "—",
-    anchorage: {
-      holding: "sand/weed",
-      notes: "Όρμος Μπαλτίζα: καλή λύση με tender. Προτίμησε καθαρό άμμο.",
-    },
-    exposure: "Ανάλογα με θέση· μελτέμι ριπές",
-    hazards: [
-      { label: "Surge", sev: 1, note: "Κυματισμός στο παλιό λιμάνι (Δάπια)." },
-      { label: "Tight maneuvering", sev: 1 },
-    ],
+    anchorage: { holding: "sand/weed", notes: "Patchy weed· προτίμησε καθαρό άμμο." },
+    exposure: "Μελτέμι με ριπές στα δεσίματα",
   },
-
-  "Porto Cheli": {
-    vhf: "—",
-    anchorage: {
-      holding: "mud/sand",
-      notes: "Πολύ καλό κράτημα — εκτεταμένος ασφαλής κόλπος.",
-    },
-    shelter: "Πολύ καλή κάλυψη περιμετρικά",
-    hazards: [
-      { label: "Chain overlaps", sev: 1, note: "Πολύς κόσμος στο αγκυροβόλιο: προσοχή σε αλυσίδες." },
-      { label: "Shallow edges", sev: 1 },
-    ],
-    notes: ["Ιδανικό για αναμονή μελτεμιού/ήρεμη νύχτα."],
-  },
-
   Ermioni: {
     vhf: "—",
-    anchorage: { holding: "mud/sand", notes: "Καλή κράτηση εντός κόλπου." },
-    shelter: "Καλή εκτός νοτιά",
-    exposure: "Ν–ΝΑ",
-    hazards: [
-      { label: "Limited berths", sev: 0 },
-      { label: "Swell with southerlies", sev: 1 },
-    ],
+    anchorage: { holding: "mud/sand", notes: "Γενικά καλή κράτηση." },
+    shelter: "Β–ΒΔ",
+    exposure: "Α–ΝΑ",
+  },
+  "Porto Cheli": {
+    vhf: "—",
+    anchorage: { holding: "mud/sand", notes: "Πολύ καλή κράτηση· κίνδυνος overlap αλυσίδων." },
+    shelter: "Καλό υπό παντού εκτός Α–ΝΑ μελτεμιών",
+    hazards: [{ label: "Chain overlaps", sev: 1 }, { label: "Shallow edges", sev: 1 }],
+  },
+  Methana: {
+    vhf: "—",
+    anchorage: { holding: "mud", notes: "Καλή κράτηση." },
+    shelter: "Β–Δ",
+    exposure: "Α–ΝΑ",
+  },
+  Epidaurus: {
+    vhf: "—",
+    anchorage: { holding: "sand/mud", notes: "Ήρεμο αγκυροβόλιο." },
+    shelter: "Γενικά καλό",
+    exposure: "Ν",
   },
 
+  /* ======== CYCLADES ======== */
   Lavrio: {
-    vhf: "—", // (λιμάνι/ιδιωτικές εγκαταστάσεις έχουν ίδια/εσωτερικά κανάλια — βάλε όταν επιβεβαιωθεί)
-    notes: ["Κόμβος για Κυκλάδες. Έλεγχος ανεφοδιασμού πριν απόπλου."],
+    vhf: "—",
+    marina: "Olympic Marine",
+    notes: ["Base για Cyclades· συχνός Β-ΒΑ άνεμος στην έξοδο."],
   },
-
-  /* ======== CYCLADES (kept from your file, tweaked for clarity) ======== */
-
+  Kea: {
+    vhf: "—",
+    anchorage: { holding: "sand/weed", notes: "Καλύτερα στα καθαρά patches." },
+    exposure: "Meltemi",
+  },
+  Kythnos: {
+    vhf: "—",
+    anchorage: { holding: "sand/weed", notes: "Κρατά καλά στα sand tongues." },
+    exposure: "Meltemi",
+  },
+  Syros: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Προστατευμένα κολπάκια (Ν)." },
+    hazards: [{ label: "Ferry wash (Ermoupoli)", sev: 1 }],
+  },
   Mykonos: {
     vhf: "—",
     marina: "Tourlos",
-    anchorage: { holding: "sand", notes: "Ρηχά & ριπές με μελτέμι." },
-    hazards: [
-      { label: "Meltemi gusts", sev: 2 },
-      { label: "Ferry wash", sev: 1 },
-    ],
+    anchorage: { holding: "sand", notes: "Ρηχά, ριπές Meltemi." },
+    hazards: [{ label: "Meltemi gusts", sev: 2 }, { label: "Ferry wash", sev: 1 }],
   },
-
   Paros: {
     vhf: "—",
-    anchorage: { holding: "sand", notes: "Καλή κράτηση στη Naoussa Bay." },
-    hazards: [
-      { label: "Meltemi funneling", sev: 2, note: "Ανάμεσα Πάρου–Νάξου." },
-    ],
+    anchorage: { holding: "sand", notes: "Naoussa: καλή προστασία· πρόσεχε ferry wash." },
+    hazards: [{ label: "Meltemi funneling", sev: 2, note: "Κανάλι Πάρου–Νάξου." }],
   },
-
   Naxos: {
     vhf: "—",
-    anchorage: { holding: "sand/weed", notes: "Καλή προστασία B–ΒΔ." },
-    hazards: [
-      { label: "Ferry wash", sev: 1 },
-      { label: "Meltemi seas", sev: 2 },
-    ],
+    anchorage: { holding: "sand/weed", notes: "Καλύτερη προστασία Β–ΒΔ." },
+    hazards: [{ label: "Ferry wash", sev: 1 }, { label: "Meltemi seas", sev: 2 }],
   },
-
+  Ios: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Καλό holding." },
+    exposure: "Meltemi",
+  },
+  Santorini: {
+    vhf: "—",
+    anchorage: { holding: "variable", notes: "Βαθιά νερά / moorings σε μαρίνες." },
+    hazards: [{ label: "Depth / swell", sev: 2 }],
+  },
   Milos: {
     vhf: "—",
-    anchorage: {
-      holding: "sand/rock",
-      notes: "Ρηχά έξω από κολπίσκους — προσοχή, ειδικά στο Kleftiko.",
-    },
-    exposure: "Ανοικτή σε W–SW swell",
+    anchorage: { holding: "sand/rock", notes: "Ρηχά έξω από κολπίσκους (π.χ. Kleftiko)." },
+    exposure: "W–SW swell",
   },
-
-  Syros: {
-    vhf: "—",
-    notes: ["Ερμούπολη: αστικό περιβάλλον/ανεφοδιασμός — μελτέμι side gusts."],
-  },
-
-  Serifos: {
-    vhf: "—",
-    anchorage: { holding: "sand", notes: "Λιβάδι — καλή κράτηση." },
-  },
-
   Sifnos: {
     vhf: "—",
-    anchorage: { holding: "sand", notes: "Κάμαρες/Βαθύ — καλά αγκυροβόλια." },
+    anchorage: { holding: "sand", notes: "Καλό holding." },
+    exposure: "Μελτέμι",
   },
-
-  Kea: {
+  Serifos: {
     vhf: "—",
-    anchorage: { holding: "sand/weed", notes: "Καρθαία/Βούρκάρι: προτίμησε καθαρό άμμο." },
+    anchorage: { holding: "sand/weed", notes: "Καλύτερα σε καθαρό άμμο." },
+    exposure: "Μελτέμι",
   },
-
-  Kythnos: {
+  Andros: { vhf: "—", exposure: "Strong Meltemi funneling (B–ΒΑ)" },
+  Tinos: { vhf: "—", exposure: "Μελτέμι/ριπές στο λιμάνι" },
+  Folegandros: {
     vhf: "—",
-    anchorage: { holding: "sand/weed", notes: "Κολώνα/Μεριχάς — δοκίμασε set σε weed." },
+    anchorage: { holding: "sand", notes: "Μικροί κολπίσκοι." },
+    exposure: "Νότιοι/δυτικοί",
+  },
+  Kimolos: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Ρηχά προσεκτικά." },
+    exposure: "W–SW swell",
+  },
+  Koufonisia: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Πολύ καθαρά νερά, καλό holding." },
+    exposure: "Μελτέμι",
+  },
+  Amorgos: {
+    vhf: "—",
+    anchorage: { holding: "sand/weed", notes: "Μελτέμι δημιουργεί swell." },
+    exposure: "B–ΒΑ",
   },
 
-  /* ======== (Placeholders ready for truth updates) ======== */
+  /* ======== IONIAN ======== */
+  Corfu: {
+    vhf: "—",
+    marina: "Gouvia Marina",
+    anchorage: { holding: "mud/sand", notes: "Καλή κράτηση σε κολπίσκους." },
+  },
+  Paxos: {
+    vhf: "—",
+    anchorage: { holding: "sand/weed", notes: "Lakka/Gaios καλά αγκυροβόλια." },
+    exposure: "ΝΔ swell",
+  },
+  Antipaxos: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Καλοκαιρινή πολυκοσμία." },
+  },
+  Lefkada: {
+    vhf: "—",
+    anchorage: { holding: "mud/sand", notes: "Κανάλι/γέφυρα με ωράρια." },
+    hazards: [{ label: "Canal traffic", sev: 1 }],
+  },
+  Preveza: { vhf: "—", anchorage: { holding: "mud/sand" } },
+  Meganisi: { vhf: "—", anchorage: { holding: "mud/sand", notes: "Βαθιές αγκυροβολίες." } },
+  Kalamos: { vhf: "—", anchorage: { holding: "sand", notes: "Καλή κάλυψη." } },
+  Kastos: { vhf: "—", anchorage: { holding: "sand", notes: "Μικρό νησί, περιορισμένες θέσεις." } },
+  Ithaca: { vhf: "—", anchorage: { holding: "mud/sand", notes: "Βαθιά κολπάκια." } },
+  Kefalonia: { vhf: "—", anchorage: { holding: "sand/weed", notes: "Assos/Fiscardo." } },
+  Zakynthos: { vhf: "—", anchorage: { holding: "sand", notes: "ΝΔ ακτές με swell." }, exposure: "W–SW swell" },
 
-  Corfu: { vhf: "—", notes: ["Ιόνιο — καλές αγκυροβολίες, συχνά ήπια θάλασσα."] },
-  Paxos: { vhf: "—", notes: ["Λάκκα/Γάιος — προστατευμένα νερά, προσοχή σε mooring density."] },
-  Lefkada: { vhf: "—", notes: ["Κανάλια/γέφυρα — πρόγραμμα διέλευσης." ] },
-  Zakynthos: { vhf: "—", notes: ["Ναυάγιο: απαγορεύσεις/ζώνες ασφαλείας εποχικά."] },
+  /* ======== DODECANESE ======== */
+  Rhodes: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Μαρίνες/δεσίματα διαθέσιμα." },
+    hazards: [{ label: "Meltemi seas outside", sev: 1 }],
+  },
+  Symi: {
+    vhf: "—",
+    anchorage: { holding: "mud/sand", notes: "Στενός οικισμός· ριπές." },
+    hazards: [{ label: "Tight harbor", sev: 2 }],
+  },
+  Kos: { vhf: "—", anchorage: { holding: "sand" } },
+  Kalymnos: { vhf: "—", anchorage: { holding: "sand/rock" } },
+  Patmos: { vhf: "—", anchorage: { holding: "sand", notes: "Καλή κάλυψη στον όρμο." } },
+  Leros: { vhf: "—", anchorage: { holding: "sand/mud" } },
+
+  /* ======== SPORADES ======== */
+  Volos: { vhf: "—", anchorage: { holding: "mud/sand" } },
+  Skiathos: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Busy ferries." },
+    hazards: [{ label: "Ferry wash", sev: 1 }],
+  },
+  Skopelos: { vhf: "—", anchorage: { holding: "sand/weed" } },
+  Alonissos: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Θαλάσσιο πάρκο· κανονισμοί προστασίας." },
+    hazards: [{ label: "Marine park restrictions", sev: 1 }],
+  },
+
+  /* ======== NORTH AEGEAN (incl. Halkidiki) ======== */
+  Thessaloniki: { vhf: "—", anchorage: { holding: "mud/sand" } },
+  "Nea Moudania": { vhf: "—", anchorage: { holding: "sand" } },
+  "Sani Marina": { vhf: "—", marina: "Sani Resort Marina" },
+  Nikiti: { vhf: "—", anchorage: { holding: "sand" } },
+  Vourvourou: { vhf: "—", anchorage: { holding: "sand", notes: "Πολύ ρηχά κοντά στις ακτές." } },
+  "Ormos Panagias": { vhf: "—", anchorage: { holding: "sand" } },
+  Ouranoupoli: { vhf: "—", anchorage: { holding: "sand", notes: "Αγ. Όρος ζώνη — περιορισμοί." },
+    hazards: [{ label: "Mt. Athos restricted waters", sev: 1 }],
+  },
+  Kavala: { vhf: "—", anchorage: { holding: "sand/mud" } },
+  Thassos: { vhf: "—", anchorage: { holding: "sand", notes: "Καλές αγκυροβολίες Ν." } },
+  Samothraki: { vhf: "—", anchorage: { holding: "sand/rock" }, exposure: "NE blows" },
+  Lemnos: { vhf: "—", anchorage: { holding: "sand" }, exposure: "Meltemi" },
+  Lesvos: { vhf: "—", anchorage: { holding: "sand/mud" } },
+  Chios: { vhf: "—", anchorage: { holding: "sand/rock" } },
+  Samos: { vhf: "—", anchorage: { holding: "sand" }, exposure: "E–NE" },
+  Ikaria: { vhf: "—", anchorage: { holding: "sand/rock" }, exposure: "Ισχυροί άνεμοι/ριπές" },
+
+  /* ======== CRETE ======== */
+  Chania: {
+    vhf: "—",
+    anchorage: { holding: "sand", notes: "Swell στην είσοδο με Δυτικούς." },
+    exposure: "W–NW swell",
+  },
+  Rethymno: { vhf: "—", anchorage: { holding: "sand" }, exposure: "Βόρειοι" },
+  Heraklion: { vhf: "—", anchorage: { holding: "sand" }, hazards: [{ label: "Commercial traffic", sev: 1 }] },
+  "Agios Nikolaos": { vhf: "—", anchorage: { holding: "sand/mud" } },
+  Sitia: { vhf: "—", anchorage: { holding: "sand" }, exposure: "E–NE" },
 };
 
 /* ========= Utility: normalize & lookup ========= */
