@@ -109,7 +109,7 @@ export default function Home() {
           >
             Simple Pricing
           </h2>
-          {/* stronger NAVY subcopy */}
+        {/* stronger NAVY subcopy */}
           <p className="mt-2 font-medium" style={{ color: "var(--color-brand-navy)" }}>
             Transparent plans to get you started.
           </p>
@@ -149,14 +149,13 @@ export default function Home() {
                 >
                   Go to AI Planner
                 </a>
-                <form action="/api/auth/logout" method="post">
-                  <button
-                    className="rounded-2xl px-6 py-3 text-sm font-semibold border"
-                    style={{ borderColor: "var(--color-brand-gold)", color: "var(--color-brand-navy)" }}
-                  >
-                    Manage account
-                  </button>
-                </form>
+                <a
+                  href="/account"
+                  className="rounded-2xl px-6 py-3 text-sm font-semibold border"
+                  style={{ borderColor: "var(--color-brand-gold)", color: "var(--color-brand-navy)" }}
+                >
+                  Manage account
+                </a>
               </div>
             </>
           ) : (
