@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildMergedPorts } from "./portsMerged";
 // ⚠️ Φέρνουμε τα facts RELATIVE (να φύγει κάθε path error)
-import { FACTS as PORT_FACTS } from "./ai/ports/portFacts";
+import { FACTS as PORT_FACTS } from "./ports/portFacts";
 
 /* =========================
  *  Regions & Types
