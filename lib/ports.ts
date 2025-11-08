@@ -14,19 +14,10 @@ export const REGIONS = [
   "Sporades",
   "NorthAegean",
   "Crete",
-  // Συνθέτες περιοχές από Sea Guide / overrides
-  "Korinthia",
-  "Sterea Ellada",
-  "Achaia",
-  "Aitoloakarnania",
-  "Fokida",
-  "Viotia",
-  "Messinia",
-  "Laconia",
-  "Zakynthos",
+  "Greece",
 ] as const;
 
-export type Region = typeof REGIONS[number];
+export type Region = (typeof REGIONS)[number];
 
 export type PortCategory = "harbor" | "marina" | "anchorage" | "spot";
 
@@ -36,11 +27,7 @@ export type Port = {
   lat: number;
   lon: number;
   category: PortCategory;
-  /** island/area optional, μπορεί να έρθει στο μέλλον */
-  island?: string | null;
-  /** Μπορεί να είναι μία από REGIONS ή σύνθετη (π.χ. Korinthia) */
-  region: string;
-  /** ΠΟΛΥ ΣΗΜΑΝΤΙΚΟ: εδώ έχουμε και GR και EN aliases */
+  region: Region;
   aliases?: string[];
 };
 
@@ -58,7 +45,7 @@ export function normalize(s: string) {
   return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
-/** match σε name + aliases (EN/EL) */
+/** Αναζήτηση σε name + aliases */
 export function portMatchesQuery(p: Port, q: string) {
   if (!q) return true;
   const needle = normalize(q);
@@ -69,35 +56,34 @@ export function portMatchesQuery(p: Port, q: string) {
   return false;
 }
 
-/** Υπολογίζει “auto region” από επιλεγμένα ports */
+/** Υπολογίζει περιοχή από όλα τα ports (start/end/vias). */
 export function guessRegionFromPorts(
   ports: Array<Port | null | undefined>
 ): Region | "Multi" | null {
   const valid = ports.filter(Boolean) as Port[];
   const set = new Set(valid.map((p) => p.region));
   if (set.size === 0) return null;
-  if (set.size === 1) return (valid[0].region as Region) ?? null;
+  if (set.size === 1) return valid[0].region;
   return "Multi";
 }
 
+/** Label που μπορείς να δείξεις στο UI για Auto mode. */
 export function getAutoRegionLabel(auto: Region | "Multi" | null) {
   if (!auto) return "Auto";
   if (auto === "Multi") return "Auto (multi-region)";
   return `${auto} (auto)`;
 }
 
-/** Dropdown φίλτρο: σε Auto εμφανίζει όλα, αλλιώς φιλτράρει πρώτα με region και μετά με query */
+/** Επιστρέφει λίστα για dropdown:
+ *  - Σε Auto: όλη η Ελλάδα, μόνο με text query
+ *  - Σε manual region: φιλτράρει πρώτα με region και μετά με text query
+ */
 export function filterPortsForDropdown(
   all: Port[],
-  mode: "Auto" | string,
+  mode: "Auto" | Region,
   query: string
 ) {
-  const base =
-    mode === "Auto"
-      ? all
-      : all.filter(
-          (p) => normalize(String(p.region)) === normalize(String(mode))
-        );
+  const base = mode === "Auto" ? all : all.filter((p) => p.region === mode);
   return base.filter((p) => portMatchesQuery(p, query));
 }
 
@@ -110,11 +96,8 @@ function buildIndex(list: Port[]): PortIndex {
     byId[p.id] = p;
     byKey[normalize(p.name)] = p.id;
     optionsSet.add(p.name);
-
     for (const a of p.aliases ?? []) {
-      const k = normalize(a);
-      // αν το alias δείχνει ήδη σε άλλο id, κρατάμε το πρώτο (σταθερότητα)
-      if (!byKey[k]) byKey[k] = p.id;
+      byKey[normalize(a)] = p.id;
       optionsSet.add(a);
     }
   }
@@ -127,42 +110,66 @@ function buildIndex(list: Port[]): PortIndex {
 
 /* =========================
  *  Data loader
- *  (ΠΛΕΟΝ από /api/ports/merged -> canonical + PortFacts + aliases GR/EN)
  * =======================*/
+type ApiMergedPort = {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  region?: string;
+  category?: string;
+  aliases?: string[];
+};
+
 async function fetchPorts(): Promise<Port[]> {
+  // ΕΝΩΜΕΝΑ από όλες τις πηγές μας
   const res = await fetch("/api/ports/merged", { cache: "no-store" });
-  if (!res.ok) {
-    // ρίχνουμε καθαρό error ώστε να το δει το UI
-    const txt = await res.text().catch(() => "");
-    throw new Error(
-      `Failed to load merged ports: ${res.status} ${res.statusText} ${txt}`
-    );
-  }
-  const data = (await res.json()) as any[];
+  if (!res.ok) throw new Error("Failed to load /api/ports/merged");
+  const data = (await res.json()) as ApiMergedPort[];
 
   // Αμυντικό φίλτρο/shape
-  const list: Port[] = (data || [])
-    .map((p: any) => ({
-      id: String(p.id ?? p.name ?? "").trim().toLowerCase().replace(/\s+/g, "-"),
-      name: String(p.name ?? "").trim(),
-      lat: Number(p.lat),
-      lon: Number(p.lon),
-      category: (String(p.category ?? "harbor").toLowerCase() as PortCategory),
-      region: String(p.region ?? "Greece"),
-      aliases: Array.isArray(p.aliases)
-        ? p.aliases
-            .map((x) => String(x || "").trim())
-            .filter(Boolean)
-        : [],
-    }))
-    .filter(
-      (p) =>
+  const list: Port[] = (Array.isArray(data) ? data : [])
+    .map((p: ApiMergedPort): Port => {
+      const rawAliases: string[] = Array.isArray(p.aliases)
+        ? (p.aliases as string[]).map((x: string) => String(x || "").trim()).filter(Boolean)
+        : [];
+
+      // region to known enum (fallback "Greece")
+      const regionClean = String(p.region ?? "Greece").trim();
+      const regionEnum = (REGIONS.includes(regionClean as Region)
+        ? (regionClean as Region)
+        : "Greece") as Region;
+
+      // category to enum fallback
+      const cat = String(p.category ?? "harbor").toLowerCase();
+      const categoryEnum: PortCategory =
+        cat === "marina"
+          ? "marina"
+          : cat === "anchorage"
+          ? "anchorage"
+          : cat === "spot"
+          ? "spot"
+          : "harbor";
+
+      return {
+        id: String(p.id || p.name || "").trim().toLowerCase().replace(/\s+/g, "-"),
+        name: String(p.name ?? "").trim(),
+        lat: Number(p.lat),
+        lon: Number(p.lon),
+        category: categoryEnum,
+        region: regionEnum,
+        aliases: rawAliases,
+      };
+    })
+    .filter((p) => {
+      return (
         p.name &&
         Number.isFinite(p.lat) &&
         Number.isFinite(p.lon) &&
-        p.category &&
-        p.region
-    );
+        !!p.category &&
+        !!p.region
+      );
+    });
 
   return list;
 }
@@ -190,14 +197,13 @@ export function usePorts() {
 
   const index = useMemo(() => (ports ? buildIndex(ports) : null), [ports]);
 
-  /** Βρίσκει port με exact match πρώτα (name/aliases EN/EL), μετά με includes */
+  /** Βρίσκει port με exact match πρώτα (name/aliases), μετά με includes */
   function findPort(query: string): Port | null {
     if (!index || !query) return null;
     const key = normalize(query);
     const id = index.byKey[key];
     if (id && index.byId[id]) return index.byId[id];
 
-    // fallback: first includes (πιάνει partials και GR/EN)
     const opt = index.options.find((o) => normalize(o).includes(key));
     if (opt) {
       const id2 = index.byKey[normalize(opt)];
@@ -207,13 +213,13 @@ export function usePorts() {
   }
 
   return {
-    ready: !!index && !error,
+    ready: !!index,
     error,
     ports: ports ?? [],
     options: index?.options ?? [],
     findPort,
 
-    // helpers για UI
+    // Χρήσιμα έξτρα για UI:
     byId: index?.byId ?? {},
     all: index?.all ?? [],
   };
