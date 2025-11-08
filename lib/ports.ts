@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { buildMergedPorts } from "./portsMerged";
-// Φέρνουμε το FACTS για να ενσωματώσουμε aliases από portFacts
+// ⚠️ Φέρνουμε τα facts RELATIVE (να φύγει κάθε path error)
 import { FACTS as PORT_FACTS } from "./ai/ports/portFacts";
 
 /* =========================
@@ -22,16 +22,15 @@ export const REGIONS = [
 export type Region = typeof REGIONS[number];
 export type PortCategory = "harbor" | "marina" | "anchorage" | "spot";
 
-/** Canonical shape που χρησιμοποιεί το UI */
 export type Port = {
   id: string;
-  name: string;          // κύριο display name (EN ή mix)
+  name: string;
   lat: number;
   lon: number;
   category: PortCategory;
   region: Region;
-  aliases?: string[];    // επιπλέον ονόματα (EN/EL/variants)
-  label?: string;        // προτεινόμενο δίγλωσσο label για dropdown
+  aliases?: string[];
+  label?: string;
 };
 
 /* =========================
@@ -100,13 +99,13 @@ function sanitizeName(raw: string) {
   return `${base} (${clean[1]})`;
 }
 
-/** true αν το string μοιάζει με ΟΝΟΜΑ (και όχι πρόταση/note) */
+/** true αν το string μοιάζει με ΟΝΟΜΑ (όχι πρόταση/note) */
 function isNameLike(raw: string) {
   const s = (raw || "").trim();
   if (!s) return false;
   if (/[0-9.;:!?]/.test(s)) return false;          // "Βάθη 2–4 m.", "Είσοδος…"
-  if (s.length > 48) return false;
-  if (s.split(/\s+/).length > 7) return false;
+  if (s.length > 40) return false;
+  if (s.split(/\s+/).length > 6) return false;
   const badStarts = [
     "Άφιξη","Αφιξη","Είσοδος","Έξοδος","Exodos","Βάθη","Καλύτερα",
     "Επικοινωνία","Προσοχή","Σημείωση","Arrival","Entrance","Depth","Better","Notes","Call"
@@ -117,7 +116,6 @@ function isNameLike(raw: string) {
   return true;
 }
 
-/** Φτιάχνει δίγλωσσο label: EN (EL) ή EL (EN), αποφεύγοντας διπλοεμφάνιση όταν ίδιο */
 function bilingualLabel(primary: string, aliases: string[]) {
   const en = [primary, ...aliases].find((x) => !isGreek(x)) || primary;
   const el = [primary, ...aliases].find((x) => isGreek(x));
@@ -128,13 +126,84 @@ function bilingualLabel(primary: string, aliases: string[]) {
 }
 
 /* =========================
+ *  Enrichment from portFacts
+ * =======================*/
+
+/** π.χ. "Mylokopi Cove" -> null, "Mandraki (Hydra)" -> "Hydra" */
+function extractParenPlace(label: string): string | null {
+  const m = String(label || "").match(/\(([^)]+)\)/);
+  if (!m) return null;
+  const inner = m[1].trim();
+  return isCleanParen(inner) ? inner : null;
+}
+
+/**
+ * Εμπλουτίζει τα ports με aliases που προέρχονται από τα κλειδιά του portFacts:
+ * - Αν το key έχει "(Island)", βρίσκουμε port που ταιριάζει στο Island (name/alias).
+ * - Αλλιώς δοκιμάζουμε exact/contains πάνω σε name/aliases.
+ * - Δεν δημιουργούμε καινούργια ports χωρίς coords· μόνο aliases.
+ */
+function enrichWithFacts(list: Port[]): Port[] {
+  const out = list.map(p => ({ ...p, aliases: [...(p.aliases ?? [])] as string[] }));
+  const byName = new Map<string, number>();
+  const byAlias = new Map<string, number>();
+
+  out.forEach((p, idx) => {
+    byName.set(normalize(p.name), idx);
+    (p.aliases ?? []).forEach(a => byAlias.set(normalize(a), idx));
+  });
+
+  const addAlias = (idx: number, alias: string) => {
+    const clean = sanitizeName(alias);
+    if (!clean || !isNameLike(clean)) return;
+    const arr = out[idx].aliases ?? (out[idx].aliases = []);
+    if (!arr.some(a => normalize(a) === normalize(clean))) arr.push(clean);
+  };
+
+  const factKeys = Object.keys(PORT_FACTS ?? {});
+  for (const raw of factKeys) {
+    const factLabel = sanitizeName(String(raw || "").trim());
+    if (!factLabel || !isNameLike(factLabel)) continue;
+
+    const inner = extractParenPlace(factLabel);
+    let idx: number | undefined;
+
+    if (inner) {
+      // 1) προσπαθούμε με το περιεχόμενο παρενθέσεων (π.χ. "Hydra")
+      idx = byName.get(normalize(inner));
+      if (idx === undefined) idx = byAlias.get(normalize(inner));
+    }
+
+    // 2) fallback: exact πάνω στο full label
+    if (idx === undefined) {
+      idx = byName.get(normalize(factLabel));
+      if (idx === undefined) idx = byAlias.get(normalize(factLabel));
+    }
+
+    // 3) fallback: "περιέχει" — π.χ. “Russian Bay (Poros)” -> Poros
+    if (idx === undefined && inner) {
+      // ψάχνουμε port που "εμπεριέχεται" στο όνομά του ή στα aliases
+      idx = out.findIndex(p =>
+        normalize(p.name) === normalize(inner) ||
+        (p.aliases ?? []).some(a => normalize(a) === normalize(inner))
+      );
+      if (idx < 0) idx = undefined;
+    }
+
+    if (idx !== undefined) addAlias(idx, factLabel);
+  }
+
+  return out;
+}
+
+/* =========================
  *  Index helpers
  * =======================*/
 type PortIndex = {
   all: Port[];
   byId: Record<string, Port>;
   byKey: Record<string, string>;
-  options: string[];         // dropdown list (labels + aliases)
+  options: string[];         // dropdown list (labels + aliases καθαρά)
 };
 
 function buildIndex(list: Port[]): PortIndex {
@@ -145,69 +214,25 @@ function buildIndex(list: Port[]): PortIndex {
   for (const p of list) {
     byId[p.id] = p;
 
-    // index για exact όνομα
+    // index exact name/aliases
     byKey[normalize(p.name)] = p.id;
-
-    // index για exact aliases
     for (const a of p.aliases ?? []) byKey[normalize(a)] = p.id;
 
     // 1) κύριο label
     if (p.label) optionSet.add(p.label);
     else optionSet.add(p.name);
 
-    // 2) προσθέτουμε ΟΛΑ τα καθαρά aliases ως **ξεχωριστές** επιλογές
+    // 2) ΟΛΑ τα aliases ως **ξεχωριστές** επιλογές
     for (const a of p.aliases ?? []) {
       const s = sanitizeName(a);
       if (s && isNameLike(s)) optionSet.add(s);
     }
 
-    // 3) προαιρετικά 1-2 δίγλωσσα combos για ευκολία αναζήτησης
+    // 3) προαιρετικά δίγλωσσα combos
     const greek = (p.aliases ?? []).find(isGreek);
     const latin = (p.aliases ?? []).find((x) => !isGreek(x));
     if (greek) optionSet.add(`${p.name} (${greek})`);
     if (latin && isGreek(p.name)) optionSet.add(`${p.name} (${latin})`);
-  }
-
-  /* === ΕΜΠΛΟΥΤΙΣΜΟΣ ΜΕ ΟΝΟΜΑΤΑ ΑΠΟ portFacts === */
-  try {
-    const facts: Record<string, any> = PORT_FACTS as any;
-    if (facts && typeof facts === "object") {
-      for (const rawKey of Object.keys(facts)) {
-        const factKey = sanitizeName(String(rawKey));
-        if (!isNameLike(factKey)) continue;
-
-        // προσπάθεια ταίριασμα:
-        // 1) Αν έχει "(Island/Port)" → στόχευσε στο περιεχόμενο
-        let targetId: string | undefined;
-        const m = factKey.match(/\(([^)]+)\)/);
-        if (m && isCleanParen(m[1])) {
-          const inner = m[1].trim();
-          const idByInner = byKey[normalize(inner)];
-          if (idByInner) targetId = idByInner;
-        }
-        // 2) exact match ολόκληρου του ονόματος
-        if (!targetId) {
-          const idExact = byKey[normalize(factKey)];
-          if (idExact) targetId = idExact;
-        }
-        // 3) heuristic: πρώτο token πριν παρενθέσεις / πρώτος όρος
-        if (!targetId) {
-          const firstToken = factKey.split("(")[0].trim().split(/\s+/)[0] || "";
-          if (firstToken) {
-            const idTok = byKey[normalize(firstToken)];
-            if (idTok) targetId = idTok;
-          }
-        }
-
-        if (!targetId) continue; // δεν φτιάχνουμε "ορφανά" χωρίς coords
-
-        // καταχώρησε το alias -> id, και πρόσθεσέ το στα options
-        byKey[normalize(factKey)] = targetId;
-        optionSet.add(factKey);
-      }
-    }
-  } catch {
-    // no-op: αν για κάποιο λόγο δεν βρεθεί FACTS, απλά αγνοούμε
   }
 
   const options = Array.from(optionSet).sort((a, b) => a.localeCompare(b, "en"));
@@ -215,55 +240,42 @@ function buildIndex(list: Port[]): PortIndex {
 }
 
 /* =========================
- *  Data builder (Merged)
+ *  Data builder
  * =======================*/
 function buildPortsFromMerged(): Port[] {
-  const merged = buildMergedPorts();
+  // 1) canonical base
+  let merged = buildMergedPorts().map((m, i) => {
+    const nameClean = sanitizeName(String(m.name ?? "").trim());
+    const id = String(m.id ?? `merged-${i}-${normalize(nameClean).slice(0, 40)}`).trim();
 
-  const out: Port[] = merged
-    .map((m, i) => {
-      const nameClean = sanitizeName(String(m.name ?? "").trim());
-      const id = String(m.id ?? `merged-${i}-${normalize(nameClean).slice(0, 40)}`).trim();
+    const regRaw = String(m.region ?? "").trim();
+    const region =
+      (REGIONS.find((r) => r.toLowerCase() === regRaw.toLowerCase()) ??
+        "Saronic") as Region;
 
-      const regRaw = String(m.region ?? "").trim();
-      const region =
-        (REGIONS.find((r) => r.toLowerCase() === regRaw.toLowerCase()) ??
-          "Saronic") as Region;
+    const category = (m.category as PortCategory) ?? guessCategoryFromName(nameClean);
 
-      const category = (m.category as PortCategory) ?? guessCategoryFromName(nameClean);
+    const aliases = uniq(
+      [nameClean, ...(Array.isArray(m.aliases) ? m.aliases : [])]
+        .map((x) => sanitizeName(String(x || "")))
+        .filter((x) => x && isNameLike(x))
+    ).slice(0, 60);
 
-      // aliases ΜΟΝΟ από merged (έχει ήδη “portFacts” names μέσα αν τα έβαλες εκεί)
-      const aliases = uniq(
-        [nameClean, ...(Array.isArray(m.aliases) ? m.aliases : [])]
-          .map((x) => sanitizeName(String(x || "")))
-          .filter((x) => x && isNameLike(x))
-      ).slice(0, 40);
+    const lat = typeof (m as any).lat === "number" ? (m as any).lat : NaN;
+    const lon = typeof (m as any).lon === "number" ? (m as any).lon : NaN;
 
-      const label = bilingualLabel(nameClean, aliases);
+    const label = bilingualLabel(nameClean, aliases);
 
-      const lat = typeof (m as any).lat === "number" ? (m as any).lat : NaN;
-      const lon = typeof (m as any).lon === "number" ? (m as any).lon : NaN;
+    return {
+      id, name: nameClean, lat, lon, category, region, aliases, label
+    } as Port;
+  })
+  .filter(p => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lon) && !!p.region);
 
-      return {
-        id,
-        name: nameClean,
-        lat,
-        lon,
-        category,
-        region,
-        aliases,
-        label,
-      } as Port;
-    })
-    .filter(
-      (p) =>
-        p.name &&
-        Number.isFinite(p.lat) &&
-        Number.isFinite(p.lon) &&
-        !!p.region
-    );
+  // 2) Εμπλουτισμός με portFacts (aliases μόνο)
+  merged = enrichWithFacts(merged);
 
-  return out;
+  return merged;
 }
 
 /* =========================
@@ -324,14 +336,15 @@ export function usePorts() {
 
   const index = useMemo(() => (ports ? buildIndex(ports) : null), [ports]);
 
-  /** Βρίσκει port με exact match πρώτα (name/label/aliases), μετά με includes */
   function findPort(query: string): Port | null {
     if (!index || !query) return null;
     const key = normalize(query);
 
+    // exact by name/alias
     const id = index.byKey[key];
     if (id && index.byId[id]) return index.byId[id];
 
+    // exact by label
     const exactLabel = index.options.find((o) => normalize(o) === key);
     if (exactLabel) {
       const p = index.all.find(
@@ -340,6 +353,7 @@ export function usePorts() {
       if (p) return p;
     }
 
+    // includes
     const p = index.all.find(
       (x) =>
         normalize(x.name).includes(key) ||
