@@ -6,7 +6,7 @@
 // - Arrays (hazards/notes/sources) ενωμένα με dedupe.
 // - Νέα SeaGuide πεδία (προαιρετικά): comms, approach, wx, facilities, ops.
 
-import { PORT_FACTS_DATA, type PortFact } from "./portFacts";
+import { PORT_FACTS_DATA, type PortFact } from "@/lib/ports/portFacts";
 import CANONICAL_PORTS_RAW from "@/public/data/ports.v1.json";
 
 export type CanonicalPort = { name: string; region?: string; lat?: number; lon?: number; [k: string]: any };

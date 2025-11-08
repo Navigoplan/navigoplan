@@ -1568,7 +1568,6 @@ const ALIASES: Record<string, string> = {
   "αλυκες ζακυνθος": "Alykes Harbour (Zakynthos)",
   "λιμανι αλυκες": "Alykes Harbour (Zakynthos)",
   "ορμος αλυκων": "Alykes Harbour (Zakynthos)",
-  "ζακυνθος": "Zakynthos Harbour",
   "λιμανι ζακυνθου": "Zakynthos Harbour",
   "μαρινα ζακυνθου": "Zakynthos Harbour",
   // west peloponnese & zakynthos extended

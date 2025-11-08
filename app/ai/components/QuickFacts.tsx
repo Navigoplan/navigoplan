@@ -4,7 +4,7 @@ import {
   getPortFacts,
   type PortFact,
   type PortHazard,
-} from "../../../lib/ports/portfacts"; // <-- σωστό path
+} from "../../../lib/ports/portFacts"; // <-- σωστό path
 
 /* ====== Local weather type (ό,τι χρειαζόμαστε εδώ) ====== */
 type SpotWeather = {
