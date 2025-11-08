@@ -1,23 +1,38 @@
 // lib/portsMerged.ts
-// Ενοποίηση canonical ports (public/data/ports.v1.json) με PortFacts (lib/ports/portFacts.ts)
-// Διαβάζει JSON στον server (fs) για να αποφευχθεί webpack JSON parse στο build.
+// Ενοποίηση canonical ports (/public/data/ports.v1.json),
+// Sea Guide master (/public/data/sea_guide_vol3_master.json) [optional],
+// και PortFacts (/public/data/port-facts.v1.json) [optional].
+//
+// Δεν χρησιμοποιούμε JSON imports, μόνο fs ώστε να παίζει καθαρά σε Vercel.
+
 import { promises as fs } from "fs";
 import path from "path";
-import { PORT_FACTS_DATA, type PortFact } from "./ports/portFacts";
 
-// ----- Types -----
+export type Hazard = { label: string; note?: string; sev?: 0 | 1 | 2 };
+
 export type CanonicalPort = {
   id?: string;
   name: string;
   lat?: number;
   lon?: number;
-  category?: string;
   region?: string;
+  category?: "harbor" | "marina" | "anchorage" | "spot";
   aliases?: string[];
-  [k: string]: any;
+  notes?: string[];
+  sources?: string[];
 };
-export type Hazard = { label: string; note?: string; sev?: 0 | 1 | 2 };
-export type MergedPort = CanonicalPort & {
+
+export type SeaGuideRecord = {
+  id: string;
+  region?: string;
+  category?: "harbor" | "marina" | "anchorage" | "spot" | "bay";
+  position?: { lat?: number; lon?: number };
+  name?: { el?: string; en?: string };
+  aliases?: { el?: string[]; en?: string[] };
+  // …κρατάμε μόνο ό,τι χρειαζόμαστε για το dropdown/coords
+};
+
+export type PortFact = {
   vhf?: string;
   vhfVerified?: boolean;
   marina?: string;
@@ -27,229 +42,198 @@ export type MergedPort = CanonicalPort & {
   hazards?: Hazard[];
   notes?: string[];
   sources?: string[];
-  __source: "canonical" | "facts" | "merged";
 };
 
-// ----- Helpers -----
+export type MergedPort = {
+  id?: string;
+  name: string;
+  lat?: number;
+  lon?: number;
+  region?: string;
+  category?: "harbor" | "marina" | "anchorage" | "spot";
+  aliases?: string[];
+  // ops fields (μένουν εδώ για μελλοντική χρήση)
+  vhf?: string; vhfVerified?: boolean; marina?: string;
+  anchorage?: { holding?: string; notes?: string };
+  shelter?: string; exposure?: string; hazards?: Hazard[]; notes?: string[]; sources?: string[];
+  __source: "canonical" | "facts" | "seaguide" | "merged";
+};
+
+const DATA_DIR = path.join(process.cwd(), "public", "data");
+const FILE_CANON = "ports.v1.json";
+const FILE_FACTS = "port-facts.v1.json";
+const FILE_SG    = "sea_guide_vol3_master.json";
+
 function normalize(s: string) {
-  return String(s ?? "").trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
-function asArray<T>(v: T | T[] | undefined): T[] {
-  return !v ? [] : Array.isArray(v) ? v : [v];
+
+function asArray<T>(v: T | T[] | undefined | null): T[] {
+  if (!v) return [];
+  return Array.isArray(v) ? v : [v];
 }
-function uniqStrings(arr: string[]): string[] {
-  const seen = new Set<string>(), out: string[] = [];
+
+function uniqStrings(arr: string[]) {
+  const out: string[] = [];
+  const seen = new Set<string>();
   for (const x of arr) {
-    const k = String(x ?? "").trim();
-    if (!k) continue;
-    if (!seen.has(k)) {
-      seen.add(k);
-      out.push(k);
-    }
-  }
-  return out;
-}
-function uniqHazards(arr: Hazard[]) {
-  const seen = new Set<string>(), out: Hazard[] = [];
-  for (const h of arr) {
-    const k = JSON.stringify({
-      l: (h.label || "").trim(),
-      n: (h.note || "").trim(),
-      s: h.sev ?? null,
-    });
-    if (!seen.has(k)) {
-      seen.add(k);
-      out.push(h);
-    }
+    const t = String(x ?? "").trim();
+    if (!t) continue;
+    const k = normalize(t);
+    if (!seen.has(k)) { seen.add(k); out.push(t); }
   }
   return out;
 }
 
-async function readJsonSafe<T = unknown>(rel: string): Promise<T | null> {
+function uniqHazards(arr: Hazard[]) {
+  const out: Hazard[] = [];
+  const seen = new Set<string>();
+  for (const h of arr ?? []) {
+    const k = JSON.stringify({ l: (h.label||"").trim(), n: (h.note||"").trim(), s: h.sev ?? null });
+    if (!seen.has(k)) { seen.add(k); out.push(h); }
+  }
+  return out;
+}
+
+async function readJSON<T = any>(fileName: string): Promise<T | null> {
   try {
-    const file = path.join(process.cwd(), rel.replace(/^\/+/, ""));
-    const buf = await fs.readFile(file, "utf8");
-    const txt = (buf || "").trim();
-    if (!txt) return null;
-    return JSON.parse(txt) as T;
+    const full = path.join(DATA_DIR, fileName);
+    const buf = await fs.readFile(full, "utf8");
+    return JSON.parse(buf) as T;
   } catch {
     return null;
   }
 }
 
-// ----- Γεωγραφικές διορθώσεις για facts-only (WGS84) -----
-const GEO_OVERRIDES: Record<string, { lat?: number; lon?: number; region?: string }> = {
-  // ενδεικτικά (όπως πριν) – συμπλήρωσε ελεύθερα
-  "Corinth Harbour": { lat: 37.9387, lon: 22.9338, region: "Korinthia" },
-  "Korinth Canal (Isthmus)": { lat: 37.9328, lon: 22.993, region: "Korinthia" },
-  "Kiato Harbour": { lat: 38.0136, lon: 22.7485, region: "Korinthia" },
-  "Vrachati Harbour": { lat: 37.9532, lon: 22.845, region: "Korinthia" },
-  // … (κρατάω τα δικά σου από πριν — μπορείς να τα επεκτείνεις)
-};
+/** Μετατρέπει ένα SeaGuide record σε “port-like” εγγραφή για merge */
+function fromSeaGuide(r: SeaGuideRecord): MergedPort | null {
+  const nameEn = r.name?.en?.trim();
+  const nameEl = r.name?.el?.trim();
+  const name = nameEn || nameEl;
+  if (!name) return null;
 
-function applyGeoOverrides(m: MergedPort, factName: string) {
-  const o = GEO_OVERRIDES[factName];
-  if (!o) return;
-  if (typeof o.lat === "number") m.lat = o.lat;
-  if (typeof o.lon === "number") m.lon = o.lon;
-  if (o.region) m.region = o.region;
-}
+  const lat = r.position?.lat;
+  const lon = r.position?.lon;
 
-// ----- Merge ενός port -----
-function mergeOne(
-  canon: CanonicalPort | undefined,
-  factName: string,
-  fact: (PortFact & { lat?: number; lon?: number; region?: string }) | undefined
-): MergedPort {
-  const F = fact ?? ({} as any);
+  const aliases = uniqStrings([
+    ...(r.aliases?.en ?? []),
+    ...(r.aliases?.el ?? []),
+    ...(nameEn && nameEl && normalize(nameEn) !== normalize(nameEl) ? [nameEl] : []),
+  ]);
 
-  if (canon) {
-    const m: MergedPort = {
-      ...canon,
-      region: canon.region ?? F.region,
-      vhf: F.vhf ?? (canon as any).vhf,
-      vhfVerified: F.vhfVerified ?? (canon as any).vhfVerified,
-      marina: F.marina ?? (canon as any).marina,
-      anchorage: F.anchorage ?? (canon as any).anchorage,
-      shelter: F.shelter ?? (canon as any).shelter,
-      exposure: F.exposure ?? (canon as any).exposure,
-      hazards: uniqHazards([...(asArray((canon as any).hazards)), ...(asArray(F.hazards))]),
-      notes: uniqStrings([...(asArray((canon as any).notes)), ...(asArray(F.notes))]),
-      sources: uniqStrings([...(asArray((canon as any).sources)), ...(asArray(F.sources))]),
-      __source: "merged",
-    };
-    if (typeof m.lat !== "number" && typeof F.lat === "number") m.lat = F.lat;
-    if (typeof m.lon !== "number" && typeof F.lon === "number") m.lon = F.lon;
-    applyGeoOverrides(m, factName);
-    return m;
-  }
+  // map “bay” σε “anchorage” για συμβατότητα
+  const category =
+    r.category === "bay" ? "anchorage" :
+    (r.category as MergedPort["category"]) ?? "harbor";
 
-  const m: MergedPort = {
-    name: factName,
-    region: F.region,
-    lat: F.lat,
-    lon: F.lon,
-    vhf: F.vhf,
-    vhfVerified: F.vhfVerified,
-    marina: F.marina,
-    anchorage: F.anchorage,
-    shelter: F.shelter,
-    exposure: F.exposure,
-    hazards: asArray(F.hazards),
-    notes: asArray(F.notes),
-    sources: asArray(F.sources),
-    __source: "facts",
+  return {
+    id: r.id,
+    name,
+    lat,
+    lon,
+    region: r.region,
+    category,
+    aliases,
+    __source: "seaguide",
   };
-  applyGeoOverrides(m, factName);
-  return m;
 }
 
-// ----- Κύρια συνάρτηση: διαβάζει JSON από public + ενώνει με facts -----
+/* ====== cache ====== */
 let _cache: MergedPort[] | null = null;
 
-/**
- * Διαβάζει:
- *  - public/data/ports.v1.json (canonical)
- *  - public/data/sea_guide_vol3_master.json (αν υπάρχει, extra πηγές)
- * και τα ενώνει με τα PortFacts (lib/ports/portFacts.ts).
- */
+/** Δημιουργεί τη merged λίστα για το API */
 export async function buildMergedPorts(): Promise<MergedPort[]> {
   if (_cache) return _cache;
 
-  // 1) canonical ports
-  const canonicalArray =
-    (await readJsonSafe<CanonicalPort[]>("public/data/ports.v1.json")) ??
-    (await readJsonSafe<CanonicalPort[]>("public/data/ports.v.json")) ?? // fallback στο παλιό όνομα αν υπάρχει
-    [];
+  // 1) Canonical ports
+  const canonRaw = await readJSON<CanonicalPort[] | { list: CanonicalPort[] }>(FILE_CANON);
+  const CANON: CanonicalPort[] = Array.isArray(canonRaw)
+    ? canonRaw
+    : (canonRaw?.list ?? []);
 
-  // 2) sea guide master (αν υπάρχει) — μπορεί να είναι λίστα αντικειμένων με δικό τους schema
-  const seaGuideMaster =
-    (await readJsonSafe<any[]>("public/data/sea_guide_vol3_master.json")) ?? [];
+  // 2) Port facts (προαιρετικό)
+  const factsRaw = await readJSON<{ version?: string; facts?: any[] }>(FILE_FACTS);
+  // εδώ δεν τα χρησιμοποιούμε για UI πέρα από μελλοντική εμπλουτισμό ops πεδίων
 
-  // Indexes
+  // 3) Sea Guide master (προαιρετικό)
+  const sgRaw = await readJSON<SeaGuideRecord[]>(FILE_SG);
+
   const canonByKey = new Map<string, CanonicalPort>();
-  for (const p of canonicalArray) {
+  CANON.forEach(p => {
+    if (!p?.name) return;
     const k = normalize(p.name);
-    if (k && !canonByKey.has(k)) canonByKey.set(k, p);
-  }
+    if (!canonByKey.has(k)) canonByKey.set(k, p);
+  });
 
-  const factsByKey = new Map<
-    string,
-    { key: string; fact: (PortFact & { lat?: number; lon?: number; region?: string }) }
-  >();
-  for (const name of Object.keys(PORT_FACTS_DATA)) {
-    const k = normalize(name);
-    factsByKey.set(k, { key: name, fact: PORT_FACTS_DATA[name] as any });
-  }
-
-  // Build from canonical (+ facts overlap)
   const out: MergedPort[] = [];
-  for (const c of canonicalArray) {
-    const k = normalize(c.name);
-    if (factsByKey.has(k)) {
-      const { key: factName, fact } = factsByKey.get(k)!;
-      out.push(mergeOne(c, factName, fact));
-    } else {
-      out.push({ ...(c as any), __source: "canonical" });
-    }
+
+  // Canonical → βάση
+  for (const c of CANON) {
+    if (!c?.name) continue;
+    out.push({
+      id: c.id,
+      name: c.name,
+      lat: c.lat,
+      lon: c.lon,
+      region: c.region,
+      category: c.category,
+      aliases: asArray(c.aliases),
+      notes: asArray(c.notes),
+      sources: asArray(c.sources),
+      __source: "canonical",
+    });
   }
 
-  // Facts-only (χωρίς canonical)
-  for (const [k, { key: factName, fact }] of factsByKey.entries()) {
-    if (!canonByKey.has(k)) out.push(mergeOne(undefined, factName, fact));
-  }
-
-  // 3) Εμπλουτισμός από sea_guide_vol3_master.json (αν έχει δικά του entries/aliases)
-  for (const rec of seaGuideMaster) {
-    try {
-      const nameEL = rec?.name?.el ? String(rec.name.el).trim() : "";
-      const nameEN = rec?.name?.en ? String(rec.name.en).trim() : "";
-      const primaryName = nameEN || nameEL || String(rec?.id || "").trim();
-      if (!primaryName) continue;
-
-      const lat = Number(rec?.position?.lat);
-      const lon = Number(rec?.position?.lon);
-      const region = rec?.region || rec?.area || "";
-
-      const key = normalize(primaryName);
-      const existed = out.find((p) => normalize(p.name) === key);
-
-      const aliases: string[] = [
-        ...(Array.isArray(rec?.aliases?.el) ? rec.aliases.el : []),
-        ...(Array.isArray(rec?.aliases?.en) ? rec.aliases.en : []),
-      ]
-        .map((s: string) => String(s || "").trim())
-        .filter(Boolean);
-
-      if (existed) {
-        // πρόσθεσε aliases & μην πειράξεις coords αν υπάρχουν ήδη
-        existed.aliases = uniqStrings([...(existed.aliases ?? []), ...aliases]);
-        if (Number.isFinite(lat) && !Number.isFinite(existed.lat as any))
-          (existed as any).lat = lat;
-        if (Number.isFinite(lon) && !Number.isFinite(existed.lon as any))
-          (existed as any).lon = lon;
-        if (!existed.region && region) existed.region = region;
-        existed.__source = existed.__source === "canonical" ? "merged" : existed.__source;
+  // SeaGuide → είτε merge σε existing (by name), είτε νέα αν δεν υπάρχει
+  if (Array.isArray(sgRaw)) {
+    for (const rec of sgRaw) {
+      const m = fromSeaGuide(rec);
+      if (!m) continue;
+      const k = normalize(m.name);
+      const idx = out.findIndex(p => normalize(p.name) === k);
+      if (idx >= 0) {
+        // merge: κρατάμε coords/region από ό,τι έχουμε διαθέσιμο (προτεραιότητα canonical)
+        const base = out[idx];
+        out[idx] = {
+          ...base,
+          region: base.region ?? m.region,
+          category: base.category ?? m.category,
+          lat: typeof base.lat === "number" ? base.lat : m.lat,
+          lon: typeof base.lon === "number" ? base.lon : m.lon,
+          aliases: uniqStrings([...(base.aliases ?? []), ...(m.aliases ?? [])]),
+          __source: "merged",
+        };
       } else {
-        // φτιάξε facts-only record από το sea_guide master
-        if (Number.isFinite(lat) && Number.isFinite(lon)) {
-          out.push({
-            id: rec?.id || primaryName,
-            name: primaryName,
-            lat,
-            lon,
-            region,
-            aliases,
-            category: rec?.category || "harbor",
-            __source: "facts",
-          } as MergedPort);
-        }
+        out.push(m);
       }
-    } catch {
-      // ignore broken entry
     }
   }
 
-  _cache = out;
-  return out;
+  // (προαιρετικό) facts εμπλουτισμός aliases από JSON “facts”
+  if (factsRaw?.facts?.length) {
+    for (const f of factsRaw.facts) {
+      // facts.names?.en/?.el/?.aliases
+      const label =
+        f?.names?.en ||
+        f?.names?.el ||
+        f?.id ||
+        null;
+      if (!label) continue;
+      const k = normalize(String(label));
+      const idx = out.findIndex(p => normalize(p.name) === k || (p.aliases ?? []).some(a => normalize(a) === k));
+      if (idx >= 0) {
+        const aliases = uniqStrings([
+          ...(out[idx].aliases ?? []),
+          ...(Array.isArray(f?.names?.aliases) ? f.names.aliases : []),
+          f?.names?.en ?? "",
+          f?.names?.el ?? "",
+        ]);
+        out[idx] = { ...out[idx], aliases, __source: out[idx].__source === "canonical" ? "merged" : out[idx].__source };
+      }
+    }
+  }
+
+  // καθάρισμα: κρατάμε όσα έχουν name + region, κι αν γίνεται coords (τα χωρίς coords μένουν αλλά δεν θα εμφανιστούν στο API filter)
+  _cache = out.filter(p => p?.name && p?.region);
+  return _cache;
 }
