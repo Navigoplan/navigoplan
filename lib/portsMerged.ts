@@ -13,72 +13,57 @@ export type MergedPort = {
   lat: number;
   lon: number;
   category: PortCategory;
-  region: string;        // το UI το χαρτογραφεί downstream σε RegionKey
-  aliases: string[];     // ΠΑΝΤΑ string[]
+  region: string;   // UI θα το χαρτογραφήσει σε RegionKey
+  aliases: string[]; // καθαρά ονόματα, όχι notes
 };
 
-// canonical dataset (ports.v1.json)
+// canonical dataset
 import basePorts from "@/public/data/ports.v1.json";
 
-// ⚠️ ΣΩΣΤΟ import με ΚΕΦΑΛΑΙΑ όπως είναι το αρχείο
-import { FACTS as PORT_FACTS } from "./ai/ports/PortFacts";
+// ⚠️ Robust import προς τα facts (relative path, χωρίς aliases)
+import * as PF_NS from "./ports/portFacts";
+const FACTS: Record<string, any> =
+  (PF_NS as any).PORT_FACTS_DATA ??
+  (PF_NS as any).FACTS ??
+  (PF_NS as any).default ??
+  {};
 
 /* ========= Helpers ========= */
 function normalize(s: string) {
-  return String(s || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
+  return String(s || "").trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
-
 const BANNED_IN_PARENS = [
   "traffic","change-over","change over","crowd","crowded","meltemi","swell",
-  "fuel","water","power","notes",
-  "πολύ","παρασκευή","σάββατο","άνεμο","άνεμοι","κύμα","ρηχ","βράχ","τηλέφ","σημείωση"
+  "fuel","water","power","notes","πολύ","παρασκευή","σάββατο","άνεμο","άνεμοι","κύμα","ρηχ","βράχ","τηλέφ","σημείωση"
 ];
-
 function isCleanParen(inner: string) {
   const s = (inner || "").trim().toLowerCase();
   if (!s) return false;
   if (BANNED_IN_PARENS.some(w => s.includes(w))) return false;
-  if (/[0-9!:;.,/\\#@%&*=_+<>?|]/.test(s)) return false;
-  const words = s.split(/\s+/).filter(Boolean);
-  if (words.length > 3) return false;
-  if (s.length > 28) return false;
-  return true;
+  if (/[0-9.;:!?]/.test(s)) return false;
+  if (s.split(/\s+/).length > 3) return false;
+  return s.length <= 28;
 }
-
 function sanitizeName(raw: string) {
   let s = (raw || "").trim();
   if (!s) return s;
-  const parens = [...s.matchAll(/\(([^)]+)\)/g)];
-  if (parens.length === 0) return s;
-
-  const clean = parens.find(m => isCleanParen(m[1]));
+  const m = s.match(/\(([^)]+)\)/g);
+  if (!m) return s;
+  const clean = m.map(t => t.slice(1,-1)).find(isCleanParen);
   if (!clean) return s.replace(/\s*\([^)]+\)/g, "").trim();
-
   s = s.replace(/\s*\([^)]+\)/g, "").trim();
-  const base = s.replace(/\s+/g, " ");
-  return `${base} (${clean[1]})`;
+  return `${s} (${clean})`;
 }
-
 function isNameLike(raw: string) {
   const s = (raw || "").trim();
   if (!s) return false;
   if (/[0-9.;:!?]/.test(s)) return false;
   if (s.length > 40) return false;
   if (s.split(/\s+/).length > 6) return false;
-  const badStarts = [
-    "Άφιξη","Αφιξη","Είσοδος","Έξοδος","Exodos","Βάθη","Καλύτερα",
-    "Επικοινωνία","Προσοχή","Σημείωση","Arrival","Entrance","Depth","Better","Notes","Call"
-  ];
-  const low = s.toLowerCase();
-  if (badStarts.some(w => low.startsWith(w.toLowerCase()))) return false;
-  if (!/^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().-]+$/.test(s)) return false;
-  return true;
+  const bad = ["άφιξη","αφιξη","είσοδος","εξοδος","έξοδος","βάθη","καλύτερα","επικοινωνία","σημείωση","arrival","entrance","depth","better","notes","call"];
+  if (bad.some(w => s.toLowerCase().startsWith(w))) return false;
+  return /^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().-]+$/.test(s);
 }
-
 function guessCategoryFromName(name: string): PortCategory {
   const n = name.toLowerCase();
   if (/\bmarina\b/.test(n)) return "marina";
@@ -91,80 +76,51 @@ function guessCategoryFromName(name: string): PortCategory {
 export function buildMergedPorts(): MergedPort[] {
   const baseArr: any[] = Array.isArray(basePorts) ? (basePorts as any[]) : [];
 
-  // 1) index base
+  // 1) index για match
   type BaseRec = { idx: number; id: string; name: string; aliases: string[] };
-  const baseIndex = new Map<string, BaseRec>();
-  const addKey = (k: string, rec: BaseRec) => { if (!baseIndex.has(k)) baseIndex.set(k, rec); };
-
-  baseArr.forEach((p, idx) => {
+  const idxMap = new Map<string, BaseRec>();
+  const addKey = (k: string, rec: BaseRec) => { if (!idxMap.has(k)) idxMap.set(k, rec); };
+  baseArr.forEach((p, i) => {
     const name = String(p.name ?? "").trim();
-    const rec: BaseRec = {
-      idx,
-      id: String(p.id ?? name),
-      name,
-      aliases: Array.isArray(p.aliases) ? p.aliases.map((x: any)=>String(x??"")) : []
-    };
+    const rec: BaseRec = { idx: i, id: String(p.id ?? name), name, aliases: Array.isArray(p.aliases) ? p.aliases.map((x:any)=>String(x??"")) : [] };
     addKey(normalize(name), rec);
     rec.aliases.forEach(a => addKey(normalize(String(a)), rec));
   });
 
-  // 2) collect aliases from portFacts keys
-  const aliasesByBaseIdx = new Map<number, Set<string>>();
-  if (PORT_FACTS && typeof PORT_FACTS === "object") {
-    for (const rawKey of Object.keys(PORT_FACTS)) {
-      const factKey = sanitizeName(String(rawKey));
-      if (!isNameLike(factKey)) continue;
+  // 2) aliases από FACTS keys
+  const extraAliases = new Map<number, Set<string>>();
+  for (const raw of Object.keys(FACTS)) {
+    const label = sanitizeName(String(raw || ""));
+    if (!isNameLike(label)) continue;
+    let rec = undefined as BaseRec | undefined;
 
-      const m = factKey.match(/\(([^)]+)\)/);
-      let matched: BaseRec | undefined;
-      if (m && isCleanParen(m[1])) {
-        const inner = m[1].trim();
-        matched = baseIndex.get(normalize(inner));
-      }
-      if (!matched) matched = baseIndex.get(normalize(factKey));
-      if (!matched) continue;
-
-      if (!aliasesByBaseIdx.has(matched.idx)) aliasesByBaseIdx.set(matched.idx, new Set());
-      aliasesByBaseIdx.get(matched.idx)!.add(factKey);
+    // Αν έχει (Island) προτίμησε το περιεχόμενο
+    const m = label.match(/\(([^)]+)\)/);
+    if (m && isCleanParen(m[1])) {
+      const inner = normalize(m[1]);
+      rec = idxMap.get(inner);
     }
+    if (!rec) rec = idxMap.get(normalize(label));
+    if (!rec) continue; // δεν δημιουργούμε ports χωρίς coords
+
+    if (!extraAliases.has(rec.idx)) extraAliases.set(rec.idx, new Set());
+    extraAliases.get(rec.idx)!.add(label);
   }
 
-  // 3) build merged list
-  const out: MergedPort[] = baseArr
-    .map((p: any, i: number): MergedPort => {
-      const name = sanitizeName(String(p.name ?? "").trim());
-      const id = String(p.id ?? name).trim();
+  // 3) τελικό merge
+  const out: MergedPort[] = baseArr.map((p:any, i:number) => {
+    const name = sanitizeName(String(p.name ?? "").trim());
+    const id = String(p.id ?? name).trim();
+    const baseAl = Array.isArray(p.aliases) ? p.aliases.map((x:any)=>String(x??"")) : [];
+    const extras = Array.from(extraAliases.get(i) ?? new Set<string>());
+    const aliases = Array.from(new Set([...baseAl, ...extras].map(sanitizeName).filter(isNameLike)));
+    const lat = typeof p.lat === "number" ? p.lat : NaN;
+    const lon = typeof p.lon === "number" ? p.lon : NaN;
+    const category: PortCategory = (p.category as PortCategory) ?? guessCategoryFromName(name);
+    const region: string = String(p.region ?? "").trim() || "Saronic";
+    return { id, name, lat, lon, category, region, aliases };
+  }).filter(r => r.name && Number.isFinite(r.lat) && Number.isFinite(r.lon) && r.region);
 
-      const baseAliases: string[] = Array.isArray(p.aliases)
-        ? p.aliases.map((x: any) => String(x ?? ""))
-        : [];
-      const extraAliases = Array.from(aliasesByBaseIdx.get(i) ?? new Set<string>());
-
-      const aliases: string[] = Array.from(
-        new Set<string>(
-          [...baseAliases, ...extraAliases]
-            .map(x => sanitizeName(x))
-            .filter(x => x && isNameLike(x))
-        )
-      );
-
-      const lat = typeof p.lat === "number" ? p.lat : NaN;
-      const lon = typeof p.lon === "number" ? p.lon : NaN;
-
-      const category: PortCategory =
-        (p.category as PortCategory) ?? guessCategoryFromName(name);
-
-      const region: string = String(p.region ?? "").trim() || "Saronic";
-
-      return { id, name, lat, lon, category, region, aliases };
-    })
-    .filter(r =>
-      r.name &&
-      Number.isFinite(r.lat) &&
-      Number.isFinite(r.lon) &&
-      String(r.region || "").trim().length > 0
-    )
-    .sort((a, b) => a.name.localeCompare(b.name, "en"));
-
+  out.sort((a,b)=> a.name.localeCompare(b.name, "en"));
   return out;
 }
