@@ -22,6 +22,17 @@ type SpotWeather = {
   gustKts?: number;
 };
 
+/** ΝΕΟ: μετρικά καιρού εν πλω, από RouteMapClient.onLegMeteo */
+export type LegMeteo = {
+  index: number;
+  from: string;
+  to: string;
+  avgWind: number;
+  avgWave: number;
+  maxWind: number;
+  maxWave: number;
+};
+
 /* ========= Utility helpers ========= */
 function formatHoursHM(hours: number) {
   const h = Math.floor(hours);
@@ -173,6 +184,7 @@ export default function CaptainCrewToolkit({
   lph,
   thumbs = {},
   destWeather = {},
+  legMeteo = [],
 }: {
   plan: DayCard[];
   startDate: string;
@@ -181,6 +193,8 @@ export default function CaptainCrewToolkit({
   lph: number;
   thumbs?: Record<string, string | undefined>;
   destWeather?: Record<string, SpotWeather>;
+  /** ΝΕΟ: per-leg μετρικά καιρού (map → parent → εδώ) */
+  legMeteo?: LegMeteo[];
 }) {
   // Συνοπτική μπάρα προειδοποιήσεων
   const summary: { day: number; port?: string; sev: Sev; text: string }[] = [];
@@ -213,6 +227,45 @@ export default function CaptainCrewToolkit({
         </div>
       </div>
 
+      {/* ΝΕΟ: In-transit weather per leg (μόνο εδώ) */}
+      <div className="px-6 pt-5">
+        <div className="mb-2 text-sm font-semibold text-neutral-800">
+          In-transit weather per leg
+        </div>
+        <div className="overflow-x-auto border rounded-xl">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-neutral-50 border-b">
+                <th className="text-left px-3 py-2">Leg</th>
+                <th className="text-left px-3 py-2">Avg wind (m/s)</th>
+                <th className="text-left px-3 py-2">Avg wave (m)</th>
+                <th className="text-left px-3 py-2">Max wind</th>
+                <th className="text-left px-3 py-2">Max wave</th>
+              </tr>
+            </thead>
+            <tbody>
+              {legMeteo.length ? (
+                legMeteo.map((r, i) => (
+                  <tr key={i} className="border-b">
+                    <td className="px-3 py-2">{r.from} → {r.to}</td>
+                    <td className="px-3 py-2">{Number.isFinite(r.avgWind) ? r.avgWind : "—"}</td>
+                    <td className="px-3 py-2">{Number.isFinite(r.avgWave) ? r.avgWave : "—"}</td>
+                    <td className="px-3 py-2">{Number.isFinite(r.maxWind) ? r.maxWind : "—"}</td>
+                    <td className="px-3 py-2">{Number.isFinite(r.maxWave) ? r.maxWave : "—"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-3 py-3 text-slate-500">
+                    — No data (enable routing WX and regenerate) —
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* SUMMARY */}
       {summary.length > 0 && (
         <div className="px-6 pt-4">
@@ -232,7 +285,7 @@ export default function CaptainCrewToolkit({
         </div>
       )}
 
-      {/* TABLE */}
+      {/* TABLE (ημερήσια εικόνα + live WX + hazards) */}
       <div className="p-6 overflow-x-auto">
         <table className="min-w-full border-collapse text-sm">
           <thead>
@@ -284,7 +337,7 @@ export default function CaptainCrewToolkit({
                     {wx?.windKts != null ? (
                       <>
                         {Math.round(wx.windKts)} kt • Bft {bft} ({bftLabel(bft)})
-                        {wx.gustKts != null && <> • ρυπές {Math.round(wx.gustKts)} kt</>}
+                        {wx.gustKts != null && <> • ριπές {Math.round(wx.gustKts)} kt</>}
                       </>
                     ) : (
                       "—"

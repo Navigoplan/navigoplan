@@ -52,52 +52,50 @@ function formatHoursHM(hoursFloat: number) {
   return `${h} h ${m} m`;
 }
 
-/* ========= Curated destination info (true, concise, selling) ========= */
+/* ========= Curated destination info ========= */
 type DestInfo = { description: string; highlights: string[] };
 
 const DEST_INFO: Record<string, DestInfo> = {
-  // --- Saronic core ---
   Aegina: {
     description:
-      "Νησί με μακραίωνη ιστορία: ο Ναός της Αφαίας (5ος αι. π.Χ.) σχηματίζει με Παρθενώνα και Σούνιο το «ιερό τρίγωνο». Φημίζεται παγκοσμίως για το φιστίκι Αιγίνης ΠΟΠ και τη νεοκλασική της Χώρα.",
+      "Νησί με μακραίωνη ιστορία: ο Ναός της Αφαίας σχηματίζει με Παρθενώνα και Σούνιο το «ιερό τρίγωνο». Φημισμένο για το φιστίκι ΠΟΠ και τη νεοκλασική Χώρα.",
     highlights: [
-      "Ναός Αφαίας & πανοραμική θέα",
+      "Ναός Αφαίας & θέα",
       "Μονή Αγίου Νεκταρίου",
-      "Βόλτα στη Χώρα – νεοκλασικά",
-      "Φρέσκα θαλασσινά στο λιμανάκι",
+      "Βόλτα στη Χώρα",
+      "Θαλασσινά στο λιμάνι",
     ],
   },
   Agistri: {
     description:
-      "Μικρό πράσινο νησί με πεύκα που φτάνουν ως τη θάλασσα και πεντακάθαρα νερά. Ιδανικό για κολύμπι και ήρεμες αγκυροβολίες.",
-    highlights: ["Απονήσος – κρυστάλλινα νερά", "Dragonera & Chalikiada", "SUP/κανό στον όρμο", "Χαλαρή βραδιά σε ταβερνάκι"],
+      "Μικρό πράσινο νησί με πεύκα ως τη θάλασσα και νερά-πισίνα. Ιδανικό για κολύμπι και ήρεμες αγκυροβολίες.",
+    highlights: ["Απονήσος", "Dragonera", "SUP/κανό", "Χαλαρό δείπνο"],
   },
   Poros: {
     description:
-      "Πράσινο νησί απέναντι από τον Γαλατά. Φημισμένο για το Ρολόι του, το στενό κανάλι, τα πευκοδάση και τις ήρεμες παραλίες.",
-    highlights: ["Ανάβαση στο Ρολόι", "Μονή Ζωοδόχου Πηγής", "Λιμανάκι της Αγάπης", "Βόλτα στο κανάλι με tender"],
+      "Πράσινο νησί απέναντι από τον Γαλατά. Φημίζεται για το Ρολόι, το στενό κανάλι και τις πευκόφυτες ακτές.",
+    highlights: ["Ρολόι", "Μονή Ζωοδόχου Πηγής", "Λιμανάκι της Αγάπης", "Tender στο κανάλι"],
   },
   Hydra: {
     description:
-      "Η κοσμοπολίτικη Ύδρα χωρίς αυτοκίνητα: πέτρινα αρχοντικά, ναυτική ιστορία και έντονη καλλιτεχνική ζωή (Λέοναρντ Κοέν, διεθνείς εκθέσεις).",
-    highlights: ["Περίπατος στο λιμάνι & κανόνια", "Αρχοντικά – μουσεία", "Ηλιοβασίλεμα στο Κανόνι", "Κολύμπι στα Σπηλια"],
+      "Ύδρα χωρίς αυτοκίνητα: πέτρινα αρχοντικά, ναυτική ιστορία και έντονη καλλιτεχνική ζωή.",
+    highlights: ["Περίπατος στο λιμάνι", "Μουσεία", "Ηλιοβασίλεμα στο Κανόνι", "Σπήλια"],
   },
-  "Spetses": {
+  Spetses: {
     description:
-      "Νησί της Μπουμπουλίνας, αρχοντικό και ρομαντικό. Φημισμένο για τις άμαξες, τα παλιά αρχοντικά και την κοσμική του ατμόσφαιρα.",
-    highlights: ["Μουσείο Μπουμπουλίνας", "Βόλτα στην Ντάπια", "Παραλία Αγ. Παρασκευή", "Βραδινή ζωή & κοκτέιλ"],
+      "Νησί της Μπουμπουλίνας — αρχοντικό, ρομαντικό και κοσμικό.",
+    highlights: ["Μουσείο Μπουμπουλίνας", "Ντάπια", "Άγ. Παρασκευή", "Κοκτέιλ το βράδυ"],
   },
   "Porto Cheli": {
     description:
-      "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα με πολλές επιλογές αγκυροβολίας. Βάση για εξορμήσεις σε Σπέτσες/Ύδρα.",
-    highlights: ["Ήρεμες αγκυρoβολίες", "Θαλάσσια παιχνίδια", "Φρέσκο ψάρι", "Short hop προς Σπέτσες"],
+      "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
+    highlights: ["Ήρεμες αγκυροβολίες", "Θαλάσσια παιχνίδια", "Φρέσκο ψάρι", "Short hop σε Σπέτσες"],
   },
   Ermioni: {
     description:
-      "Παραθαλάσσια κωμόπολη σε στενό χερσόνησο, με πευκόφυτο Μπίστι. Ηρεμία, καλές ταβέρνες και όμορφος περίπατος.",
-    highlights: ["Περίπατος στο Μπίστι", "Θαλασσινά στην παραλία", "Ήσυχη βραδιά", "Βάση για κοντινά μπάνια"],
+      "Παραθαλάσσια κωμόπολη σε χερσόνησο, με πευκόφυτο Μπίστι και καλές ταβέρνες.",
+    highlights: ["Περίπατος στο Μπίστι", "Θαλασσινά", "Ήσυχη βραδιά", "Κοντινά μπάνια"],
   },
-  // Μπορείς να προσθέσεις κι άλλα προοδευτικά (Κυκλάδες κ.λπ.)
 };
 
 /* ========= Wikipedia enrichment ========= */
@@ -114,11 +112,9 @@ async function fetchJSON(url: string) {
   if (!r.ok) throw new Error("fetch error");
   return r.json();
 }
-
 function encTitle(s: string) {
   return encodeURIComponent(s.replace(/\s+/g, "_"));
 }
-
 async function fetchWikiCard(placeName: string): Promise<WikiCard | null> {
   const langs = ["el", "en"];
   let summary: any = null;
@@ -128,9 +124,7 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard | null> {
       const base = `https://${lang}.wikipedia.org/api/rest_v1`;
       summary = await fetchJSON(`${base}/page/summary/${encTitle(placeName)}`);
       if (summary?.title) break;
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 
   if (!summary) return null;
@@ -155,9 +149,7 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard | null> {
     }
     card.gallery = Array.from(new Set([...(card.imageUrl ? [card.imageUrl] : []), ...pics])).slice(0, 6);
     if (!card.imageUrl && card.gallery?.length) card.imageUrl = card.gallery[0];
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 
   return card;
 }
@@ -172,14 +164,12 @@ export default function VipGuestsView({
   thumbs,
   destWeather,
 }: Props) {
-  // Συλλέγουμε μοναδικούς προορισμούς (to)
   const destNames = useMemo(() => {
     const set = new Set<string>();
     for (const d of plan) if (d.leg?.to) set.add(d.leg.to);
     return Array.from(set);
   }, [plan]);
 
-  // Cache για Wikipedia εμπλουτισμό
   const [wiki, setWiki] = useState<Record<string, WikiCard | null>>({});
 
   useEffect(() => {
@@ -195,9 +185,7 @@ export default function VipGuestsView({
       }
       if (!abort) setWiki(next);
     })();
-    return () => {
-      abort = true;
-    };
+    return () => { abort = true; };
   }, [destNames]);
 
   return (
@@ -221,67 +209,46 @@ export default function VipGuestsView({
       {/* Cards */}
       <div className="p-6 space-y-4">
         {plan.map((d) => {
-          const hasLeg = !!d.leg;
           const to = d.leg?.to ?? "";
           const img = thumbs?.[to] || wiki[to]?.imageUrl;
           const wx = destWeather?.[to];
-
-          // Κείμενο: curated πρώτα, διαφορετικά Wikipedia summary
           const curated = DEST_INFO[to];
           const summary = wiki[to]?.summary?.trim();
           const mainDesc = curated?.description || summary || "";
-
           const hi = (curated?.highlights || []).slice(0, 6);
 
           return (
-            <div
-              key={d.day}
-              className="rounded-2xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
-            >
+            <div key={d.day} className="rounded-2xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
               <div className="grid sm:grid-cols-[120px_1fr_260px] gap-0">
-                {/* Day pill */}
                 <div className="bg-neutral-50 p-4 flex flex-col items-start justify-center">
                   <div className="text-3xl font-semibold leading-none">{d.day}</div>
                   <div className="text-xs uppercase tracking-wider text-neutral-500">Day</div>
                 </div>
 
-                {/* Main */}
                 <div className="p-4">
                   <div className="text-sm text-neutral-500">{formatDate(d.date)}</div>
 
-                  {hasLeg ? (
+                  {d.leg ? (
                     <>
                       <div className="mt-1 flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-lg font-semibold">
-                            {d.leg!.from} → {d.leg!.to}
+                            {d.leg.from} → {d.leg.to}
                           </div>
                           <div className="mt-1 text-sm text-neutral-600">
-                            {Math.round(d.leg!.nm)} nm • {formatHoursHM(d.leg!.hours)}
-                            {d.leg!.eta ? (
-                              <>
-                                {" "}
-                                • Depart {d.leg!.eta.dep} • Arrive {d.leg!.eta.arr} ({d.leg!.eta.window})
-                              </>
-                            ) : null}
+                            {Math.round(d.leg.nm)} nm • {formatHoursHM(d.leg.hours)}
+                            {d.leg.eta && <> • Depart {d.leg.eta.dep} • Arrive {d.leg.eta.arr} ({d.leg.eta.window})</>}
                           </div>
 
                           {/* Live Weather chips */}
                           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                             {wx && <span className="rounded-full border px-2 py-1">Weather: {wx.label ?? "—"}</span>}
-                            {wx?.tempC != null && (
-                              <span className="rounded-full border px-2 py-1">🌡 {wx.tempC}°C</span>
-                            )}
-                            {wx?.cloudPct != null && (
-                              <span className="rounded-full border px-2 py-1">☁️ {wx.cloudPct}%</span>
-                            )}
-                            {wx?.precipMM != null && (
-                              <span className="rounded-full border px-2 py-1">🌧 {wx.precipMM} mm/h</span>
-                            )}
+                            {wx?.tempC != null && <span className="rounded-full border px-2 py-1">🌡 {wx.tempC}°C</span>}
+                            {wx?.cloudPct != null && <span className="rounded-full border px-2 py-1">☁️ {wx.cloudPct}%</span>}
+                            {wx?.precipMM != null && <span className="rounded-full border px-2 py-1">🌧 {wx.precipMM} mm/h</span>}
                           </div>
                         </div>
 
-                        {/* Image */}
                         {img && (
                           <img
                             src={img}
@@ -292,7 +259,6 @@ export default function VipGuestsView({
                         )}
                       </div>
 
-                      {/* Descriptions */}
                       {mainDesc && (
                         <p className="mt-3 text-[15px] leading-relaxed text-neutral-800">
                           {mainDesc}
@@ -311,20 +277,16 @@ export default function VipGuestsView({
                   )}
                 </div>
 
-                {/* Highlights column */}
                 <div className="p-4 border-l bg-neutral-50">
                   <div className="text-sm font-medium mb-1">Highlights</div>
                   {hi.length ? (
                     <ul className="text-sm text-neutral-700 space-y-1 list-disc pl-5">
-                      {hi.map((x, i) => (
-                        <li key={i}>{x}</li>
-                      ))}
+                      {hi.map((x, i) => (<li key={i}>{x}</li>))}
                     </ul>
                   ) : (
                     <div className="text-sm text-neutral-500">Swim stop, dinner ashore, golden-hour cruise.</div>
                   )}
 
-                  {/* Wikipedia link if available */}
                   {wiki[to]?.sourceUrl && (
                     <div className="mt-3">
                       <a
@@ -332,7 +294,7 @@ export default function VipGuestsView({
                         target="_blank"
                         rel="noreferrer"
                         className="text-xs underline text-neutral-600 hover:text-neutral-800"
-                        title="Πηγή: Wikipedia (εξωτερικός σύνδεσμος)"
+                        title="Πηγή: Wikipedia"
                       >
                         Περισσότερα στη Wikipedia
                       </a>
@@ -344,7 +306,6 @@ export default function VipGuestsView({
           );
         })}
 
-        {/* CTA */}
         <div className="rounded-2xl border bg-neutral-50 p-5 text-center">
           <div className="text-sm text-neutral-600">Θέλεις premium PDF brochure με φωτογραφίες & route map;</div>
           <div className="mt-3">

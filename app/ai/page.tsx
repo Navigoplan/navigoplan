@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
 import { usePorts } from "../../lib/ports";
 
-// NEW: split views
+// split views
 import CaptainCrewToolkit from "./components/CaptainCrewToolkit";
 import VipGuestsView from "./components/VipGuestsView";
 
@@ -108,8 +108,6 @@ function sanitizeName(raw: string) {
   const base = s.replace(/\s+/g, " ");
   return `${base} ${firstClean[0]}`.replace(/\s+/g, " ").trim();
 }
-
-/** ⚠️ ΝΕΟ: δέχεται string και επιστρέφει αν μοιάζει με ΟΝΟΜΑ (όχι σημείωση) */
 function isNameLike(raw: string) {
   const s = (raw || "").trim();
   if (!s) return false;
@@ -125,19 +123,17 @@ function isNameLike(raw: string) {
   if (!/^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().-]+$/.test(s)) return false;
   return true;
 }
-
-/** keeps only clean alias-like names */
 function chooseLabelFromPort(p: any): string {
   const name = sanitizeName(p?.name ?? "");
   const aliases: string[] = Array.isArray(p?.aliases) ? p.aliases : [];
   for (const a of aliases) {
     const s = sanitizeName(a);
-    if (/\(.+\)/.test(s) && isNameLike(s)) return s; // prefer clean "(Island)"
+    if (/\(.+\)/.test(s) && isNameLike(s)) return s;
   }
   return name;
 }
 
-/* ========= Autocomplete (double-sanitize) ========= */
+/* ========= Autocomplete component ========= */
 function AutoCompleteInput({
   value, onChange, placeholder, options,
 }: { value: string; onChange: (v: string) => void; placeholder: string; options: string[] }) {
@@ -313,7 +309,6 @@ function loadStateFromQuery(sp: URLSearchParams, setters: {
   const autogen = sp.get("autogen") === "1";
   return { mode, autogen, rawNotes: sp.get("notes") || null };
 }
-
 /* ========= Route builders ========= */
 function nearestIndexInRing(
   ring: string[], target: PortCoord, findPortStrict: (name: string) => PortCoord | null
@@ -326,6 +321,7 @@ function nearestIndexInRing(
   }
   return best;
 }
+
 function buildRouteRegion(
   start: string, end: string, days: number, region: RegionKey, vias: string[],
   findPortStrict: (name: string) => PortCoord | null
@@ -377,16 +373,14 @@ function buildRouteRegion(
   while (path.length < days + 1) path.push(last);
   return path;
 }
-function buildRouteCustomByDays(start: string, dayStops: string[], findPortStrict: (name: string) => PortCoord | null) {
+
+function buildRouteCustomByDays(
+  start: string, dayStops: string[], findPortStrict: (name: string) => PortCoord | null
+) {
   const seq = [start, ...dayStops].map(s => s.trim()).filter(Boolean);
   const allValid = seq.every(s => !!findPortStrict(s));
   if (!allValid || seq.length < 2) return null;
   return seq;
-}
-function formatHoursHM(hours: number) {
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
-  return `${h}h ${m.toString().padStart(2, "0")}m`;
 }
 
 /* ========= Facilities (seed) ========= */
@@ -411,6 +405,66 @@ const PORT_FACTS: Record<string, { fuel?: boolean; water?: boolean; provisions?:
   "Sifnos": { fuel: false, water: true, provisions: true, berth: true },
   "Serifos": { fuel: false, water: true, provisions: true, berth: true },
 };
+
+/* ========= Wikipedia helper ========= */
+type WikiCard = {
+  title: string; summary: string; imageUrl?: string; gallery?: string[];
+  coords?: { lat: number; lon: number }; sourceUrl?: string;
+  related?: { title: string; thumb?: string }[];
+};
+async function fetchWikiJSON(url: string) {
+  const r = await fetch(url, { headers: { accept: "application/json" } });
+  if (!r.ok) throw new Error("wiki fetch");
+  return r.json();
+}
+function encTitle(s: string) { return encodeURIComponent(s.replace(/\s+/g, "_")); }
+
+export async function fetchWikiCard(placeName: string): Promise<WikiCard> {
+  const langs = ["el", "en"];
+  const base = (lang: string) => `https://${lang}.wikipedia.org/api/rest_v1`;
+  let summaryData: any = null;
+  for (const lang of langs) {
+    try {
+      summaryData = await fetchWikiJSON(`${base(lang)}/page/summary/${encTitle(placeName)}`);
+      if (summaryData?.title) break;
+    } catch {}
+  }
+
+  const card: WikiCard = {
+    title: summaryData?.title ?? placeName,
+    summary: summaryData?.extract ?? "",
+    imageUrl: summaryData?.thumbnail?.source,
+    coords: summaryData?.coordinates ? { lat: summaryData.coordinates.lat, lon: summaryData.coordinates.lon } : undefined,
+    sourceUrl: summaryData?.content_urls?.desktop?.page,
+    gallery: [],
+    related: [],
+  };
+
+  try {
+    const lang = summaryData?.lang ?? "en";
+    const media = await fetchWikiJSON(`${base(lang)}/page/media/${encTitle(card.title)}`);
+    const pics: string[] = [];
+    for (const item of media?.items ?? []) {
+      if (item?.type === "image") {
+        const src = item?.srcset?.[item.srcset.length - 1]?.src || item?.src || item?.thumbnail?.source;
+        if (src) pics.push(src);
+      }
+    }
+    card.gallery = Array.from(new Set([...(card.imageUrl ? [card.imageUrl] : []), ...pics])).slice(0, 8);
+    if (!card.imageUrl && card.gallery?.length) card.imageUrl = card.gallery[0];
+  } catch {}
+
+  try {
+    const lang = summaryData?.lang ?? "en";
+    const rel = await fetchWikiJSON(`${base(lang)}/page/related/${encTitle(card.title)}`);
+    card.related = (rel?.pages ?? []).map((p: any) => ({
+      title: p?.titles?.display ?? p?.title,
+      thumb: p?.thumbnail?.source,
+    })).filter((x: any) => !!x.title).slice(0, 8);
+  } catch {}
+
+  return card;
+}
 
 /* ========= LIVE Weather ========= */
 type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string; windKts?: number; gustKts?: number };
@@ -495,7 +549,7 @@ function AIPlannerInner() {
     return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
   };
 
-  // ✅ μόνο καθαρά ονόματα
+  // μόνο καθαρά ονόματα για dropdown
   const PORT_OPTIONS = useMemo(() => {
     const set = new Set<string>();
     for (const p of (ports as any[] ?? [])) {
@@ -533,9 +587,9 @@ function AIPlannerInner() {
   const [thumbs, setThumbs] = useState<Record<string, string | undefined>>({});
   const [destWeather, setDestWeather] = useState<Record<string, SpotWeather>>({});
 
-  // NEW: Routing weather toggle & leg metrics
-  const [routeWeatherAware, setRouteWeatherAware] = useState<boolean>(false);     // <— toggle
-  const [legMeteo, setLegMeteo] = useState<Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }>>([]); // <— table data
+  // NEW: routing weather toggle & leg metrics from map
+  const [routeWeatherAware, setRouteWeatherAware] = useState<boolean>(false);
+  const [legMeteo, setLegMeteo] = useState<Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }>>([]);
 
   // Region mode
   const [start, setStart] = useState<string>("Alimos");
@@ -656,6 +710,7 @@ function AIPlannerInner() {
     setShowTabs(true);
     setActiveTab("crew");
 
+    // Prefetch thumbs
     (async () => {
       const uniq = Array.from(new Set(legs.map(l => l.to)));
       const next: Record<string, string | undefined> = {};
@@ -664,6 +719,21 @@ function AIPlannerInner() {
         catch { next[t] = undefined; }
       }
       setThumbs(next);
+    })();
+
+    // NEW: Prefetch LIVE WX for each destination (to)
+    (async () => {
+      const uniqNames = Array.from(new Set(legs.map(l => l.to)));
+      const next: Record<string, SpotWeather> = {};
+      for (const name of uniqNames) {
+        const p = findPort(name);
+        if (!p) continue;
+        try {
+          const w = await fetchSpotWeather(p.lat, p.lon);
+          if (w) next[name] = w;
+        } catch {}
+      }
+      setDestWeather(next);
     })();
 
     const qs = buildQueryFromState({
@@ -802,7 +872,7 @@ function AIPlannerInner() {
                 </div>
                 <div className="flex flex-col">
                   <label htmlFor="fuel" className="mb-1 text-xs font-medium text-gray-600">Τιμή καυσίμου (€/L)</label>
-                  <input id="fuel" type="number" min={0} step="0.01" value={fuelPrice} onChange={(e) => setFuelPrice(parseFloat(e.target.value || "1.8"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 1.80" />
+                  <input id="fuel" type="number" min={0} step={0.01} value={fuelPrice} onChange={(e) => setFuelPrice(parseFloat(e.target.value || "1.8"))} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold" placeholder="π.χ. 1.80" />
                 </div>
               </>
             )}
@@ -964,8 +1034,8 @@ function AIPlannerInner() {
                     markers={markers}
                     activeNames={activeNames}
                     onMarkerClick={handleMarkerClick}
-                    weatherAwareProp={routeWeatherAware}             // NEW
-                    onLegMeteo={(rows)=>setLegMeteo(rows)}           // NEW
+                    weatherAwareProp={routeWeatherAware}
+                    onLegMeteo={(rows)=>setLegMeteo(rows)}
                   />
                 </div>
                 <div className="mt-2 text-xs text-slate-500">
@@ -988,41 +1058,7 @@ function AIPlannerInner() {
               </div>
             )}
 
-            {/* NEW: In-transit weather table */}
-            {legMeteo.length > 0 && (
-              <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-sm font-medium text-brand-navy">In-transit weather per leg</div>
-                <div className="mt-2 overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-slate-500">
-                        <th className="py-1 pr-3">Leg</th>
-                        <th className="py-1 pr-3">Avg wind (m/s)</th>
-                        <th className="py-1 pr-3">Avg wave (m)</th>
-                        <th className="py-1 pr-3">Max wind</th>
-                        <th className="py-1 pr-3">Max wave</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {legMeteo.map((r, i)=>(
-                        <tr key={i} className="border-t">
-                          <td className="py-1 pr-3">{r.from} → {r.to}</td>
-                          <td className="py-1 pr-3">{Number.isFinite(r.avgWind) ? r.avgWind : "—"}</td>
-                          <td className="py-1 pr-3">{Number.isFinite(r.avgWave) ? r.avgWave : "—"}</td>
-                          <td className="py-1 pr-3">{Number.isFinite(r.maxWind) ? r.maxWind : "—"}</td>
-                          <td className="py-1 pr-3">{Number.isFinite(r.maxWave) ? r.maxWave : "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">
-                  * Προέλευση: Open-Meteo Marine (τρέχουσα ώρα grid). Προσεγγιστικά μεγέθη κατά μήκος της διαδρομής.
-                </div>
-              </div>
-            )}
-
-            {/* TABS */}
+            {/* Tabs */}
             <div className="mb-3 no-print">
               <div className="flex gap-2">
                 <button onClick={() => setActiveTab("crew")} className={`px-4 py-2 rounded-2xl text-sm font-medium border ${activeTab==="crew" ? "bg-black text-white border-black" : "bg-white hover:bg-neutral-100"}`}>For Captain & Crew</button>
@@ -1040,6 +1076,7 @@ function AIPlannerInner() {
                 lph={lph}
                 thumbs={thumbs}
                 destWeather={destWeather}
+                legMeteo={legMeteo}
               />
             )}
 
