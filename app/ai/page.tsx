@@ -1,4 +1,4 @@
-"use client";
+"use client"; 
 
 import RouteMapClient from "./RouteMapClient";
 import { Suspense, useMemo, useState, useEffect, useId, useRef } from "react";
@@ -10,6 +10,8 @@ import { usePorts } from "../../lib/ports";
 // split views
 import CaptainCrewToolkit from "./components/CaptainCrewToolkit";
 import VipGuestsView from "./components/VipGuestsView";
+// NEW: import button
+import GenerateFinalItineraryButton from "../../components/GenerateFinalItineraryButton";
 
 export const dynamic = "force-dynamic";
 
@@ -1082,15 +1084,29 @@ function AIPlannerInner() {
 
             {/* VIP */}
             {activeTab === "vip" && plan && (
-              <VipGuestsView
-                plan={plan}
-                mode={mode}
-                startDate={startDate}
-                start={mode === "Region" ? start : customStart}
-                end={mode === "Region" ? end : undefined}
-                thumbs={thumbs}
-                destWeather={destWeather}
-              />
+              <>
+                <VipGuestsView
+                  plan={plan}
+                  mode={mode}
+                  startDate={startDate}
+                  start={mode === "Region" ? start : customStart}
+                  end={mode === "Region" ? end : undefined}
+                  thumbs={thumbs}
+                  destWeather={destWeather}
+                />
+                {/* NEW: Generate Final Itinerary button (below the VIP view) */}
+                <div className="mt-4">
+                  <GenerateFinalItineraryButton
+                    dayCards={plan}
+                    yacht={{ type: yachtType, speed, lph }}
+                    tripTitle={
+                      mode === "Region"
+                        ? `${start} → ${end ?? start} • ${startDate}`
+                        : `Custom Cruise • ${startDate}`
+                    }
+                  />
+                </div>
+              </>
             )}
           </div>
         )}
