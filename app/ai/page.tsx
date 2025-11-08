@@ -85,6 +85,47 @@ function autoPickRegion(start: string, end: string): RegionKey {
   return "Cyclades";
 }
 
+/* ========= CLEAN LABELS for port inputs ========= */
+/** λέξεις/μοτίβα που δείχνουν ότι η παρένθεση είναι σχόλιο και όχι τοπωνύμιο */
+const BANNED_IN_PARENS = [
+  "traffic","change-over","change over","crowd","crowded","meltemi","swell",
+  "fuel","water","power","taxi","shops","supermarket","notes",
+  "πολύ","παρασκευή","σάββατο","άνεμο","άνεμοι","κύμα","ρηχ", "βράχ", "τηλέφ", "σημείωση"
+];
+
+function isCleanParen(inner: string) {
+  const s = inner.trim().toLowerCase();
+  if (!s) return false;
+  if (BANNED_IN_PARENS.some(w => s.includes(w))) return false;
+  if (/[0-9!:;.,/\\#@%&*=_+<>?|]/.test(s)) return false;
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length > 3) return false;
+  if (s.length > 28) return false;
+  return true;
+}
+
+function sanitizeName(raw: string) {
+  let s = (raw || "").trim();
+  if (!s) return s;
+  const parens = [...s.matchAll(/\(([^)]+)\)/g)];
+  if (parens.length === 0) return s;
+  const firstClean = parens.find(m => isCleanParen(m[1]));
+  if (!firstClean) return s.replace(/\s*\([^)]+\)/g, "").trim();
+  s = s.replace(/\s*\([^)]+\)/g, "").trim();
+  const base = s.replace(/\s+/g, " ");
+  return `${base} ${firstClean[0]}`.replace(/\s+/g, " ").trim();
+}
+
+function chooseLabelFromPort(p: any): string {
+  const name = sanitizeName(p?.name ?? "");
+  const aliases: string[] = Array.isArray(p?.aliases) ? p.aliases : [];
+  for (const a of aliases) {
+    const s = sanitizeName(a);
+    if (/\(.+\)/.test(s)) return s;
+  }
+  return name;
+}
+
 /* ========= Autocomplete ========= */
 function AutoCompleteInput({
   value, onChange, placeholder, options,
@@ -407,7 +448,6 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard> {
 }
 
 /* ========= LIVE Weather ========= */
-/** UPDATED TYPE (adds windKts, gustKts) */
 type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string; windKts?: number; gustKts?: number };
 const weatherCache = new Map<string, SpotWeather>();
 function labelFromWx(precipMM?: number, cloudPct?: number) {
@@ -416,7 +456,6 @@ function labelFromWx(precipMM?: number, cloudPct?: number) {
   if ((cloudPct ?? 0) >= 30) return "Partly cloudy";
   return "Clear";
 }
-/** UPDATED fetchSpotWeather (returns wind in knots & gusts) */
 async function fetchSpotWeather(lat: number, lon: number): Promise<SpotWeather | null> {
   const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
   if (weatherCache.has(key)) return weatherCache.get(key)!;
@@ -483,7 +522,8 @@ function suggestWindow(region: RegionKey, hours: number, weatherAware: boolean) 
 function AIPlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { ready, error, ports, options, findPort: findPortRaw } = usePorts();
+  // IMPORTANT: δεν παίρνουμε πλέον "options" από usePorts (είχε σχόλια μέσα)
+  const { ready, error, ports, findPort: findPortRaw } = usePorts();
 
   const findPort = (input: string): PortCoord | null => {
     if (!input) return null;
@@ -491,11 +531,27 @@ function AIPlannerInner() {
     return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
   };
 
+  // ✅ Καθαρά labels μόνο από ports[]
   const PORT_OPTIONS = useMemo(() => {
-    const arr = Array.isArray(options) ? options.slice() : [];
-    arr.sort((a: string, b: string) => a.localeCompare(b));
+    const set = new Set<string>();
+    for (const p of (ports as any[] ?? [])) {
+      const label = chooseLabelFromPort(p);
+      if (label) set.add(label);
+      // επίσης πρόσθεσε και το καθαρισμένο canonical name αν διαφέρει
+      const cleanName = sanitizeName(p?.name ?? "");
+      if (cleanName && cleanName !== label) set.add(cleanName);
+      // και 1-2 καθαρά aliases
+      if (Array.isArray(p?.aliases)) {
+        for (const a of p.aliases) {
+          const s = sanitizeName(a);
+          if (s) set.add(s);
+        }
+      }
+    }
+    const arr = Array.from(set);
+    arr.sort((a, b) => a.localeCompare(b));
     return arr;
-  }, [options]);
+  }, [ports]);
 
   const [mode, setMode] = useState<PlannerMode>("Region");
   // Common
@@ -700,7 +756,7 @@ function AIPlannerInner() {
 
   const markers: { name: string; lat: number; lon: number }[] = useMemo(() => {
     if (!ready || !ports?.length) return [];
-    return ports.map((p: any) => ({ name: p.name, lat: p.lat, lon: p.lon }));
+    return (ports as any[]).map((p) => ({ name: p.name, lat: p.lat, lon: p.lon }));
   }, [ready, ports]);
 
   const activeNames = useMemo(() => {
@@ -727,7 +783,8 @@ function AIPlannerInner() {
         const i = Math.max(1, Math.min(customDays, customPickIndex)) - 1; setCustomStopAt(i, portName); return;
       }
       if (mapPickMode === "End") { const i = customDays - 1; setCustomStopAt(i, portName); return; }
-      if (mapPickMode === "Via") { const i = customDayStops.findIndex(x => !x); setCustomStopAt(i >= 0 ? i : customDayStops.length - 1, portName); return; }
+      if (mapPickMode === "Via") { const i = customDayStops.findIndex(x => !x); setCustomStopAt(i >= 0 ? i : customDayStops.length - 1, portName); return;
+      }
     }
   }
 
@@ -990,8 +1047,8 @@ function AIPlannerInner() {
                 startDate={startDate}
                 start={mode === "Region" ? start : customStart}
                 end={mode === "Region" ? end : undefined}
-                thumbs={thumbs}            /* pass thumbs to VIP */
-                destWeather={destWeather}  /* pass live WX to VIP */
+                thumbs={thumbs}
+                destWeather={destWeather}
               />
             )}
           </div>
