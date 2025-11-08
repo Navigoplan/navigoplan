@@ -3,8 +3,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { buildMergedPorts } from "./portsMerged";
-// ⚠️ Φέρνουμε τα facts RELATIVE (να φύγει κάθε path error)
-import { FACTS as PORT_FACTS } from "./ports/portFacts";
+// ✅ Φέρνουμε τα facts με ΣΩΣΤΟ path & casing: lib/ports/PortFacts.ts
+import { FACTS as PORT_FACTS } from "./ports/PortFacts";
 
 /* =========================
  *  Regions & Types
@@ -126,7 +126,7 @@ function bilingualLabel(primary: string, aliases: string[]) {
 }
 
 /* =========================
- *  Enrichment from portFacts
+ *  Enrichment from PortFacts
  * =======================*/
 
 /** π.χ. "Mylokopi Cove" -> null, "Mandraki (Hydra)" -> "Hydra" */
@@ -138,7 +138,7 @@ function extractParenPlace(label: string): string | null {
 }
 
 /**
- * Εμπλουτίζει τα ports με aliases που προέρχονται από τα κλειδιά του portFacts:
+ * Εμπλουτίζει τα ports με aliases που προέρχονται από τα κλειδιά του PortFacts:
  * - Αν το key έχει "(Island)", βρίσκουμε port που ταιριάζει στο Island (name/alias).
  * - Αλλιώς δοκιμάζουμε exact/contains πάνω σε name/aliases.
  * - Δεν δημιουργούμε καινούργια ports χωρίς coords· μόνο aliases.
@@ -169,23 +169,23 @@ function enrichWithFacts(list: Port[]): Port[] {
     let idx: number | undefined;
 
     if (inner) {
-      // 1) προσπαθούμε με το περιεχόμενο παρενθέσεων (π.χ. "Hydra")
+      // 1) match με περιεχόμενο παρενθέσεων (π.χ. "Hydra")
       idx = byName.get(normalize(inner));
       if (idx === undefined) idx = byAlias.get(normalize(inner));
     }
 
-    // 2) fallback: exact πάνω στο full label
+    // 2) fallback: exact με όλο το label
     if (idx === undefined) {
       idx = byName.get(normalize(factLabel));
       if (idx === undefined) idx = byAlias.get(normalize(factLabel));
     }
 
-    // 3) fallback: "περιέχει" — π.χ. “Russian Bay (Poros)” -> Poros
+    // 3) fallback: “περιέχει” (για safety)
     if (idx === undefined && inner) {
-      // ψάχνουμε port που "εμπεριέχεται" στο όνομά του ή στα aliases
-      idx = out.findIndex(p =>
-        normalize(p.name) === normalize(inner) ||
-        (p.aliases ?? []).some(a => normalize(a) === normalize(inner))
+      idx = out.findIndex(
+        p =>
+          normalize(p.name) === normalize(inner) ||
+          (p.aliases ?? []).some(a => normalize(a) === normalize(inner))
       );
       if (idx < 0) idx = undefined;
     }
@@ -197,13 +197,13 @@ function enrichWithFacts(list: Port[]): Port[] {
 }
 
 /* =========================
- *  Index helpers
+ *  Index helpers (options περιλαμβάνουν ΚΑΙ aliases)
  * =======================*/
 type PortIndex = {
   all: Port[];
   byId: Record<string, Port>;
   byKey: Record<string, string>;
-  options: string[];         // dropdown list (labels + aliases καθαρά)
+  options: string[]; // dropdown list (labels + aliases)
 };
 
 function buildIndex(list: Port[]): PortIndex {
@@ -214,7 +214,7 @@ function buildIndex(list: Port[]): PortIndex {
   for (const p of list) {
     byId[p.id] = p;
 
-    // index exact name/aliases
+    // exact index για name/aliases
     byKey[normalize(p.name)] = p.id;
     for (const a of p.aliases ?? []) byKey[normalize(a)] = p.id;
 
@@ -222,7 +222,7 @@ function buildIndex(list: Port[]): PortIndex {
     if (p.label) optionSet.add(p.label);
     else optionSet.add(p.name);
 
-    // 2) ΟΛΑ τα aliases ως **ξεχωριστές** επιλογές
+    // 2) ΟΛΑ τα aliases ως ξεχωριστές επιλογές
     for (const a of p.aliases ?? []) {
       const s = sanitizeName(a);
       if (s && isNameLike(s)) optionSet.add(s);
@@ -272,7 +272,7 @@ function buildPortsFromMerged(): Port[] {
   })
   .filter(p => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lon) && !!p.region);
 
-  // 2) Εμπλουτισμός με portFacts (aliases μόνο)
+  // 2) Εμπλουτισμός με PortFacts (aliases μόνο, καμία πρόταση)
   merged = enrichWithFacts(merged);
 
   return merged;
