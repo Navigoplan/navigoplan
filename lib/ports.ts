@@ -3,6 +3,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { buildMergedPorts } from "./portsMerged";
+// Φέρνουμε το FACTS για να ενσωματώσουμε aliases από portFacts
+import { FACTS as PORT_FACTS } from "./ai/ports/portFacts";
 
 /* =========================
  *  Regions & Types
@@ -103,8 +105,8 @@ function isNameLike(raw: string) {
   const s = (raw || "").trim();
   if (!s) return false;
   if (/[0-9.;:!?]/.test(s)) return false;          // "Βάθη 2–4 m.", "Είσοδος…"
-  if (s.length > 40) return false;
-  if (s.split(/\s+/).length > 6) return false;
+  if (s.length > 48) return false;
+  if (s.split(/\s+/).length > 7) return false;
   const badStarts = [
     "Άφιξη","Αφιξη","Είσοδος","Έξοδος","Exodos","Βάθη","Καλύτερα",
     "Επικοινωνία","Προσοχή","Σημείωση","Arrival","Entrance","Depth","Better","Notes","Call"
@@ -166,6 +168,48 @@ function buildIndex(list: Port[]): PortIndex {
     if (latin && isGreek(p.name)) optionSet.add(`${p.name} (${latin})`);
   }
 
+  /* === ΕΜΠΛΟΥΤΙΣΜΟΣ ΜΕ ΟΝΟΜΑΤΑ ΑΠΟ portFacts === */
+  try {
+    const facts: Record<string, any> = PORT_FACTS as any;
+    if (facts && typeof facts === "object") {
+      for (const rawKey of Object.keys(facts)) {
+        const factKey = sanitizeName(String(rawKey));
+        if (!isNameLike(factKey)) continue;
+
+        // προσπάθεια ταίριασμα:
+        // 1) Αν έχει "(Island/Port)" → στόχευσε στο περιεχόμενο
+        let targetId: string | undefined;
+        const m = factKey.match(/\(([^)]+)\)/);
+        if (m && isCleanParen(m[1])) {
+          const inner = m[1].trim();
+          const idByInner = byKey[normalize(inner)];
+          if (idByInner) targetId = idByInner;
+        }
+        // 2) exact match ολόκληρου του ονόματος
+        if (!targetId) {
+          const idExact = byKey[normalize(factKey)];
+          if (idExact) targetId = idExact;
+        }
+        // 3) heuristic: πρώτο token πριν παρενθέσεις / πρώτος όρος
+        if (!targetId) {
+          const firstToken = factKey.split("(")[0].trim().split(/\s+/)[0] || "";
+          if (firstToken) {
+            const idTok = byKey[normalize(firstToken)];
+            if (idTok) targetId = idTok;
+          }
+        }
+
+        if (!targetId) continue; // δεν φτιάχνουμε "ορφανά" χωρίς coords
+
+        // καταχώρησε το alias -> id, και πρόσθεσέ το στα options
+        byKey[normalize(factKey)] = targetId;
+        optionSet.add(factKey);
+      }
+    }
+  } catch {
+    // no-op: αν για κάποιο λόγο δεν βρεθεί FACTS, απλά αγνοούμε
+  }
+
   const options = Array.from(optionSet).sort((a, b) => a.localeCompare(b, "en"));
   return { all: list, byId, byKey, options };
 }
@@ -188,7 +232,7 @@ function buildPortsFromMerged(): Port[] {
 
       const category = (m.category as PortCategory) ?? guessCategoryFromName(nameClean);
 
-      // aliases ΜΟΝΟ από merged (έχει ήδη “portFacts” names μέσα)
+      // aliases ΜΟΝΟ από merged (έχει ήδη “portFacts” names μέσα αν τα έβαλες εκεί)
       const aliases = uniq(
         [nameClean, ...(Array.isArray(m.aliases) ? m.aliases : [])]
           .map((x) => sanitizeName(String(x || "")))
