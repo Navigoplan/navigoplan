@@ -32,6 +32,7 @@ export function normalize(s: string) {
     .replace(/\p{Diacritic}/gu, "");
 }
 const isGreek = (s: string) => /[\u0370-\u03FF]/.test(s);
+
 function uniq<T>(arr: T[]) {
   const out: T[] = []; const seen = new Set<string>();
   for (const x of arr) {
@@ -40,6 +41,7 @@ function uniq<T>(arr: T[]) {
   }
   return out;
 }
+
 function guessCategoryFromName(nm: string): PortCategory {
   const n = nm.toLowerCase();
   if (/\bmarina\b/.test(n)) return "marina";
@@ -88,6 +90,39 @@ function bilingualLabel(primary: string, aliases: string[]) {
     return isGreek(primary) ? `${primary} (${en})` : `${primary} (${el})`;
   }
   return primary;
+}
+
+/* =========================
+ *  Aliases από το name (auto-expand)
+ * =======================*/
+
+// λέξεις που θέλουμε να αφαιρούμε από ονομασίες τύπου "Porto Limnionas Cove"
+const STOPWORDS = /\b(cove|bay|harbour|harbor|marina|port)\b/gi;
+
+function stripParensOnce(s: string) {
+  return s.replace(/\s*\([^)]+\)/g, "").trim();
+}
+
+/**
+ * Από ένα canonical name (π.χ. "Porto Limnionas Cove") παράγει βοηθητικά aliases:
+ * - "Porto Limnionas" (χωρίς stopwords)
+ * - "Limnionas" (τελευταίο token)
+ * - πλήρες χωρίς stopwords
+ */
+function expandNameAliases(nameRaw: string): string[] {
+  const out = new Set<string>();
+  const base = stripParensOnce(nameRaw).trim();
+
+  const noStop = base.replace(STOPWORDS, "").replace(/\s+/g, " ").trim();
+
+  const parts = noStop.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    out.add(parts.slice(0, parts.length - 1).join(" ")); // π.χ. "Porto Limnionas"
+    out.add(parts[parts.length - 1]);                    // π.χ. "Limnionas"
+  }
+  if (noStop && noStop.toLowerCase() !== base.toLowerCase()) out.add(noStop);
+
+  return Array.from(out).filter(Boolean);
 }
 
 /* =========================
@@ -213,8 +248,14 @@ async function fetchMergedApi(): Promise<Port[]> {
       const lon = Number(p.lon);
       const region = String(p.region ?? "").trim() || "Greece";
       const cat = (p.category as PortCategory) ?? guessCategoryFromName(name);
+
+      const rawAliases = Array.isArray(p.aliases) ? p.aliases : [];
+      const expanded = [
+        ...rawAliases,
+        ...expandNameAliases(name), // <— auto-aliases από το canonical name
+      ];
       const aliases = uniq(
-        [name, ...(Array.isArray(p.aliases) ? p.aliases : [])]
+        [name, ...expanded]
           .map(x => sanitizeName(String(x || "")))
           .filter(isNameLike)
       ).slice(0, 80);
@@ -252,7 +293,13 @@ async function fetchFallbackFromStatic(): Promise<Port[]> {
     const id = String(c.id ?? `canon-${i}-${normalize(name).slice(0,40)}`);
     const region = String(c.region ?? "Greece").trim();
     const cat = c.category ?? guessCategoryFromName(name);
-    const aliases = uniq([name, ...(c.aliases ?? [])].map(x => sanitizeName(String(x||""))).filter(isNameLike)).slice(0,80);
+
+    const aliases = uniq(
+      [name, ...(c.aliases ?? []), ...expandNameAliases(name)]
+        .map(x => sanitizeName(String(x||"")))
+        .filter(isNameLike)
+    ).slice(0,80);
+
     out.push({ id, name, lat: c.lat!, lon: c.lon!, region, category: cat, aliases });
   }
 
@@ -269,9 +316,19 @@ async function fetchFallbackFromStatic(): Promise<Port[]> {
 
     const lat = r.position?.lat;
     const lon = r.position?.lon;
-    const finalCat: PortCategory = (r.category === "bay" ? "anchorage" : (r.category as PortCategory)) || "harbor";
-    const aliases = uniq([...(r.aliases?.en ?? []), ...(r.aliases?.el ?? []), ...(nameEn && nameEl && normalize(nameEn) !== normalize(nameEl) ? [nameEl] : [])]
-      .map(x => sanitizeName(String(x||""))).filter(isNameLike));
+    const finalCat: PortCategory =
+      (r.category === "bay" ? "anchorage" : (r.category as PortCategory)) || "harbor";
+
+    const aliases = uniq(
+      [
+        ...(r.aliases?.en ?? []),
+        ...(r.aliases?.el ?? []),
+        ...(nameEn && nameEl && normalize(nameEn) !== normalize(nameEl) ? [nameEl] : []),
+        ...expandNameAliases(baseName) // <— auto-aliases από SeaGuide name
+      ]
+      .map(x => sanitizeName(String(x||"")))
+      .filter(isNameLike)
+    );
 
     const key = normalize(baseName);
     const idx = byName.get(key);
@@ -333,7 +390,7 @@ export function usePorts() {
 
         if (!cancelled) {
           setPorts(enriched);
-          setError(null); // βεβαιωνόμαστε ότι δεν μένει “Σφάλμα dataset”
+          setError(null); // μη μένει “Σφάλμα dataset”
         }
       } catch (e: any) {
         if (!cancelled) {
