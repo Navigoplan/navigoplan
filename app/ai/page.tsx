@@ -81,7 +81,7 @@ function autoPickRegion(start: string, end: string): RegionKey {
   return "Cyclades";
 }
 
-/* ========= CLEAN LABELS (global helpers) ========= */
+/* ========= CLEAN LABELS ========= */
 const BANNED_IN_PARENS = [
   "traffic","change-over","change over","crowd","crowded","meltemi","swell",
   "fuel","water","power","taxi","shops","supermarket","notes",
@@ -108,14 +108,36 @@ function sanitizeName(raw: string) {
   const base = s.replace(/\s+/g, " ");
   return `${base} ${firstClean[0]}`.replace(/\s+/g, " ").trim();
 }
-/** takes ANY string (even from portFacts) and returns a clean label */
-function sanitizeLabelString(raw: string) { return sanitizeName(raw); }
+
+/** ⚠️ ΝΕΟ: δέχεται string και επιστρέφει αν μοιάζει με ΟΝΟΜΑ (όχι σημείωση) */
+function isNameLike(raw: string) {
+  const s = (raw || "").trim();
+  if (!s) return false;
+  // αποκλείουμε οτιδήποτε έχει τελείες/;!/—/κόμματα ή ψηφία (π.χ. "Βάθη 2–4 m")
+  if (/[0-9.;:!?]/.test(s)) return false;
+  // πολύ μακρύ, μάλλον πρόταση
+  if (s.length > 40) return false;
+  // πάνω από 6 λέξεις = πιθανό note
+  if (s.split(/\s+/).filter(Boolean).length > 6) return false;
+  // φράσεις που εμφανίζονται στα notes
+  const badStarts = [
+    "Άφιξη","Αφιξη","Είσοδος","Έξοδος","Εξοδος","Βάθη","Καλύτερα",
+    "Επικοινωνία","Προσοχή","Σημείωση","Άνεμος","Μελτέμι","Shelter","Depth","Entrance","Better","Call","Arrival","Notes"
+  ];
+  const lower = s.toLowerCase();
+  if (badStarts.some(w => lower.startsWith(w.toLowerCase()))) return false;
+  // επιτρέπουμε μόνο γράμματα, κενά, απόστροφους, παύλες, παρενθέσεις
+  if (!/^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().-]+$/.test(s)) return false;
+  return true;
+}
+
+/** keeps only clean alias-like names */
 function chooseLabelFromPort(p: any): string {
   const name = sanitizeName(p?.name ?? "");
   const aliases: string[] = Array.isArray(p?.aliases) ? p.aliases : [];
   for (const a of aliases) {
     const s = sanitizeName(a);
-    if (/\(.+\)/.test(s)) return s; // prefer alias with clean "(Island)"
+    if (/\(.+\)/.test(s) && isNameLike(s)) return s; // prefer clean "(Island)"
   }
   return name;
 }
@@ -130,12 +152,12 @@ function AutoCompleteInput({
   const [showAll, setShowAll] = useState(false);
   const [hasFocus, setHasFocus] = useState(false);
 
-  // clean everything that comes in
+  // καθαρίζουμε & ΦΙΛΤΡΑΡΟΥΜΕ (μόνο name-like)
   const CLEAN_OPTIONS = useMemo(() => {
     const set = new Set<string>();
     for (const o of options || []) {
-      const clean = sanitizeLabelString(o);
-      if (clean) set.add(clean);
+      const cand = sanitizeName(o);
+      if (cand && isNameLike(cand)) set.add(cand);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [options]);
@@ -526,7 +548,6 @@ function suggestWindow(region: RegionKey, hours: number, weatherAware: boolean) 
 function AIPlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // usePorts χωρίς options (options είχαν σχόλια)
   const { ready, error, ports, findPort: findPortRaw } = usePorts();
 
   const findPort = (input: string): PortCoord | null => {
@@ -535,18 +556,20 @@ function AIPlannerInner() {
     return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
   };
 
-  // ✅ Καθαρά labels μόνο από ports[] και επιπλέον clean aliases
+  // ✅ Μόνο καθαρά ονόματα — ποτέ notes από portFacts
   const PORT_OPTIONS = useMemo(() => {
     const set = new Set<string>();
     for (const p of (ports as any[] ?? [])) {
       const label = chooseLabelFromPort(p);
-      if (label) set.add(label);
+      if (label && isNameLike(label)) set.add(label);
+
       const cleanName = sanitizeName(p?.name ?? "");
-      if (cleanName && cleanName !== label) set.add(cleanName);
+      if (cleanName && isNameLike(cleanName)) set.add(cleanName);
+
       if (Array.isArray(p?.aliases)) {
         for (const a of p.aliases) {
           const s = sanitizeName(a);
-          if (s) set.add(s);
+          if (s && isNameLike(s)) set.add(s);
         }
       }
     }
@@ -690,7 +713,6 @@ function AIPlannerInner() {
     setShowTabs(true);
     setActiveTab("crew");
 
-    // prefetch thumbs
     (async () => {
       const uniq = Array.from(new Set(legs.map(l => l.to)));
       const next: Record<string, string | undefined> = {};
@@ -772,39 +794,24 @@ function AIPlannerInner() {
   }, [mode, start, end, effectiveVias, customStart, customDayStops]);
 
   function handleMarkerClick(portName: string) {
+    const pClean = sanitizeName(portName);
     if (mode === "Region") {
-      if (mapPickMode === "Start") { setStart(portName); return; }
-      if (mapPickMode === "End")   { setEnd(portName); return; }
+      if (mapPickMode === "Start") { setStart(pClean); return; }
+      if (mapPickMode === "End")   { setEnd(pClean); return; }
       const idx = vias.findIndex(v => !v);
       if (mapPickMode === "Via") {
-        if (idx >= 0) setViaAt(idx, portName); else setVias(v => [...v, portName]); return;
+        if (idx >= 0) setViaAt(idx, pClean); else setVias(v => [...v, pClean]); return;
       }
     } else {
-      if (mapPickMode === "Start") { setCustomStart(portName); return; }
+      if (mapPickMode === "Start") { setCustomStart(pClean); return; }
       if (mapPickMode === "Custom") {
-        const i = Math.max(1, Math.min(customDays, customPickIndex)) - 1; setCustomStopAt(i, portName); return;
+        const i = Math.max(1, Math.min(customDays, customPickIndex)) - 1; setCustomStopAt(i, pClean); return;
       }
-      if (mapPickMode === "End") { const i = customDays - 1; setCustomStopAt(i, portName); return; }
-      if (mapPickMode === "Via") { const i = customDayStops.findIndex(x => !x); setCustomStopAt(i >= 0 ? i : customDayStops.length - 1, portName); return;
+      if (mapPickMode === "End") { const i = customDays - 1; setCustomStopAt(i, pClean); return; }
+      if (mapPickMode === "Via") { const i = customDayStops.findIndex(x => !x); setCustomStopAt(i >= 0 ? i : customDayStops.length - 1, pClean); return;
       }
     }
   }
-
-  // LIVE weather fetch per-destination
-  useEffect(() => {
-    (async () => {
-      if (!plan || !plan.length) { setDestWeather({}); return; }
-      const uniqueDest = Array.from(new Set(plan.map(d => d.leg?.to).filter(Boolean) as string[]));
-      const next: Record<string, SpotWeather> = {};
-      for (const name of uniqueDest) {
-        const p = findPort(name); if (!p) continue;
-        const wx = await fetchSpotWeather(p.lat, p.lon);
-        if (wx) next[name] = wx;
-      }
-      setDestWeather(next);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan]);
 
   /* ========= UI ========= */
   return (
