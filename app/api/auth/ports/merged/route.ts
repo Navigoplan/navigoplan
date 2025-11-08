@@ -5,26 +5,26 @@ import { buildMergedPorts, type MergedPort } from "@/lib/portsMerged";
 export const runtime = "nodejs";
 
 type PortCategory = "harbor" | "marina" | "anchorage" | "spot";
-
 type ApiPort = {
   id: string;
   name: string;
-  lat: number;
-  lon: number;
-  category: PortCategory;
-  region: string;
-  aliases: string[];
+  lat?: number;
+  lon?: number;
+  category?: PortCategory;
+  region?: string;
+  aliases?: string[];
+  subregionTags?: string[];
 };
 
 function isNameLike(raw: string) {
   const s = (raw || "").trim();
   if (!s) return false;
   if (/[0-9.;:!?]/.test(s)) return false;
-  if (s.length > 60) return false;
-  if (s.split(/\s+/).length > 8) return false;
+  if (s.length > 40) return false;
+  if (s.split(/\s+/).length > 6) return false;
   const bad = ["Άφιξη","Αφιξη","Είσοδος","Έξοδος","Arrival","Entrance","Depth","Notes","Better","Call"];
   const low = s.toLowerCase();
-  if (bad.some((w) => low.startsWith(w.toLowerCase()))) return false;
+  if (bad.some(w => low.startsWith(w.toLowerCase()))) return false;
   return /^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().\-]+$/.test(s);
 }
 
@@ -34,19 +34,18 @@ export async function GET() {
 
     const list: ApiPort[] = merged
       .map((p: MergedPort, i: number): ApiPort => {
+        const id = String(p.id ?? `p-${i}`);
+        const name = String(p.name ?? "").trim();
+        const lat = typeof p.lat === "number" ? p.lat : undefined;
+        const lon = typeof p.lon === "number" ? p.lon : undefined;
+        const region = String(p.region ?? "").trim();
+        const category = (p.category as PortCategory) ?? "harbor";
         const aliases = (Array.isArray(p.aliases) ? p.aliases : []).filter(isNameLike);
-        return {
-          id: String(p.id ?? `p-${i}`),
-          name: String(p.name ?? "").trim(),
-          lat: Number(p.lat),
-          lon: Number(p.lon),
-          region: String(p.region ?? "").trim(),
-          category: (p.category as PortCategory) ?? "harbor",
-          aliases,
-        };
+        const subregionTags = Array.isArray(p.subregionTags) ? p.subregionTags : undefined;
+        return { id, name, lat, lon, region, category, aliases, subregionTags };
       })
-      // Χρειαζόμαστε name+region+coords
-      .filter((p) => !!p.name && !!p.region && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+      // Χρειαζόμαστε coords για Map/AI — κράτα μόνο όσα έχουν και lat/lon
+      .filter((p: ApiPort) => !!p.name && !!p.region && typeof p.lat === "number" && typeof p.lon === "number");
 
     return NextResponse.json(list, { status: 200 });
   } catch (err: any) {
