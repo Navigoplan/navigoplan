@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 
+/* ================= Types ================= */
 type YachtType = "Motor" | "Sailing";
 type Yacht = { type: YachtType; speed: number; lph: number };
 type Leg = {
@@ -17,10 +18,12 @@ type Leg = {
 type DayCard = { day: number; date: string; leg?: Leg; notes?: string };
 type Payload = { dayCards: DayCard[]; yacht?: Yacht; tripTitle?: string; createdAt?: number };
 
-/* ====== helpers ====== */
+/* ============ Helpers / Math ============ */
+// Responsive container size
 function useRectSize<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 1200, h: 650 });
+
   useEffect(() => {
     if (!ref.current) return;
     const el = ref.current;
@@ -34,10 +37,13 @@ function useRectSize<T extends HTMLElement>() {
     setSize({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
   }, []);
+
   return { ref, ...size };
 }
 
 type Pt = { x: number; y: number };
+
+// Smooth path (Catmull-Rom → cubic Bezier)
 function catmullRomToBezier(points: Pt[], tension = 0.9): string {
   if (points.length < 2) return "";
   if (points.length === 2) {
@@ -62,18 +68,22 @@ function catmullRomToBezier(points: Pt[], tension = 0.9): string {
   return path.join(" ");
 }
 
+// Sample along a path
 function usePathSampler(d: string, w: number, h: number) {
   const ref = useRef<SVGPathElement | null>(null);
   const [len, setLen] = useState(0);
+
   useEffect(() => {
     if (!ref.current) return;
     try { setLen(ref.current.getTotalLength()); } catch { setLen(0); }
   }, [d, w, h]);
+
   function pointAt(t: number) {
     if (!ref.current || len === 0) return { x: 0, y: 0 };
     const pt = ref.current.getPointAtLength(t * len);
     return { x: pt.x, y: pt.y };
   }
+
   return { ref, len, pointAt };
 }
 
@@ -87,9 +97,13 @@ function buildWaypoints(days: DayCard[], w: number, h: number): Pt[] {
     return { x, y };
   });
 }
-function heading(a: Pt, b: Pt) { return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI; }
 
-/* ====== visuals ====== */
+function heading(a: Pt, b: Pt) {
+  const ang = Math.atan2(b.y - a.y, b.x - a.x);
+  return (ang * 180) / Math.PI;
+}
+
+/* ============ Visuals ============ */
 function YachtIcon() {
   return (
     <svg viewBox="0 0 64 64" className="w-11 h-11 drop-shadow-[0_3px_8px_rgba(0,0,0,.25)]">
@@ -115,8 +129,12 @@ function IslandsLayer({ w, h, depth = 1 }: { w: number; h: number; depth: 1 | 2 
     { x: 0.74, y: 0.52, sx: 0.055, sy: 0.024, r: 9 },
     { x: 0.86, y: 0.28, sx: 0.062, sy: 0.027, r: -5 },
   ];
+
   return (
-    <div className="absolute inset-0 pointer-events-none" style={{ animation: `drift${depth} ${dur}s ease-in-out infinite alternate` }}>
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{ animation: `drift${depth} ${dur}s ease-in-out infinite alternate` }}
+    >
       <svg className="absolute inset-0 w-full h-full">
         {IS.map((is, i) => (
           <g key={`${depth}-${i}`} transform={`translate(${w * is.x},${h * is.y}) rotate(${is.r})`}>
@@ -126,6 +144,7 @@ function IslandsLayer({ w, h, depth = 1 }: { w: number; h: number; depth: 1 | 2 
           </g>
         ))}
       </svg>
+
       <style>{`
         @keyframes drift1 { 0% { transform: translateX(-${drift}px) } 100% { transform: translateX(${drift}px) } }
         @keyframes drift2 { 0% { transform: translateX(-${drift}px) } 100% { transform: translateX(${drift}px) } }
@@ -174,33 +193,11 @@ function SummaryView({ days, title }: { days: DayCard[]; title: string }) {
         <div className="rounded-lg bg-gray-50 p-3"><div className="text-xs text-gray-500">Total Hours</div><div className="font-semibold text-lg">{totalHours.toFixed(1)}</div></div>
         <div className="rounded-lg bg-gray-50 p-3"><div className="text-xs text-gray-500">Total Fuel (L)</div><div className="font-semibold text-lg">{totalFuel.toFixed(0)}</div></div>
       </div>
-      <div className="mt-6 max-h-[40vh] overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-500">
-              <th className="py-2">Day</th><th>Date</th><th>From → To</th>
-              <th className="text-right">NM</th><th className="text-right">Hours</th><th className="text-right">Fuel (L)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {days.map((d) => (
-              <tr key={d.day} className="border-t border-gray-100">
-                <td className="py-2">{d.day}</td>
-                <td>{d.date}</td>
-                <td>{d.leg ? `${d.leg.from} → ${d.leg.to}` : "—"}</td>
-                <td className="text-right">{d.leg ? d.leg.nm.toFixed(1) : "—"}</td>
-                <td className="text-right">{d.leg ? d.leg.hours.toFixed(1) : "—"}</td>
-                <td className="text-right">{d.leg ? d.leg.fuelL.toFixed(0) : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
 
-/* ====== Player ====== */
+/* ============ Player ============ */
 function FinalItineraryPlayer({ data }: { data: Payload }) {
   const { ref, w, h } = useRectSize<HTMLDivElement>();
   const [idx, setIdx] = useState(0);
@@ -216,13 +213,19 @@ function FinalItineraryPlayer({ data }: { data: Payload }) {
 
   const title = data.tripTitle || "VIP Final Itinerary";
 
+  // Path calculations
   const waypoints = useMemo(() => buildWaypoints(days, w, h), [days, w, h]);
   const pathD = useMemo(() => catmullRomToBezier(waypoints, 0.9), [waypoints]);
   const { ref: pathRef, pointAt } = usePathSampler(pathD, w, h);
 
+  // Motion progress along current leg
   const t = useMotionValue(0);
-  const [seg, setSeg] = useState<{ start: number; end: number }>({ start: 0, end: waypoints.length > 1 ? 1 / (waypoints.length - 1) : 1 });
+  const [seg, setSeg] = useState<{ start: number; end: number }>({
+    start: 0,
+    end: waypoints.length > 1 ? 1 / (waypoints.length - 1) : 1
+  });
 
+  // Animate sailing per leg, duration scaled by hours
   useEffect(() => {
     if (phase !== "sail" || waypoints.length < 2) return;
     const N = waypoints.length - 1;
@@ -231,7 +234,8 @@ function FinalItineraryPlayer({ data }: { data: Payload }) {
     setSeg({ start, end });
 
     const hours = days[idx]?.leg?.hours ?? 1;
-    const dur = Math.max(0.9, Math.min(5.5, hours * 0.9));
+    const dur = Math.max(0.9, Math.min(5.5, hours * 0.9)); // 0.9s–5.5s
+
     t.set(start);
     const controls = animate(t, end, {
       duration: dur,
@@ -241,6 +245,7 @@ function FinalItineraryPlayer({ data }: { data: Payload }) {
     return () => controls.stop();
   }, [idx, phase, t, waypoints.length, days]);
 
+  // Wake trail
   const [trail, setTrail] = useState<Pt[]>([]);
   useEffect(() => {
     const unsub = t.on("change", (tv) => {
@@ -253,6 +258,7 @@ function FinalItineraryPlayer({ data }: { data: Payload }) {
     return () => unsub();
   }, [pointAt, t]);
 
+  // Bobbing & slight yaw
   const bob = useMotionValue(0);
   const yaw = useMotionValue(0);
   useEffect(() => {
@@ -266,15 +272,18 @@ function FinalItineraryPlayer({ data }: { data: Payload }) {
   return (
     <div className="w-full">
       <div ref={ref} className="relative w-full aspect-[16/9] overflow-hidden rounded-2xl border bg-sky-300/60 backdrop-blur shadow-xl">
+        {/* Sea backdrop */}
         <div className="absolute inset-0 bg-gradient-to-b from-sky-300 via-sky-400 to-sky-500" />
         <div className="pointer-events-none absolute inset-0 opacity-45 [background:radial-gradient(800px_240px_at_20%_10%,rgba(255,255,255,0.25),transparent_60%),radial-gradient(900px_300px_at_80%_30%,rgba(255,255,255,0.18),transparent_60%)]" />
         <div className="absolute inset-x-0 bottom-0 h-24 animate-[swell_7s_ease-in-out_infinite] bg-[radial-gradient(40px_8px_at_20%_8px,rgba(255,255,255,0.45),transparent_70%)] [mask-image:linear-gradient(to_top,black,transparent)]" />
         <style>{`@keyframes swell{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}`}</style>
 
+        {/* Islands parallax */}
         <IslandsLayer w={w} h={h} depth={3} />
         <IslandsLayer w={w} h={h} depth={2} />
         <IslandsLayer w={w} h={h} depth={1} />
 
+        {/* Route & wake */}
         <svg className="absolute inset-0 w-full h-full">
           <defs>
             <linearGradient id="trailGrad" x1="0" y1="0" x2="0" y2="1">
@@ -286,25 +295,35 @@ function FinalItineraryPlayer({ data }: { data: Payload }) {
           <path d={pathD} fill="none" stroke="white" strokeOpacity="0.9" strokeWidth={3} strokeDasharray="12 9" />
           {waypoints.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={5} fill="white" />)}
           {trail.length > 1 && (
-            <polyline points={trail.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="url(#trailGrad)" strokeWidth={4} strokeOpacity={0.9} />
+            <polyline
+              points={trail.map((p) => `${p.x},${p.y}`).join(" ")}
+              fill="none"
+              stroke="url(#trailGrad)"
+              strokeWidth={4}
+              strokeOpacity={0.9}
+            />
           )}
         </svg>
 
-        <motion.div
-          className="absolute -translate-x-1/2 -translate-y-1/2"
-          style={{
-            x: useTransform(t, (tv) => pointAt(tv).x),
-            y: useTransform(t, (tv) => pointAt(tv).y + bobPx.get()),
-            rotate: useTransform(t, (tv) => {
-              const p = pointAt(tv);
-              const pPrev = pointAt(Math.max(0, tv - 0.001));
-              return heading(pPrev, p) + (yawDeg.get() as number);
-            }),
-          }}
-        >
-          <YachtIcon />
-        </motion.div>
+        {/* Yacht */}
+        {phase !== "done" && (
+          <motion.div
+            className="absolute -translate-x-1/2 -translate-y-1/2"
+            style={{
+              x: useTransform(t, (tv) => pointAt(tv).x),
+              y: useTransform(t, (tv) => pointAt(tv).y + bobPx.get()),
+              rotate: useTransform(t, (tv) => {
+                const p = pointAt(tv);
+                const pPrev = pointAt(Math.max(0, tv - 0.001));
+                return heading(pPrev, p) + (yawDeg.get() as number);
+              }),
+            }}
+          >
+            <YachtIcon />
+          </motion.div>
+        )}
 
+        {/* Stop card */}
         {phase === "stop" && days[idx] && (
           <div className="absolute left-1/2 top-6 -translate-x-1/2">
             <StopCard
@@ -317,13 +336,11 @@ function FinalItineraryPlayer({ data }: { data: Payload }) {
           </div>
         )}
 
+        {/* Summary */}
         {phase === "done" && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="scale-95 md:scale-100">
-              <SummaryView
-                days={days}
-                title={title}
-              />
+              <SummaryView days={days} title={title} />
             </div>
           </div>
         )}
@@ -332,7 +349,7 @@ function FinalItineraryPlayer({ data }: { data: Payload }) {
   );
 }
 
-/* ====== Page ====== */
+/* ============ Page wrapper ============ */
 export default function FinalItineraryPage() {
   const [data, setData] = useState<Payload | null>(null);
 
@@ -352,7 +369,10 @@ export default function FinalItineraryPage() {
         <h1 className="text-2xl sm:text-3xl font-semibold">Final Itinerary (Animated)</h1>
         <p className="text-sm text-gray-500">Premium animated presentation for VIP Guests</p>
       </div>
-      <FinalItineraryPlayer data={data ?? { dayCards: [], tripTitle: "VIP Final Itinerary" }} />
+
+      <FinalItineraryPlayer
+        data={data ?? { dayCards: [], tripTitle: "VIP Final Itinerary" }}
+      />
     </main>
   );
 }

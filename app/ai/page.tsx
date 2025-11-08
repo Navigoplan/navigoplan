@@ -11,7 +11,7 @@ import { usePorts } from "../../lib/ports";
 import CaptainCrewToolkit from "./components/CaptainCrewToolkit";
 import VipGuestsView from "./components/VipGuestsView";
 // NEW: import button
-import GenerateFinalItineraryButton from "../../components/GenerateFinalItineraryButton";
+import GenerateFinalItineraryButton from "../components/GenerateFinalItineraryButton";
 
 export const dynamic = "force-dynamic";
 
