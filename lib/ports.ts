@@ -28,7 +28,7 @@ export type Port = {
   lon: number;
   category: PortCategory;
   region: Region;
-  aliases?: string[];    // επιπλέον ονόματα για αναζήτηση (EN/EL/variants)
+  aliases?: string[];    // επιπλέον ονόματα (EN/EL/variants)
   label?: string;        // προτεινόμενο δίγλωσσο label για dropdown
 };
 
@@ -132,7 +132,7 @@ type PortIndex = {
   all: Port[];
   byId: Record<string, Port>;
   byKey: Record<string, string>;
-  options: string[];         // ό,τι δείχνουμε στο dropdown (labels)
+  options: string[];         // dropdown list (labels + aliases)
 };
 
 function buildIndex(list: Port[]): PortIndex {
@@ -142,14 +142,24 @@ function buildIndex(list: Port[]): PortIndex {
 
   for (const p of list) {
     byId[p.id] = p;
+
+    // index για exact όνομα
     byKey[normalize(p.name)] = p.id;
+
+    // index για exact aliases
     for (const a of p.aliases ?? []) byKey[normalize(a)] = p.id;
 
-    // dropdown label
+    // 1) κύριο label
     if (p.label) optionSet.add(p.label);
     else optionSet.add(p.name);
 
-    // +μερικά χρήσιμα aliases (δίγλωσσα), όχι όλα για να μη φουσκώσει
+    // 2) προσθέτουμε ΟΛΑ τα καθαρά aliases ως **ξεχωριστές** επιλογές
+    for (const a of p.aliases ?? []) {
+      const s = sanitizeName(a);
+      if (s && isNameLike(s)) optionSet.add(s);
+    }
+
+    // 3) προαιρετικά 1-2 δίγλωσσα combos για ευκολία αναζήτησης
     const greek = (p.aliases ?? []).find(isGreek);
     const latin = (p.aliases ?? []).find((x) => !isGreek(x));
     if (greek) optionSet.add(`${p.name} (${greek})`);
@@ -164,7 +174,6 @@ function buildIndex(list: Port[]): PortIndex {
  *  Data builder (Merged)
  * =======================*/
 function buildPortsFromMerged(): Port[] {
-  // Παίρνουμε ΟΛΑ (canonical) από το portsMerged
   const merged = buildMergedPorts();
 
   const out: Port[] = merged
@@ -172,21 +181,19 @@ function buildPortsFromMerged(): Port[] {
       const nameClean = sanitizeName(String(m.name ?? "").trim());
       const id = String(m.id ?? `merged-${i}-${normalize(nameClean).slice(0, 40)}`).trim();
 
-      // region -> Region (fallback Saronic)
       const regRaw = String(m.region ?? "").trim();
-      const reg =
+      const region =
         (REGIONS.find((r) => r.toLowerCase() === regRaw.toLowerCase()) ??
           "Saronic") as Region;
 
-      // category
       const category = (m.category as PortCategory) ?? guessCategoryFromName(nameClean);
 
-      // aliases ΜΟΝΟ από m.aliases + name, καθαρά & name-like
+      // aliases ΜΟΝΟ από merged (έχει ήδη “portFacts” names μέσα)
       const aliases = uniq(
         [nameClean, ...(Array.isArray(m.aliases) ? m.aliases : [])]
           .map((x) => sanitizeName(String(x || "")))
           .filter((x) => x && isNameLike(x))
-      ).slice(0, 20);
+      ).slice(0, 40);
 
       const label = bilingualLabel(nameClean, aliases);
 
@@ -199,7 +206,7 @@ function buildPortsFromMerged(): Port[] {
         lat,
         lon,
         category,
-        region: reg,
+        region,
         aliases,
         label,
       } as Port;
@@ -229,7 +236,6 @@ export function portMatchesQuery(p: Port, q: string) {
   return false;
 }
 
-/** Υπολογίζει περιοχή από όλα τα ports (start/end/vias). */
 export function guessRegionFromPorts(
   ports: Array<Port | null | undefined>
 ): Region | "Multi" | null {
@@ -240,17 +246,12 @@ export function guessRegionFromPorts(
   return "Multi";
 }
 
-/** Label που μπορείς να δείξεις στο UI για Auto mode. */
 export function getAutoRegionLabel(auto: Region | "Multi" | null) {
   if (!auto) return "Auto";
   if (auto === "Multi") return "Auto (multi-region)";
   return `${auto} (auto)`;
 }
 
-/** Επιστρέφει λίστα για dropdown:
- *  - Σε Auto: όλη η Ελλάδα, μόνο με text query
- *  - Σε manual region: φιλτράρει πρώτα με region και μετά με text query
- */
 export function filterPortsForDropdown(
   all: Port[],
   mode: "Auto" | Region,
@@ -284,11 +285,9 @@ export function usePorts() {
     if (!index || !query) return null;
     const key = normalize(query);
 
-    // exact by name/aliases
     const id = index.byKey[key];
     if (id && index.byId[id]) return index.byId[id];
 
-    // exact by label
     const exactLabel = index.options.find((o) => normalize(o) === key);
     if (exactLabel) {
       const p = index.all.find(
@@ -297,7 +296,6 @@ export function usePorts() {
       if (p) return p;
     }
 
-    // includes
     const p = index.all.find(
       (x) =>
         normalize(x.name).includes(key) ||
