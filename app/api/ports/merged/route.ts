@@ -5,6 +5,7 @@ import { buildMergedPorts, type MergedPort } from "@/lib/portsMerged";
 export const runtime = "nodejs";
 
 type PortCategory = "harbor" | "marina" | "anchorage" | "spot";
+
 type ApiPort = {
   id: string;
   name: string;
@@ -15,6 +16,7 @@ type ApiPort = {
   aliases?: string[];
 };
 
+/* ===== Helper για έλεγχο ονόματος ===== */
 function isNameLike(raw: string) {
   const s = (raw || "").trim();
   if (!s) return false;
@@ -27,10 +29,12 @@ function isNameLike(raw: string) {
   return /^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().\-]+$/.test(s);
 }
 
+/* ===== GET endpoint ===== */
 export async function GET() {
   try {
     const merged: MergedPort[] = await buildMergedPorts();
 
+    // Χτίζουμε canonical λίστα
     const list: ApiPort[] = merged
       .map((p, i): ApiPort => ({
         id: String(p.id ?? `p-${i}`),
@@ -41,10 +45,23 @@ export async function GET() {
         category: (p.category as PortCategory) ?? "harbor",
         aliases: (Array.isArray(p.aliases) ? p.aliases : []).filter(isNameLike),
       }))
-      // Χρειαζόμαστε όνομα + region + coords
+      // Χρειαζόμαστε όνομα + region + συντεταγμένες
       .filter(p => !!p.name && !!p.region && typeof p.lat === "number" && typeof p.lon === "number");
 
-    return NextResponse.json(list, { status: 200 });
+    // ===== Διαγνωστικά headers =====
+    const res = NextResponse.json(list, { status: 200 });
+
+    try {
+      const sgCount = (merged as any[]).filter(p => p?.__source === "seaguide").length;
+      res.headers.set("x-merged-source", "ports+seaguide");
+      res.headers.set("x-merged-count", String(list.length));
+      res.headers.set("x-merged-seaguide", String(sgCount));
+    } catch {
+      res.headers.set("x-merged-source", "ports-only");
+    }
+
+    return res;
+
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "failed" }, { status: 500 });
   }
