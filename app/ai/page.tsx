@@ -113,20 +113,15 @@ function sanitizeName(raw: string) {
 function isNameLike(raw: string) {
   const s = (raw || "").trim();
   if (!s) return false;
-  // αποκλείουμε οτιδήποτε έχει τελείες/;!/—/κόμματα ή ψηφία (π.χ. "Βάθη 2–4 m")
   if (/[0-9.;:!?]/.test(s)) return false;
-  // πολύ μακρύ, μάλλον πρόταση
   if (s.length > 40) return false;
-  // πάνω από 6 λέξεις = πιθανό note
   if (s.split(/\s+/).filter(Boolean).length > 6) return false;
-  // φράσεις που εμφανίζονται στα notes
   const badStarts = [
     "Άφιξη","Αφιξη","Είσοδος","Έξοδος","Εξοδος","Βάθη","Καλύτερα",
     "Επικοινωνία","Προσοχή","Σημείωση","Άνεμος","Μελτέμι","Shelter","Depth","Entrance","Better","Call","Arrival","Notes"
   ];
   const lower = s.toLowerCase();
   if (badStarts.some(w => lower.startsWith(w.toLowerCase()))) return false;
-  // επιτρέπουμε μόνο γράμματα, κενά, απόστροφους, παύλες, παρενθέσεις
   if (!/^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().-]+$/.test(s)) return false;
   return true;
 }
@@ -152,7 +147,6 @@ function AutoCompleteInput({
   const [showAll, setShowAll] = useState(false);
   const [hasFocus, setHasFocus] = useState(false);
 
-  // καθαρίζουμε & ΦΙΛΤΡΑΡΟΥΜΕ (μόνο name-like)
   const CLEAN_OPTIONS = useMemo(() => {
     const set = new Set<string>();
     for (const o of options || []) {
@@ -418,61 +412,6 @@ const PORT_FACTS: Record<string, { fuel?: boolean; water?: boolean; provisions?:
   "Serifos": { fuel: false, water: true, provisions: true, berth: true },
 };
 
-/* ========= Wikipedia helper ========= */
-type WikiCard = {
-  title: string; summary: string; imageUrl?: string; gallery?: string[];
-  coords?: { lat: number; lon: number }; sourceUrl?: string;
-  related?: { title: string; thumb?: string }[];
-};
-async function fetchWikiJSON(url: string) {
-  const r = await fetch(url, { headers: { accept: "application/json" } });
-  if (!r.ok) throw new Error("wiki fetch");
-  return r.json();
-}
-function encTitle(s: string) { return encodeURIComponent(s.replace(/\s+/g, "_")); }
-async function fetchWikiCard(placeName: string): Promise<WikiCard> {
-  const langs = ["el", "en"];
-  const base = (lang: string) => `https://${lang}.wikipedia.org/api/rest_v1`;
-  let summaryData: any = null;
-  for (const lang of langs) {
-    try {
-      summaryData = await fetchWikiJSON(`${base(lang)}/page/summary/${encTitle(placeName)}`);
-      if (summaryData?.title) break;
-    } catch {}
-  }
-  const card: WikiCard = {
-    title: summaryData?.title ?? placeName,
-    summary: summaryData?.extract ?? "",
-    imageUrl: summaryData?.thumbnail?.source,
-    coords: summaryData?.coordinates ? { lat: summaryData.coordinates.lat, lon: summaryData.coordinates.lon } : undefined,
-    sourceUrl: summaryData?.content_urls?.desktop?.page,
-    gallery: [],
-    related: [],
-  };
-  try {
-    const lang = summaryData?.lang ?? "en";
-    const media = await fetchWikiJSON(`${base(lang)}/page/media/${encTitle(card.title)}`);
-    const pics: string[] = [];
-    for (const item of media?.items ?? []) {
-      if (item?.type === "image") {
-        const src = item?.srcset?.[item.srcset.length - 1]?.src || item?.src || item?.thumbnail?.source;
-        if (src) pics.push(src);
-      }
-    }
-    card.gallery = Array.from(new Set([...(card.imageUrl ? [card.imageUrl] : []), ...pics])).slice(0, 8);
-    if (!card.imageUrl && card.gallery?.length) card.imageUrl = card.gallery[0];
-  } catch {}
-  try {
-    const lang = summaryData?.lang ?? "en";
-    const rel = await fetchWikiJSON(`${base(lang)}/page/related/${encTitle(card.title)}`);
-    card.related = (rel?.pages ?? []).map((p: any) => ({
-      title: p?.titles?.display ?? p?.title,
-      thumb: p?.thumbnail?.source,
-    })).filter((x: any) => !!x.title).slice(0, 8);
-  } catch {}
-  return card;
-}
-
 /* ========= LIVE Weather ========= */
 type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string; windKts?: number; gustKts?: number };
 const weatherCache = new Map<string, SpotWeather>();
@@ -556,7 +495,7 @@ function AIPlannerInner() {
     return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
   };
 
-  // ✅ Μόνο καθαρά ονόματα — ποτέ notes από portFacts
+  // ✅ μόνο καθαρά ονόματα
   const PORT_OPTIONS = useMemo(() => {
     const set = new Set<string>();
     for (const p of (ports as any[] ?? [])) {
@@ -593,6 +532,10 @@ function AIPlannerInner() {
 
   const [thumbs, setThumbs] = useState<Record<string, string | undefined>>({});
   const [destWeather, setDestWeather] = useState<Record<string, SpotWeather>>({});
+
+  // NEW: Routing weather toggle & leg metrics
+  const [routeWeatherAware, setRouteWeatherAware] = useState<boolean>(false);     // <— toggle
+  const [legMeteo, setLegMeteo] = useState<Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }>>([]); // <— table data
 
   // Region mode
   const [start, setStart] = useState<string>("Alimos");
@@ -986,12 +929,23 @@ function AIPlannerInner() {
               </div>
             </div>
 
-            {/* MAP */}
+            {/* MAP toolbar */}
             <div className="no-print mb-2 flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-brand-navy">Map Pick Mode:</span>
               <label className="text-sm flex items-center gap-1"><input type="radio" name="pick" checked={mapPickMode==="Start"} onChange={() => setMapPickMode("Start")} />Start</label>
               <label className="text-sm flex items-center gap-1"><input type="radio" name="pick" checked={mapPickMode==="End"} onChange={() => setMapPickMode("End")} />End</label>
               <label className="text-sm flex items-center gap-1"><input type="radio" name="pick" checked={mapPickMode==="Via"} onChange={() => setMapPickMode("Via")} />{mode==="Region" ? "Via (Region)" : "Next Stop (Custom)"} </label>
+
+              {/* NEW: routing weather toggle */}
+              <label className="text-sm flex items-center gap-2 ml-2">
+                <input
+                  type="checkbox"
+                  checked={routeWeatherAware}
+                  onChange={(e)=>setRouteWeatherAware(e.target.checked)}
+                />
+                In-transit weather (routing)
+              </label>
+
               {mode === "Custom" && (
                 <>
                   <label className="text-sm flex items-center gap-1"><input type="radio" name="pick" checked={mapPickMode==="Custom"} onChange={() => setMapPickMode("Custom")} />Set Day:</label>
@@ -1005,7 +959,14 @@ function AIPlannerInner() {
             {mapPoints.length >= 1 && (
               <div className="no-print mb-6">
                 <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
-                  <RouteMapClient points={mapPoints} markers={markers} activeNames={activeNames} onMarkerClick={handleMarkerClick}/>
+                  <RouteMapClient
+                    points={mapPoints}
+                    markers={markers}
+                    activeNames={activeNames}
+                    onMarkerClick={handleMarkerClick}
+                    weatherAwareProp={routeWeatherAware}             // NEW
+                    onLegMeteo={(rows)=>setLegMeteo(rows)}           // NEW
+                  />
                 </div>
                 <div className="mt-2 text-xs text-slate-500">
                   * Map preview για σχεδιασμό. Η διακεκομμένη γραμμή είναι εκτίμηση, όχι ναυτικός διάδρομος.
@@ -1023,6 +984,40 @@ function AIPlannerInner() {
                   <div><div className="text-xs print-subtle">Distance</div><div className="font-medium">{totals.nm} nm</div></div>
                   <div><div className="text-xs print-subtle">Underway</div><div className="font-medium">{totals.hrs}</div></div>
                   {yachtType === "Motor" && (<div><div className="text-xs print-subtle">Fuel / Cost</div><div className="font-medium">~{totals.fuel} L • ~€{totals.cost}</div></div>)}
+                </div>
+              </div>
+            )}
+
+            {/* NEW: In-transit weather table */}
+            {legMeteo.length > 0 && (
+              <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="text-sm font-medium text-brand-navy">In-transit weather per leg</div>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-slate-500">
+                        <th className="py-1 pr-3">Leg</th>
+                        <th className="py-1 pr-3">Avg wind (m/s)</th>
+                        <th className="py-1 pr-3">Avg wave (m)</th>
+                        <th className="py-1 pr-3">Max wind</th>
+                        <th className="py-1 pr-3">Max wave</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {legMeteo.map((r, i)=>(
+                        <tr key={i} className="border-t">
+                          <td className="py-1 pr-3">{r.from} → {r.to}</td>
+                          <td className="py-1 pr-3">{Number.isFinite(r.avgWind) ? r.avgWind : "—"}</td>
+                          <td className="py-1 pr-3">{Number.isFinite(r.avgWave) ? r.avgWave : "—"}</td>
+                          <td className="py-1 pr-3">{Number.isFinite(r.maxWind) ? r.maxWind : "—"}</td>
+                          <td className="py-1 pr-3">{Number.isFinite(r.maxWave) ? r.maxWave : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  * Προέλευση: Open-Meteo Marine (τρέχουσα ώρα grid). Προσεγγιστικά μεγέθη κατά μήκος της διαδρομής.
                 </div>
               </div>
             )}

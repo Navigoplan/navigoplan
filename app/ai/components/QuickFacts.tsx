@@ -1,10 +1,12 @@
 "use client";
-import React from "react";
+
+import React, { useEffect, useState } from "react";
 import {
   getPortFacts,
   type PortFact,
   type PortHazard,
-} from "../../../lib/ports/portFacts"; // <-- σωστό path
+} from "../../../lib/ports/portFacts";
+import { getSGWeather } from "../../../lib/sgWeather";
 
 /* ====== Local weather type (ό,τι χρειαζόμαστε εδώ) ====== */
 type SpotWeather = {
@@ -53,13 +55,25 @@ type Props = { name: string; wx?: SpotWeather };
 export default function QuickFacts({ name, wx }: Props) {
   const facts: PortFact | undefined = getPortFacts(name);
   const bft = ktToBeaufort(wx?.windKts);
-  if (!facts && !wx) return null;
+
+  // SeaGuide weather (περιγραφικό κείμενο)
+  const [sgWx, setSgWx] = useState<{ el?: string; en?: string } | undefined>();
+  useEffect(() => {
+    let stop = false;
+    (async () => {
+      try { const r = await getSGWeather(name); if (!stop) setSgWx(r); }
+      catch { /* noop */ }
+    })();
+    return () => { stop = true; };
+  }, [name]);
+
+  if (!facts && !wx && !sgWx) return null;
 
   return (
     <div className="rounded-xl border p-3">
       <div className="mb-1 text-sm font-semibold">Quick facts</div>
 
-      {/* VHF / Shelter / Exposure */}
+      {/* Badges line */}
       <div className="flex flex-wrap gap-2 text-xs">
         {facts?.vhf && (
           <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5">
@@ -81,13 +95,26 @@ export default function QuickFacts({ name, wx }: Props) {
             <b>Exposure:</b> {facts.exposure}
           </span>
         )}
+
+        {/* LIVE WX (Open-Meteo) */}
         {wx && (
-          <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5">
-            <b>WX:</b> {wx.label ?? "—"}
+          <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5" title="Real-time weather">
+            <b>Live WX:</b> {wx.label ?? "—"}
             {wx.tempC != null && <> • {wx.tempC}°C</>}
             {wx.windKts != null && (
               <> • {Math.round(wx.windKts)} kt (Bft {bft}{bftLabel(bft) ? `, ${bftLabel(bft)}` : ""})</>
             )}
+          </span>
+        )}
+
+        {/* SeaGuide WX (text) */}
+        {sgWx && (sgWx.el || sgWx.en) && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5"
+            title={sgWx.en ?? sgWx.el ?? ""}
+          >
+            <b>SeaGuide WX:</b> {(sgWx.el || sgWx.en)!.slice(0, 80)}
+            {(sgWx.el || sgWx.en)!.length > 80 ? "…" : ""}
           </span>
         )}
       </div>
