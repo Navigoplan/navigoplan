@@ -13,7 +13,6 @@ type ApiPort = {
   category?: PortCategory;
   region?: string;
   aliases?: string[];
-  subregionTags?: string[];
 };
 
 function isNameLike(raw: string) {
@@ -33,19 +32,17 @@ export async function GET() {
     const merged: MergedPort[] = await buildMergedPorts();
 
     const list: ApiPort[] = merged
-      .map((p: MergedPort, i: number): ApiPort => {
-        const id = String(p.id ?? `p-${i}`);
-        const name = String(p.name ?? "").trim();
-        const lat = typeof p.lat === "number" ? p.lat : undefined;
-        const lon = typeof p.lon === "number" ? p.lon : undefined;
-        const region = String(p.region ?? "").trim();
-        const category = (p.category as PortCategory) ?? "harbor";
-        const aliases = (Array.isArray(p.aliases) ? p.aliases : []).filter(isNameLike);
-        const subregionTags = Array.isArray(p.subregionTags) ? p.subregionTags : undefined;
-        return { id, name, lat, lon, region, category, aliases, subregionTags };
-      })
-      // Χρειαζόμαστε coords για Map/AI — κράτα μόνο όσα έχουν και lat/lon
-      .filter((p: ApiPort) => !!p.name && !!p.region && typeof p.lat === "number" && typeof p.lon === "number");
+      .map((p, i): ApiPort => ({
+        id: String(p.id ?? `p-${i}`),
+        name: String(p.name ?? "").trim(),
+        lat: typeof p.lat === "number" ? p.lat : undefined,
+        lon: typeof p.lon === "number" ? p.lon : undefined,
+        region: String(p.region ?? "").trim(),
+        category: (p.category as PortCategory) ?? "harbor",
+        aliases: (Array.isArray(p.aliases) ? p.aliases : []).filter(isNameLike),
+      }))
+      // Χρειαζόμαστε όνομα + region + coords
+      .filter(p => !!p.name && !!p.region && typeof p.lat === "number" && typeof p.lon === "number");
 
     return NextResponse.json(list, { status: 200 });
   } catch (err: any) {
