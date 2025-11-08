@@ -2,10 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { buildMergedPorts } from "./portsMerged";
-
-// ✅ Διαβάζουμε τα facts από το αρχείο σου (lowercase path, named export)
-import { FACTS as PORT_FACTS } from "./ports/portFacts";
 
 /* =========================
  *  Regions & Types
@@ -20,6 +16,7 @@ export const REGIONS = [
   "Crete",
 ] as const;
 export type Region = typeof REGIONS[number];
+
 export type PortCategory = "harbor" | "marina" | "anchorage" | "spot";
 
 export type Port = {
@@ -28,9 +25,14 @@ export type Port = {
   lat: number;
   lon: number;
   category: PortCategory;
+  /** Ομαδοποίηση στις 7 βασικές περιοχές */
   region: Region;
-  aliases?: string[];
+  /** Το ακατέργαστο region του backend (π.χ. "Korinthia", "Messinia"…) */
+  originalRegion?: string;
+  /** Δίγλωσση ετικέτα π.χ. "Hydra (Ύδρα)" ή "Ύδρα (Hydra)" */
   label?: string;
+  /** Όλα τα aliases (Ελληνικά + Αγγλικά) για αναζήτηση/autocomplete */
+  aliases?: string[];
 };
 
 /* =========================
@@ -43,35 +45,90 @@ export function normalize(s: string) {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
 }
-function isGreek(s: string) { return /[\u0370-\u03FF]/.test(s); }
-
+function isGreek(s: string) {
+  return /[\u0370-\u03FF]/.test(String(s || ""));
+}
 function uniq<T>(arr: T[]) {
-  const out: T[] = [];
   const seen = new Set<string>();
+  const out: T[] = [];
   for (const x of arr) {
-    const k = typeof x === "string" ? normalize(x) : JSON.stringify(x);
-    if (!seen.has(k)) { seen.add(k); out.push(x); }
+    const k =
+      typeof x === "string" ? normalize(x) : JSON.stringify(x ?? null);
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(x);
+    }
   }
   return out;
 }
-
 function guessCategoryFromName(nm: string): PortCategory {
   const n = nm.toLowerCase();
-  if (/\bmarina\b/.test(n)) return "marina";
-  if (/\b(cove|bay|anchorage)\b/.test(n) || /όρμος|κολπ/.test(n)) return "anchorage";
-  if (/\bcanal\b/.test(n)) return "spot";
+  if (/\bmarina\b/.test(n) || /μαρίν/.test(n)) return "marina";
+  if (/\b(cove|bay|anchorage)\b/.test(n) || /όρμος|κολπ/.test(n))
+    return "anchorage";
+  if (/\bcanal\b/.test(n) || /διώρυγ/.test(n)) return "spot";
   return "harbor";
 }
 
+/** Κρατάμε μόνο καθαρά labels για dropdown (όχι φράσεις όπως "Entrance", "Depth" κ.λπ.) */
+function isNameLike(raw: string) {
+  const s = (raw || "").trim();
+  if (!s) return false;
+  if (/[0-9.;:!?]/.test(s)) return false; // π.χ. "Βάθη 2–4 m."
+  if (s.length > 64) return false;
+  if (s.split(/\s+/).length > 8) return false;
+  const bad = [
+    "άφιξη",
+    "αφιξη",
+    "είσοδος",
+    "εξοδος",
+    "έξοδος",
+    "βάθη",
+    "καλύτερα",
+    "επικοινωνία",
+    "σημείωση",
+    "arrival",
+    "entrance",
+    "depth",
+    "better",
+    "notes",
+    "call",
+  ];
+  if (bad.some((w) => s.toLowerCase().startsWith(w))) return false;
+  return /^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().\-]+$/.test(s);
+}
+
+/** Αν υπάρχει παρενθετικό, το κρατάμε μόνο αν φαίνεται "τόπος" (όχι περιγραφικό) */
 const BANNED_IN_PARENS = [
-  "traffic","change-over","change over","crowd","crowded","meltemi","swell",
-  "fuel","water","power","taxi","shops","supermarket","notes",
-  "πολύ","παρασκευή","σάββατο","άνεμο","άνεμοι","κύμα","ρηχ","βράχ","τηλέφ","σημείωση"
+  "traffic",
+  "change-over",
+  "change over",
+  "crowd",
+  "crowded",
+  "meltemi",
+  "swell",
+  "fuel",
+  "water",
+  "power",
+  "taxi",
+  "shops",
+  "supermarket",
+  "notes",
+  "πολύ",
+  "παρασκευή",
+  "σάββατο",
+  "άνεμο",
+  "άνεμοι",
+  "κύμα",
+  "ρηχ",
+  "βράχ",
+  "τηλέφ",
+  "σημείωση",
 ];
 function isCleanParen(inner: string) {
   const s = (inner || "").trim().toLowerCase();
   if (!s) return false;
-  if (BANNED_IN_PARENS.some(w => s.includes(w))) return false;
+  if (BANNED_IN_PARENS.some((w) => s.includes(w))) return false;
   if (/[0-9.;:!?]/.test(s)) return false;
   if (s.split(/\s+/).length > 3) return false;
   return s.length <= 28;
@@ -81,24 +138,16 @@ function sanitizeName(raw: string) {
   if (!s) return s;
   const matches = s.match(/\(([^)]+)\)/g);
   if (!matches) return s;
-  const clean = matches.map(t => t.slice(1, -1)).find(isCleanParen);
+  const clean = matches.map((t) => t.slice(1, -1)).find(isCleanParen);
   if (!clean) return s.replace(/\s*\([^)]+\)/g, "").trim();
   s = s.replace(/\s*\([^)]+\)/g, "").trim();
   return `${s} (${clean})`;
 }
-function isNameLike(raw: string) {
-  const s = (raw || "").trim();
-  if (!s) return false;
-  if (/[0-9.;:!?]/.test(s)) return false;        // π.χ. "Βάθη 2–4 m."
-  if (s.length > 40) return false;
-  if (s.split(/\s+/).length > 6) return false;
-  const bad = ["άφιξη","αφιξη","είσοδος","εξοδος","έξοδος","βάθη","καλύτερα","επικοινωνία","σημείωση","arrival","entrance","depth","better","notes","call"];
-  if (bad.some(w => s.toLowerCase().startsWith(w))) return false;
-  return /^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ\s'().-]+$/.test(s);
-}
+
+/** Δίγλωσση σύνθεση ετικέτας */
 function bilingualLabel(primary: string, aliases: string[]) {
-  const en = [primary, ...aliases].find(x => !isGreek(x)) || primary;
-  const el = [primary, ...aliases].find(x => isGreek(x));
+  const en = [primary, ...aliases].find((x) => !isGreek(x)) || primary;
+  const el = [primary, ...aliases].find((x) => isGreek(x));
   if (el && normalize(el) !== normalize(en)) {
     return isGreek(primary) ? `${primary} (${en})` : `${primary} (${el})`;
   }
@@ -106,71 +155,68 @@ function bilingualLabel(primary: string, aliases: string[]) {
 }
 
 /* =========================
- *  Enrichment from portFacts (aliases μόνο)
+ *  Bucket: σε 7 βασικές περιοχές
  * =======================*/
-function extractParenPlace(label: string): string | null {
-  const m = label.match(/\(([^)]+)\)/);
-  if (!m) return null;
-  const inner = m[1].trim();
-  return isCleanParen(inner) ? inner : null;
-}
+function bucketRegion(rawRegion: string, name: string, lat: number, lon: number): Region {
+  const r = (rawRegion || "").toLowerCase();
+  const nm = (name || "").toLowerCase();
 
-/**
- * Προσθέτει στα υπάρχοντα ports aliases από τα **keys** του portFacts:
- * - Προτίμηση σε match με το παρενθετικό (π.χ. "(Hydra)").
- * - Fallback: exact match στο πλήρες label ή contains.
- * - Δεν δημιουργεί νέα ports χωρίς coords· μόνο aliases.
- */
-function enrichWithFacts(list: Port[]): Port[] {
-  const out = list.map(p => ({ ...p, aliases: [...(p.aliases ?? [])] as string[] }));
-
-  const byName = new Map<string, number>();
-  const byAlias = new Map<string, number>();
-  out.forEach((p, i) => {
-    byName.set(normalize(p.name), i);
-    (p.aliases ?? []).forEach(a => byAlias.set(normalize(a), i));
-  });
-
-  const addAlias = (idx: number, al: string) => {
-    const clean = sanitizeName(al);
-    if (!clean || !isNameLike(clean)) return;
-    const arr = out[idx].aliases ?? (out[idx].aliases = []);
-    if (!arr.some(a => normalize(a) === normalize(clean))) arr.push(clean);
-  };
-
-  const keys = Object.keys(PORT_FACTS ?? {});
-  for (const raw of keys) {
-    const label = sanitizeName(String(raw || ""));
-    if (!isNameLike(label)) continue;
-
-    const inner = extractParenPlace(label);
-    let idx: number | undefined;
-
-    if (inner) {
-      idx = byName.get(normalize(inner));
-      if (idx === undefined) idx = byAlias.get(normalize(inner));
-    }
-    if (idx === undefined) {
-      idx = byName.get(normalize(label));
-      if (idx === undefined) idx = byAlias.get(normalize(label));
-    }
-    if (idx === undefined && inner) {
-      idx = out.findIndex(
-        p =>
-          normalize(p.name) === normalize(inner) ||
-          (p.aliases ?? []).some(a => normalize(a) === normalize(inner))
-      );
-      if (idx < 0) idx = undefined;
-    }
-
-    if (idx !== undefined) addAlias(idx, label);
+  // Λέξεις-κλειδιά
+  if (r.includes("ion") || nm.includes("zakynth") || nm.includes("corfu") || nm.includes("kerkyra") || nm.includes("paxos") || nm.includes("lefka")) {
+    return "Ionian";
+  }
+  if (r.includes("cycl") || nm.includes("mykon") || nm.includes("naxos") || nm.includes("paros") || nm.includes("kea") || nm.includes("kythn") || nm.includes("serif") || nm.includes("sifn") || nm.includes("santor")) {
+    return "Cyclades";
+  }
+  if (r.includes("dodec") || nm.includes("rhodes") || nm.includes("rodos") || nm.includes("kos") || nm.includes("kalymn") || nm.includes("leros") || nm.includes("patmos")) {
+    return "Dodecanese";
+  }
+  if (r.includes("spor") || nm.includes("skiath") || nm.includes("skopel") || nm.includes("aloniss")) {
+    return "Sporades";
+  }
+  if (r.includes("crete") || r.includes("krit") || nm.includes("herakl") || nm.includes("chania") || nm.includes("rethym") || nm.includes("agios nikolaos") || nm.includes("sitia")) {
+    return "Crete";
+  }
+  if (r.includes("north") || r.includes("aeg") || nm.includes("thessalon") || nm.includes("kavala") || nm.includes("lesvos") || nm.includes("mytil") || nm.includes("chios") || nm.includes("samos") || nm.includes("ikaria") || nm.includes("samothr")) {
+    return "NorthAegean";
   }
 
-  return out;
+  // Κορινθιακός / Σαρωνικός / Πελοπόννησος → Saronic (για το planner)
+  if (r.includes("korinth") || r.includes("corinth") || r.includes("pelop") || r.includes("saron") || nm.includes("korinth") || nm.includes("loutraki") || nm.includes("aegina") || nm.includes("poros") || nm.includes("hydra") || nm.includes("spetses")) {
+    return "Saronic";
+  }
+
+  // Fallback με γεωγραφικά όρια
+  // Αδρά: Κρήτη (lat < 35.1), Ιόνιο (lon < 21.5), Β. Αιγαίο (lon > 24.8 && lat > 38.5), Σποράδες (lat ~39, lon 23-24), αλλιώς Σαρωνικός
+  if (lat < 35.1) return "Crete";
+  if (lon < 21.5) return "Ionian";
+  if (lon > 24.8 && lat > 38.5) return "NorthAegean";
+  if (lat > 38.5 && lon >= 23 && lon <= 24.5) return "Sporades";
+  return "Saronic";
 }
 
 /* =========================
- *  Index (περιλαμβάνει ΟΛΑ τα aliases στο dropdown)
+ *  API fetch
+ * =======================*/
+type APIRow = {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  category?: string;
+  region?: string; // raw
+  aliases?: string[];
+};
+
+async function fetchMerged(): Promise<APIRow[]> {
+  const res = await fetch("/api/ports/merged", { cache: "no-store" });
+  if (!res.ok) throw new Error(`merged fetch: ${res.status}`);
+  const json = await res.json();
+  return Array.isArray(json) ? (json as APIRow[]) : [];
+}
+
+/* =========================
+ *  Build index (με ΟΛΑ τα aliases στο dropdown)
  * =======================*/
 type PortIndex = {
   all: Port[];
@@ -178,6 +224,7 @@ type PortIndex = {
   byKey: Record<string, string>;
   options: string[];
 };
+
 function buildIndex(list: Port[]): PortIndex {
   const byId: Record<string, Port> = {};
   const byKey: Record<string, string> = {};
@@ -186,21 +233,20 @@ function buildIndex(list: Port[]): PortIndex {
   for (const p of list) {
     byId[p.id] = p;
     byKey[normalize(p.name)] = p.id;
-    (p.aliases ?? []).forEach(a => (byKey[normalize(a)] = p.id));
+    (p.aliases ?? []).forEach((a) => (byKey[normalize(a)] = p.id));
 
     // κύριο label
-    if (p.label) opts.add(p.label);
-    else opts.add(p.name);
+    opts.add(p.label || p.name);
 
-    // ΟΛΑ τα aliases (καθαρά) ως ξεχωριστές επιλογές
-    (p.aliases ?? []).forEach(a => {
-      const s = sanitizeName(a);
+    // όλα τα aliases (καθαρά)
+    (p.aliases ?? []).forEach((a) => {
+      const s = sanitizeName(String(a || ""));
       if (s && isNameLike(s)) opts.add(s);
     });
 
-    // +δίγλωσσα combos για άνεση αναζήτησης
+    // δίγλωσσα combos για ευκολία
     const gr = (p.aliases ?? []).find(isGreek);
-    const la = (p.aliases ?? []).find(x => !isGreek(x));
+    const la = (p.aliases ?? []).find((x) => !isGreek(x));
     if (gr) opts.add(`${p.name} (${gr})`);
     if (la && isGreek(p.name)) opts.add(`${p.name} (${la})`);
   }
@@ -214,72 +260,111 @@ function buildIndex(list: Port[]): PortIndex {
 }
 
 /* =========================
- *  Build & Hook
+ *  Public API
  * =======================*/
-function buildPortsFromMerged(): Port[] {
-  let merged = buildMergedPorts().map((m, i) => {
-    const name = sanitizeName(String(m.name ?? "").trim());
-    const id = String(m.id ?? `merged-${i}-${normalize(name).slice(0, 40)}`).trim();
-
-    const reg = (REGIONS.find(r => r.toLowerCase() === String(m.region ?? "").toLowerCase()) ?? "Saronic") as Region;
-    const cat = (m.category as PortCategory) ?? guessCategoryFromName(name);
-
-    const aliases = uniq(
-      [name, ...(Array.isArray(m.aliases) ? m.aliases : [])]
-        .map(x => sanitizeName(String(x || "")))
-        .filter(isNameLike)
-    ).slice(0, 60);
-
-    const lat = typeof (m as any).lat === "number" ? (m as any).lat : NaN;
-    const lon = typeof (m as any).lon === "number" ? (m as any).lon : NaN;
-
-    const label = bilingualLabel(name, aliases);
-
-    return { id, name, lat, lon, category: cat, region: reg, aliases, label } as Port;
-  }).filter(p => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.region);
-
-  // ➕ Εμπλουτισμός με portFacts (aliases μόνο)
-  merged = enrichWithFacts(merged);
-
-  return merged;
-}
-
 export function portMatchesQuery(p: Port, q: string) {
   if (!q) return true;
   const needle = normalize(q);
   if (normalize(p.name).includes(needle)) return true;
   if (p.label && normalize(p.label).includes(needle)) return true;
-  return (p.aliases ?? []).some(a => normalize(a).includes(needle));
+  return (p.aliases ?? []).some((a) => normalize(a).includes(needle));
 }
 
-export function guessRegionFromPorts(ports: Array<Port | null | undefined>): Region | "Multi" | null {
+export function guessRegionFromPorts(
+  ports: Array<Port | null | undefined>
+): Region | "Multi" | null {
   const valid = ports.filter(Boolean) as Port[];
-  const set = new Set(valid.map(p => p.region));
+  const set = new Set(valid.map((p) => p.region));
   if (set.size === 0) return null;
   if (set.size === 1) return valid[0].region;
   return "Multi";
 }
+
 export function getAutoRegionLabel(auto: Region | "Multi" | null) {
   if (!auto) return "Auto";
   return auto === "Multi" ? "Auto (multi-region)" : `${auto} (auto)`;
 }
-export function filterPortsForDropdown(all: Port[], mode: "Auto" | Region, query: string) {
-  const base = mode === "Auto" ? all : all.filter(p => p.region === mode);
-  return base.filter(p => portMatchesQuery(p, query));
+
+/** Φιλτράρει για το region dropdown του Planner */
+export function filterPortsForDropdown(
+  all: Port[],
+  mode: "Auto" | Region,
+  query: string
+) {
+  const base = mode === "Auto" ? all : all.filter((p) => p.region === mode);
+  return base.filter((p) => portMatchesQuery(p, query));
 }
 
+/* =========================
+ *  Hook
+ * =======================*/
 export function usePorts() {
   const [ports, setPorts] = useState<Port[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    try {
-      const list = buildPortsFromMerged();
-      setPorts(list);
-    } catch (e) {
-      setError(e as Error);
-      setPorts([]);
-    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchMerged();
+
+        // Χτίζουμε Port αντικείμενα με δίγλωσσα labels & aliases
+        let list: Port[] = rows
+          .map((r, i) => {
+            const name = sanitizeName(String(r.name || "").trim());
+            if (!name || !Number.isFinite(r.lat) || !Number.isFinite(r.lon))
+              return null;
+
+            const rawAliases = Array.isArray(r.aliases) ? r.aliases : [];
+            const aliases = uniq(
+              [name, ...rawAliases]
+                .map((x) => sanitizeName(String(x || "")))
+                .filter(isNameLike)
+            ).slice(0, 80);
+
+            const label = bilingualLabel(name, aliases);
+            const cat = (r.category as PortCategory) || guessCategoryFromName(name);
+            const region = bucketRegion(String(r.region || ""), name, r.lat, r.lon);
+
+            const id =
+              String((r as any).id ?? `m-${i}-${normalize(name).slice(0, 40)}`).trim();
+
+            return {
+              id,
+              name,
+              lat: Number(r.lat),
+              lon: Number(r.lon),
+              category: cat,
+              region,
+              originalRegion: r.region || "",
+              label,
+              aliases,
+            } as Port;
+          })
+          .filter(Boolean) as Port[];
+
+        // dedupe με βάση (name,lat,lon)
+        const seen = new Set<string>();
+        list = list.filter((p) => {
+          const k = `${normalize(p.name)}|${p.lat.toFixed(5)}|${p.lon.toFixed(
+            5
+          )}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+
+        if (!cancelled) setPorts(list);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e as Error);
+          setPorts([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const index = useMemo(() => (ports ? buildIndex(ports) : null), [ports]);
@@ -292,20 +377,24 @@ export function usePorts() {
     const id = index.byKey[key];
     if (id && index.byId[id]) return index.byId[id];
 
-    // exact: label
-    const exact = index.options.find(o => normalize(o) === key);
+    // exact: συνολικό label
+    const exact = index.options.find((o) => normalize(o) === key);
     if (exact) {
-      const p = index.all.find(x => normalize(x.label || x.name) === key);
+      const p = index.all.find(
+        (x) => normalize(x.label || x.name) === key
+      );
       if (p) return p;
     }
 
     // includes
-    return index.all.find(
-      x =>
-        normalize(x.name).includes(key) ||
-        normalize(x.label || "").includes(key) ||
-        (x.aliases ?? []).some(a => normalize(a).includes(key))
-    ) ?? null;
+    return (
+      index.all.find(
+        (x) =>
+          normalize(x.name).includes(key) ||
+          normalize(x.label || "").includes(key) ||
+          (x.aliases ?? []).some((a) => normalize(a).includes(key))
+      ) ?? null
+    );
   }
 
   return {
@@ -314,6 +403,8 @@ export function usePorts() {
     ports: ports ?? [],
     options: index?.options ?? [],
     findPort,
+
+    // Χρήσιμα έξτρα για UI
     byId: index?.byId ?? {},
     all: index?.all ?? [],
   };
