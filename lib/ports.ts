@@ -1,4 +1,3 @@
-// lib/ports.ts
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -27,7 +26,7 @@ export type Port = {
   lon: number;
   category: PortCategory;
   island?: string;
-  /** H περιοχή όπως έρχεται από το JSON */
+  /** Περιοχή όπως έρχεται από το JSON/API */
   region: Region | string;
   aliases?: string[];
 };
@@ -68,14 +67,14 @@ export function guessRegionFromPorts(
   return "Multi";
 }
 
-/** Label που μπορείς να δείξεις στο UI για Auto mode. */
+/** Label για Auto mode. */
 export function getAutoRegionLabel(auto: Region | "Multi" | null) {
   if (!auto) return "Auto";
   if (auto === "Multi") return "Auto (multi-region)";
   return `${auto} (auto)`;
 }
 
-/** Επιστρέφει λίστα για dropdown:
+/** Λίστα για dropdown:
  *  - Σε Auto: όλη η Ελλάδα, μόνο με text query
  *  - Σε manual region: φιλτράρει πρώτα με region και μετά με text query
  */
@@ -110,15 +109,40 @@ function buildIndex(list: Port[]): PortIndex {
 }
 
 /* =========================
- *  Data loader  (UPDATED)
+ *  Data loader
  * =======================*/
+
+/**
+ * Φορτώνει ports:
+ * 1) Πρώτα από /api/ports/merged (ενοποιημένο: canonical + PortFacts + GEO overrides)
+ * 2) Fallback στο static /data/ports.v1.json
+ */
 async function fetchPorts(): Promise<Port[]> {
-  // Τραβάμε το ΕΝΩΜΕΝΟ dataset από το API.
-  const res = await fetch("/api/ports/merged", { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to load /api/ports/merged");
+  // 1) merged API
+  try {
+    const r = await fetch("/api/ports/merged", { cache: "no-store" });
+    if (r.ok) {
+      const arr = (await r.json()) as Port[];
+      return arr.filter(
+        (p) =>
+          p &&
+          typeof p.id === "string" &&
+          typeof p.name === "string" &&
+          typeof p.lat === "number" &&
+          typeof p.lon === "number" &&
+          typeof p.category === "string" &&
+          typeof p.region === "string"
+      );
+    }
+  } catch (e) {
+    console.warn("ports: merged API failed, will try static JSON", e);
+  }
+
+  // 2) fallback στο static JSON
+  const res = await fetch("/data/ports.v1.json", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load ports.v1.json");
   const data = (await res.json()) as Port[];
 
-  // Προστασία: Φιλτράρουμε τυχόν σκουπίδια/ελλιπή records
   return data.filter(
     (p) =>
       p &&
