@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-// ✅ ΣΩΣΤΟ PATH: lib/port/portFacts.ts (singular "port")
+// ΣΩΣΤΟ import για τα facts (singular folder "port")
 import { PORT_FACTS_DATA as PORT_FACTS } from "./ports/portFacts";
 
 /* =========================
@@ -16,7 +16,7 @@ export type Port = {
   lat: number;
   lon: number;
   category: PortCategory;
-  region: string;          // χαλαρό string (Korinthia, Messinia, Ionian, κλπ)
+  region: string;          // π.χ. Ionian, Korinthia, Cyclades, …
   aliases?: string[];
   label?: string;          // δίγλωσσο label για dropdown
 };
@@ -31,17 +31,15 @@ export function normalize(s: string) {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
 }
-function isGreek(s: string) { return /[\u0370-\u03FF]/.test(s); }
+const isGreek = (s: string) => /[\u0370-\u03FF]/.test(s);
 function uniq<T>(arr: T[]) {
-  const out: T[] = [];
-  const seen = new Set<string>();
+  const out: T[] = []; const seen = new Set<string>();
   for (const x of arr) {
     const k = typeof x === "string" ? normalize(x) : JSON.stringify(x);
     if (!seen.has(k)) { seen.add(k); out.push(x); }
   }
   return out;
 }
-
 function guessCategoryFromName(nm: string): PortCategory {
   const n = nm.toLowerCase();
   if (/\bmarina\b/.test(n)) return "marina";
@@ -102,11 +100,6 @@ function extractParenPlace(label: string): string | null {
   return isCleanParen(inner) ? inner : null;
 }
 
-/**
- * Προσθέτει στα ports aliases από τα **keys** του portFacts:
- * - προσπαθεί να “κουμπώσει” με το κύριο όνομα ή το παρενθετικό μέρος
- * - δεν δημιουργεί νέα ports χωρίς coords· μόνο aliases.
- */
 function enrichWithFactsAliases(list: Port[]): Port[] {
   const out = list.map(p => ({ ...p, aliases: [...(p.aliases ?? [])] as string[] }));
 
@@ -184,7 +177,7 @@ function buildIndex(list: Port[]): PortIndex {
       if (s && isNameLike(s)) opts.add(s);
     });
 
-    // +δίγλωσσα combos
+    // + δίγλωσσα combos
     const gr = (p.aliases ?? []).find(isGreek);
     const la = (p.aliases ?? []).find(x => !isGreek(x));
     if (gr) opts.add(`${p.name} (${gr})`);
@@ -200,15 +193,17 @@ function buildIndex(list: Port[]): PortIndex {
 }
 
 /* =========================
- *  Fetch from API & build
+ *  Fetch helpers (API + FallBack)
  * =======================*/
+async function fetchJSON<T>(url: string): Promise<T> {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json() as Promise<T>;
+}
+
 async function fetchMergedApi(): Promise<Port[]> {
-  const res = await fetch("/api/ports/merged", { cache: "no-store" });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`API /api/ports/merged failed: ${res.status} ${t}`);
-  }
-  const arr = (await res.json()) as Array<Partial<Port> & { name: string }>;
+  // 1) Προσπάθεια μέσω API (server merge)
+  const arr = await fetchJSON<Array<Partial<Port> & { name: string }>>("/api/ports/merged");
 
   const list: Port[] = arr
     .map((p, i) => {
@@ -227,11 +222,91 @@ async function fetchMergedApi(): Promise<Port[]> {
       return { id, name, lat, lon, category: cat, region, aliases } as Port;
     })
     .filter(p => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.region);
+
   return list;
 }
 
+/** Fallback όταν το API αποτύχει: χτίζει ports από τα static αρχεία */
+async function fetchFallbackFromStatic(): Promise<Port[]> {
+  // canonical
+  type Canon = { id?: string; name: string; lat?: number; lon?: number; region?: string; category?: PortCategory; aliases?: string[] };
+  let canon: Canon[] = [];
+  try { canon = await fetchJSON<Canon[]>("/data/ports.v1.json"); } catch {}
+
+  // sea guide (προαιρετικό)
+  type SG = {
+    id?: string; region?: string; category?: PortCategory | "bay";
+    position?: { lat?: number; lon?: number };
+    name?: { el?: string; en?: string };
+    aliases?: { el?: string[]; en?: string[] };
+  };
+  let sg: SG[] = [];
+  try { sg = await fetchJSON<SG[]>("/data/sea_guide_vol3_master.json"); } catch {}
+
+  // canonical → βάση
+  const out: Port[] = [];
+  for (let i = 0; i < canon.length; i++) {
+    const c = canon[i];
+    if (!c?.name || typeof c.lat !== "number" || typeof c.lon !== "number") continue;
+    const name = sanitizeName(c.name);
+    const id = String(c.id ?? `canon-${i}-${normalize(name).slice(0,40)}`);
+    const region = String(c.region ?? "Greece").trim();
+    const cat = c.category ?? guessCategoryFromName(name);
+    const aliases = uniq([name, ...(c.aliases ?? [])].map(x => sanitizeName(String(x||""))).filter(isNameLike)).slice(0,80);
+    out.push({ id, name, lat: c.lat!, lon: c.lon!, region, category: cat, aliases });
+  }
+
+  // SeaGuide → merge (αν βρούμε by name, ενώ αλλιώς προσθέτουμε με coords)
+  const byName = new Map<string, number>();
+  out.forEach((p, i) => byName.set(normalize(p.name), i));
+
+  for (let j = 0; j < sg.length; j++) {
+    const r = sg[j];
+    const nameEn = r?.name?.en?.trim();
+    const nameEl = r?.name?.el?.trim();
+    const baseName = nameEn || nameEl || "";
+    if (!baseName) continue;
+
+    const lat = r.position?.lat;
+    const lon = r.position?.lon;
+    const finalCat: PortCategory = (r.category === "bay" ? "anchorage" : (r.category as PortCategory)) || "harbor";
+    const aliases = uniq([...(r.aliases?.en ?? []), ...(r.aliases?.el ?? []), ...(nameEn && nameEl && normalize(nameEn) !== normalize(nameEl) ? [nameEl] : [])]
+      .map(x => sanitizeName(String(x||""))).filter(isNameLike));
+
+    const key = normalize(baseName);
+    const idx = byName.get(key);
+
+    if (idx !== undefined) {
+      // merge σε υπάρχον canonical
+      const prev = out[idx];
+      out[idx] = {
+        ...prev,
+        region: prev.region || (r.region ?? "Greece"),
+        category: prev.category || finalCat,
+        lat: typeof prev.lat === "number" ? prev.lat : (lat ?? prev.lat),
+        lon: typeof prev.lon === "number" ? prev.lon : (lon ?? prev.lon),
+        aliases: uniq([...(prev.aliases ?? []), ...aliases]).slice(0, 80),
+      };
+    } else if (typeof lat === "number" && typeof lon === "number") {
+      const id = String(r.id ?? `sg-${j}-${key.slice(0,40)}`);
+      const name = sanitizeName(baseName);
+      out.push({
+        id,
+        name,
+        lat,
+        lon,
+        region: r.region ?? "Greece",
+        category: finalCat,
+        aliases,
+      });
+    }
+  }
+
+  return out;
+}
+
 /* =========================
- *  Hook
+ *  Hook (με ανθεκτικό fallback)
  * =======================*/
 export function usePorts() {
   const [ports, setPorts] = useState<Port[] | null>(null);
@@ -241,16 +316,29 @@ export function usePorts() {
     let cancelled = false;
     (async () => {
       try {
-        const base = await fetchMergedApi();
+        let base: Port[] = [];
+        try {
+          // 1) API first
+          base = await fetchMergedApi();
+        } catch (e) {
+          // 2) Fallback σε static
+          base = await fetchFallbackFromStatic();
+        }
+
+        // Εμπλουτισμός με aliases από portFacts + δίγλωσσο label
         const enriched = enrichWithFactsAliases(base).map(p => ({
           ...p,
           label: p.label ?? bilingualLabel(p.name, p.aliases ?? []),
         }));
-        if (!cancelled) setPorts(enriched);
+
+        if (!cancelled) {
+          setPorts(enriched);
+          setError(null); // βεβαιωνόμαστε ότι δεν μένει “Σφάλμα dataset”
+        }
       } catch (e: any) {
         if (!cancelled) {
           setError(e as Error);
-          setPorts([]);
+          setPorts([]); // κενό αλλά UI λειτουργεί (χωρίς crash)
         }
       }
     })();
@@ -263,15 +351,18 @@ export function usePorts() {
     if (!index || !q) return null;
     const key = normalize(q);
 
+    // exact: name/alias
     const id = index.byKey[key];
     if (id && index.byId[id]) return index.byId[id];
 
+    // exact: label
     const exact = index.options.find(o => normalize(o) === key);
     if (exact) {
       const p = index.all.find(x => normalize(x.label || x.name) === key);
       if (p) return p;
     }
 
+    // includes
     return (
       index.all.find(
         x =>
