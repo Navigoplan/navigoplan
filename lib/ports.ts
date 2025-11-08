@@ -1,101 +1,172 @@
-// lib/ports.ts
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 
-export const REGIONS = ["Saronic","Cyclades","Ionian","Dodecanese","Sporades","NorthAegean","Crete"] as const;
+/* =========================
+ *  Regions & Types
+ * =======================*/
+export const REGIONS = [
+  "Saronic",
+  "Cyclades",
+  "Ionian",
+  "Dodecanese",
+  "Sporades",
+  "NorthAegean",
+  "Crete",
+] as const;
+
 export type Region = typeof REGIONS[number];
+
 export type PortCategory = "harbor" | "marina" | "anchorage" | "spot";
 
 export type Port = {
-  id?: string;
+  id: string;
   name: string;
   lat: number;
   lon: number;
   category: PortCategory;
+  island?: string;
   region: Region | string;
   aliases?: string[];
 };
 
-type MergedPortWire = {
-  name: string;
-  lat?: number; lon?: number;
-  region?: string;
-  aliases?: string[];
-  __source: "canonical" | "facts" | "merged";
+/* =========================
+ *  Index helpers
+ * =======================*/
+type PortIndex = {
+  all: Port[];
+  byId: Record<string, Port>;
+  byKey: Record<string, string>;
+  options: string[];
 };
 
-type PortIndex = { all: Port[]; byId: Record<string, Port>; byKey: Record<string, string>; options: string[] };
-
-export function normalize(s: string) { return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, ""); }
-function keyOf(p: Port) { return normalize(p.name); }
-
-function makeAliases(p: MergedPortWire): string[] {
-  const out = new Set<string>();
-  const push = (v?: string) => { const s = String(v || "").trim(); if (s) { out.add(s); out.add(s.normalize("NFD").replace(/\p{Diacritic}/gu,"")); } };
-  // κύριο όνομα
-  push(p.name);
-  // predefined aliases (canonical dataset)
-  for (const a of p.aliases ?? []) push(a);
-  // απλά heuristics για ελληνικά/λατινικά (light)
-  if (/ker[iìí]/i.test(p.name)) { out.add("Keri"); out.add("Κερί"); out.add("κερι"); }
-  if (/vidav/i.test(p.name)) { out.add("Βιδαβί"); out.add("βιδαβι"); }
-  if (/agios/i.test(p.name)) { out.add(p.name.replace(/Agios/,"Άγιος")); out.add(p.name.replace(/Agios/,"Αγιος")); }
-  if (/harbour/i.test(p.name)) { out.add(p.name.replace(/Harbour/,"Λιμάνι")); out.add(p.name.replace(/Harbour/,"Λιμάνι")); }
-  return Array.from(out);
+export function normalize(s: string) {
+  return s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
-async function fetchMerged(): Promise<MergedPortWire[]> {
-  const r = await fetch("/api/ports/merged", { cache: "no-store" });
-  if (!r.ok) throw new Error("merged api failed");
-  const j = await r.json();
-  return (j?.ports ?? []) as MergedPortWire[];
-}
-
+/** Αναζήτηση σε name + aliases */
 export function portMatchesQuery(p: Port, q: string) {
   if (!q) return true;
   const needle = normalize(q);
   if (normalize(p.name).includes(needle)) return true;
-  for (const a of p.aliases ?? []) if (normalize(a).includes(needle)) return true;
+  if (Array.isArray(p.aliases)) {
+    return p.aliases.some((a) => normalize(a).includes(needle));
+  }
   return false;
+}
+
+/** Υπολογίζει περιοχή από όλα τα ports (start/end/vias). */
+export function guessRegionFromPorts(
+  ports: Array<Port | null | undefined>
+): Region | "Multi" | null {
+  const valid = ports.filter(Boolean) as Port[];
+  const set = new Set(valid.map((p) => p.region));
+  if (set.size === 0) return null;
+  if (set.size === 1) return valid[0].region as Region;
+  return "Multi";
+}
+
+/** Label που μπορείς να δείξεις στο UI για Auto mode. */
+export function getAutoRegionLabel(auto: Region | "Multi" | null) {
+  if (!auto) return "Auto";
+  if (auto === "Multi") return "Auto (multi-region)";
+  return `${auto} (auto)`;
+}
+
+/** Επιστρέφει λίστα για dropdown:
+ *  - Σε Auto: όλη η Ελλάδα, μόνο με text query
+ *  - Σε manual region: φιλτράρει πρώτα με region και μετά με text query
+ */
+export function filterPortsForDropdown(
+  all: Port[],
+  mode: "Auto" | Region,
+  query: string
+) {
+  const base = mode === "Auto" ? all : all.filter((p) => String(p.region) === mode);
+  return base.filter((p) => portMatchesQuery(p, query));
 }
 
 function buildIndex(list: Port[]): PortIndex {
   const byId: Record<string, Port> = {};
   const byKey: Record<string, string> = {};
   const optionsSet = new Set<string>();
+
   for (const p of list) {
-    const id = p.id ?? `${normalize(p.name)}@${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
-    byId[id] = p;
-    byKey[keyOf(p)] = id;
+    byId[p.id] = p;
+    byKey[normalize(p.name)] = p.id;
     optionsSet.add(p.name);
-    for (const a of p.aliases ?? []) optionsSet.add(a);
+    for (const a of p.aliases ?? []) {
+      byKey[normalize(a)] = p.id;
+      optionsSet.add(a);
+    }
   }
-  const options = Array.from(optionsSet).sort((a,b)=>a.localeCompare(b,"en"));
+
+  const options = Array.from(optionsSet).sort((a, b) =>
+    a.localeCompare(b, "en")
+  );
   return { all: list, byId, byKey, options };
 }
 
+/* =========================
+ *  Data loader
+ *  1) Προσπαθεί από /api/ports/merged (canonical+facts)
+ *  2) Fallback σε /data/ports.v1.json
+ * =======================*/
 async function fetchPorts(): Promise<Port[]> {
-  const raw = await fetchMerged();
-  const list: Port[] = raw
-    .map((p: MergedPortWire) => {
-      if (typeof p.lat !== "number" || typeof p.lon !== "number") return null;
-      const aliases = makeAliases(p);
-      // κατηγορία περίπου από το όνομα (fallback). Canonical έχει ήδη category, αλλά εδώ κρατάμε light.
-      let category: PortCategory = "harbor";
-      const nm = p.name.toLowerCase();
-      if (nm.includes("marina")) category = "marina";
-      else if (nm.includes("bay") || nm.includes("cove") || nm.includes("anchorage")) category = "anchorage";
+  // 1) merged API
+  try {
+    const res = await fetch("/api/ports/merged", { cache: "no-store" });
+    if (res.ok) {
+      const data = (await res.json()) as any[];
+      return shapeAndFilter(data);
+    }
+  } catch {
+    // ignore -> fallback
+  }
+
+  // 2) fallback static JSON
+  const res = await fetch("/data/ports.v1.json", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load ports dataset");
+  const data = (await res.json()) as any[];
+  return shapeAndFilter(data);
+}
+
+/** Στρογγυλοποίηση/shape & ασφαλιστικά φίλτρα */
+function shapeAndFilter(data: any[]): Port[] {
+  const list: Port[] = (data || [])
+    .map((p: any) => {
+      const id = String(p.id ?? p.name ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9\-]/g, "");
+      const name = String(p.name ?? "").trim();
+      const lat = Number(p.lat);
+      const lon = Number(p.lon);
+      const category = (String(p.category ?? "harbor").toLowerCase() as PortCategory) || "harbor";
+      const region = String(p.region ?? "Greece");
+      const aliases: string[] = Array.isArray(p.aliases)
+        ? (p.aliases as any[]).map((x: any) => String(x || "").trim()).filter(Boolean)
+        : [];
+
       return {
-        name: p.name,
-        lat: p.lat!,
-        lon: p.lon!,
-        region: (p.region as any) || "Greece",
+        id,
+        name,
+        lat,
+        lon,
         category,
+        region,
         aliases,
       } as Port;
     })
-    .filter((x): x is Port => !!x && Number.isFinite(x.lat) && Number.isFinite(x.lon) && !!x.name);
+    .filter(
+      (p) =>
+        p.name &&
+        Number.isFinite(p.lat) &&
+        Number.isFinite(p.lon) &&
+        p.category &&
+        p.region
+    );
 
   return list;
 }
@@ -110,18 +181,26 @@ export function usePorts() {
   useEffect(() => {
     let cancelled = false;
     fetchPorts()
-      .then((list) => { if (!cancelled) setPorts(list); })
-      .catch((e) => { if (!cancelled) setError(e as Error); });
-    return () => { cancelled = true; };
+      .then((list) => {
+        if (!cancelled) setPorts(list);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e as Error);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const index = useMemo(() => (ports ? buildIndex(ports) : null), [ports]);
 
+  /** Βρίσκει port με exact match πρώτα (name/aliases), μετά με includes */
   function findPort(query: string): Port | null {
     if (!index || !query) return null;
     const key = normalize(query);
     const id = index.byKey[key];
     if (id && index.byId[id]) return index.byId[id];
+
     const opt = index.options.find((o) => normalize(o).includes(key));
     if (opt) {
       const id2 = index.byKey[normalize(opt)];
@@ -136,6 +215,7 @@ export function usePorts() {
     ports: ports ?? [],
     options: index?.options ?? [],
     findPort,
+
     byId: index?.byId ?? {},
     all: index?.all ?? [],
   };
