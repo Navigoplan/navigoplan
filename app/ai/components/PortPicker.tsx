@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type React from "react";
 
-/* ========= Local types & helpers (no external imports) ========= */
+/* ========= Local types ========= */
 
 export type PortCore = {
   id: string;
@@ -19,9 +19,77 @@ type PickerOption = {
   searchText: string;                     // name + aliases (lowercased)
 };
 
+/* ========= Helpers (με “καθάρισμα” aliases) ========= */
+
+// λέξεις/μοτίβα που προδίδουν ότι η παρένθεση είναι ΣΧΟΛΙΟ (facts) και όχι τοποθεσία
+const BANNED_IN_PARENS = [
+  "traffic", "change-over", "crowd", "crowded", "meltemi", "swell",
+  "fuel", "water", "power", "taxi", "shops", "supermarket", "notes",
+  "π","πολύ","παρασκευή","σάββατο","άνεμο","κύμα","πρόσεχε","γεμάτο",
+  "συνωστισ", "καύσωνας", "βοήθ", "τηλέφ", "προσοχή"
+];
+
+// true αν η παρένθεση μοιάζει με “τοποθεσία” (π.χ. Aegina / Αίγινα), όχι σχόλιο
+function isCleanParenthesis(inner: string): boolean {
+  const s = inner.trim().toLowerCase();
+
+  // κόβουμε αν περιέχει απαγορευμένες λέξεις
+  if (BANNED_IN_PARENS.some(k => s.includes(k))) return false;
+
+  // κόβουμε αν έχει σύμβολα που συνήθως δεν υπάρχουν σε τοπωνύμια
+  if (/[0-9!:;.,/\\#@%&*=_+<>?|]/.test(s)) return false;
+
+  // αποδεχόμαστε μικρά/μεσαία μήκη (ένα ή δύο λέξεις συνήθως: "Aegina", "Naxos")
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length > 3) return false;
+  if (s.length > 24) return false;
+
+  return true;
+}
+
+function extractCleanParenAlias(aliases?: string[]): string | undefined {
+  if (!aliases?.length) return;
+
+  // 1) προτίμηση σε aliases που ήδη είναι "Όνομα (Νησί)" και η παρένθεση είναι καθαρή
+  for (const a of aliases) {
+    const m = a.match(/^(.*)\((.+)\)\s*$/);
+    if (!m) continue;
+    const inner = m[2];
+    if (isCleanParenthesis(inner)) return a.trim();
+  }
+
+  // 2) fallback: επιστρέφουμε το πρώτο alias που ΔΕΝ περιέχει “κακά” μοτίβα
+  for (const a of aliases) {
+    const low = a.toLowerCase();
+    if (!BANNED_IN_PARENS.some(k => low.includes(k))) {
+      return a.trim();
+    }
+  }
+
+  return;
+}
+
+// Τελική επιλογή label:
+// - Αν το name έχει καθαρές παρενθέσεις, κρατάμε αυτό.
+// - Αλλιώς, αν υπάρχει καθαρό alias με παρενθέσεις, το προτιμάμε.
+// - Αλλιώς, απλά το name (χωρίς σχόλια).
 function chooseDisplayName(p: PortCore): string {
-  const withIsland = p.aliases?.find((a) => /\(.+\)/.test(a));
-  return withIsland ?? p.name;
+  const name = p.name.trim();
+
+  const nameMatch = name.match(/^(.*)\((.+)\)\s*$/);
+  if (nameMatch && isCleanParenthesis(nameMatch[2])) {
+    return name;
+  }
+
+  const cleanAlias = extractCleanParenAlias(p.aliases);
+  if (cleanAlias) return cleanAlias;
+
+  // έσχατο fallback: κόψε ό,τι ύποπτη παρένθεση υπάρχει στο name
+  if (nameMatch && !isCleanParenthesis(nameMatch[2])) {
+    return nameMatch[1].trim();
+  }
+
+  return name;
 }
 
 function buildSearchText(p: PortCore): string {
@@ -32,7 +100,7 @@ function buildSearchText(p: PortCore): string {
 function toPickerOptions(ports: PortCore[]): PickerOption[] {
   return ports.map((p) => ({
     value: p.id,
-    label: chooseDisplayName(p), // show ONLY the display name
+    label: chooseDisplayName(p), // ONLY clean display name
     searchText: buildSearchText(p),
   }));
 }
@@ -40,7 +108,7 @@ function toPickerOptions(ports: PortCore[]): PickerOption[] {
 /* ===================== Component ===================== */
 
 type Props = {
-  ports: PortCore[];                // raw ports (no facts in here)
+  ports: PortCore[];                // raw ports (no facts here)
   value?: string;                   // selected port id
   onChange: (id: string) => void;
   placeholder?: string;
@@ -58,13 +126,14 @@ export default function PortPicker({
 }: Props) {
   const [query, setQuery] = useState<string>("");
 
-  // ports -> options with ONLY displayLabel
   const options: PickerOption[] = useMemo(() => toPickerOptions(ports), [ports]);
 
   const filtered: PickerOption[] = useMemo(() => {
     if (!query) return options.slice(0, maxResults);
     const q = query.toLowerCase();
-    return options.filter((o: PickerOption) => o.searchText.includes(q)).slice(0, maxResults);
+    return options
+      .filter((o: PickerOption) => o.searchText.includes(q))
+      .slice(0, maxResults);
   }, [options, query, maxResults]);
 
   const selected: PickerOption | undefined = value
@@ -82,7 +151,6 @@ export default function PortPicker({
         autoComplete="off"
       />
 
-      {/* Dropdown */}
       {(query !== "" || filtered.length > 0) && (
         <div
           className="absolute z-50 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg"
@@ -100,18 +168,16 @@ export default function PortPicker({
               aria-selected={o.value === selected?.value}
               onClick={() => {
                 onChange(o.value);
-                setQuery(o.label); // fill input with ONLY the name
+                setQuery(o.label); // ΜΟΝΟ καθαρό όνομα
               }}
               type="button"
             >
-              {/* Show ONLY the label (display name) */}
               {o.label}
             </button>
           ))}
         </div>
       )}
 
-      {/* Hidden field if you need it in forms */}
       {selected && <input type="hidden" name="portId" value={selected.value} />}
     </div>
   );
