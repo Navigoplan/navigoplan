@@ -1,3 +1,4 @@
+// lib/ports.ts
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -27,7 +28,7 @@ export type Port = {
   category: PortCategory;
   island?: string;
   /** H περιοχή όπως έρχεται από το JSON */
-  region: Region;
+  region: Region | string;
   aliases?: string[];
 };
 
@@ -61,9 +62,9 @@ export function guessRegionFromPorts(
   ports: Array<Port | null | undefined>
 ): Region | "Multi" | null {
   const valid = ports.filter(Boolean) as Port[];
-  const set = new Set(valid.map((p) => p.region));
+  const set = new Set(valid.map((p) => (p.region as string)));
   if (set.size === 0) return null;
-  if (set.size === 1) return valid[0].region;
+  if (set.size === 1) return (valid[0].region as Region) ?? null;
   return "Multi";
 }
 
@@ -83,7 +84,7 @@ export function filterPortsForDropdown(
   mode: "Auto" | Region,
   query: string
 ) {
-  const base = mode === "Auto" ? all : all.filter((p) => p.region === mode);
+  const base = mode === "Auto" ? all : all.filter((p) => (p.region as string) === mode);
   return base.filter((p) => portMatchesQuery(p, query));
 }
 
@@ -109,11 +110,12 @@ function buildIndex(list: Port[]): PortIndex {
 }
 
 /* =========================
- *  Data loader
+ *  Data loader  (UPDATED)
  * =======================*/
 async function fetchPorts(): Promise<Port[]> {
-  const res = await fetch("/data/ports.v1.json", { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to load ports.v1.json");
+  // Τραβάμε το ΕΝΩΜΕΝΟ dataset από το API.
+  const res = await fetch("/api/ports/merged", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load /api/ports/merged");
   const data = (await res.json()) as Port[];
 
   // Προστασία: Φιλτράρουμε τυχόν σκουπίδια/ελλιπή records
