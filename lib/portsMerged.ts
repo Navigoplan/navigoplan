@@ -13,14 +13,15 @@ export type MergedPort = {
   lat: number;
   lon: number;
   category: PortCategory;
-  region: string;        // θα χαρτογραφηθεί downstream σε RegionKey
-  aliases: string[];     // ΠΑΝΤΑ καθαρό string[]
+  region: string;        // το UI το χαρτογραφεί downstream σε RegionKey
+  aliases: string[];     // ΠΑΝΤΑ string[]
 };
 
 // canonical dataset (ports.v1.json)
 import basePorts from "@/public/data/ports.v1.json";
-// facts μόνο για ονόματα/aliases (ΔΕΝ περνάμε notes/hazards)
-import * as PortFactsMod from "@/lib/ports/portFacts";
+
+// ⚠️ ΣΩΣΤΟ import με ΚΕΦΑΛΑΙΑ όπως είναι το αρχείο
+import { FACTS as PORT_FACTS } from "./ai/ports/PortFacts";
 
 /* ========= Helpers ========= */
 function normalize(s: string) {
@@ -62,7 +63,6 @@ function sanitizeName(raw: string) {
   return `${base} (${clean[1]})`;
 }
 
-/** true αν το string μοιάζει με ΟΝΟΜΑ (και όχι πρόταση/note) */
 function isNameLike(raw: string) {
   const s = (raw || "").trim();
   if (!s) return false;
@@ -91,48 +91,45 @@ function guessCategoryFromName(name: string): PortCategory {
 export function buildMergedPorts(): MergedPort[] {
   const baseArr: any[] = Array.isArray(basePorts) ? (basePorts as any[]) : [];
 
-  // === 1) Χτίζουμε index από το base για γρήγορο ταίριασμα ===
+  // 1) index base
   type BaseRec = { idx: number; id: string; name: string; aliases: string[] };
-  const baseIndex = new Map<string, BaseRec>(); // key -> base rec
+  const baseIndex = new Map<string, BaseRec>();
   const addKey = (k: string, rec: BaseRec) => { if (!baseIndex.has(k)) baseIndex.set(k, rec); };
 
   baseArr.forEach((p, idx) => {
     const name = String(p.name ?? "").trim();
-    const rec: BaseRec = { idx, id: String(p.id ?? name), name, aliases: Array.isArray(p.aliases) ? p.aliases.map((x: any)=>String(x??"")) : [] };
+    const rec: BaseRec = {
+      idx,
+      id: String(p.id ?? name),
+      name,
+      aliases: Array.isArray(p.aliases) ? p.aliases.map((x: any)=>String(x??"")) : []
+    };
     addKey(normalize(name), rec);
     rec.aliases.forEach(a => addKey(normalize(String(a)), rec));
   });
 
-  // === 2) Μαζεύουμε ΟΝΟΜΑΤΑ από portFacts ως aliases στόχου ===
-  const FACTS: Record<string, any> =
-    (PortFactsMod as any).default ?? (PortFactsMod as any).FACTS ?? (PortFactsMod as any);
-
+  // 2) collect aliases from portFacts keys
   const aliasesByBaseIdx = new Map<number, Set<string>>();
-
-  if (FACTS && typeof FACTS === "object") {
-    for (const rawKey of Object.keys(FACTS)) {
+  if (PORT_FACTS && typeof PORT_FACTS === "object") {
+    for (const rawKey of Object.keys(PORT_FACTS)) {
       const factKey = sanitizeName(String(rawKey));
       if (!isNameLike(factKey)) continue;
 
-      // αν υπάρχει “(Island)” → προσπάθησε match με το περιεχόμενο
       const m = factKey.match(/\(([^)]+)\)/);
       let matched: BaseRec | undefined;
       if (m && isCleanParen(m[1])) {
         const inner = m[1].trim();
         matched = baseIndex.get(normalize(inner));
       }
-      // αν δεν βρέθηκε, προσπάθησε exact με όλο το κλειδί
-      if (!matched) {
-        matched = baseIndex.get(normalize(factKey));
-      }
-      if (!matched) continue; // δεν κάνουμε facts-only ports χωρίς coords
+      if (!matched) matched = baseIndex.get(normalize(factKey));
+      if (!matched) continue;
 
       if (!aliasesByBaseIdx.has(matched.idx)) aliasesByBaseIdx.set(matched.idx, new Set());
       aliasesByBaseIdx.get(matched.idx)!.add(factKey);
     }
   }
 
-  // === 3) Φτιάχνουμε το τελικό merged out (βάση + εμπλουτισμένα aliases) ===
+  // 3) build merged list
   const out: MergedPort[] = baseArr
     .map((p: any, i: number): MergedPort => {
       const name = sanitizeName(String(p.name ?? "").trim());
@@ -141,7 +138,6 @@ export function buildMergedPorts(): MergedPort[] {
       const baseAliases: string[] = Array.isArray(p.aliases)
         ? p.aliases.map((x: any) => String(x ?? ""))
         : [];
-
       const extraAliases = Array.from(aliasesByBaseIdx.get(i) ?? new Set<string>());
 
       const aliases: string[] = Array.from(
