@@ -2,8 +2,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-// Φόρτωση των keys από τα Port Facts για έξτρα aliases
-import { PORT_FACTS_DATA as PORT_FACTS } from "./ports/portFacts";
+// ✅ ΣΩΣΤΟ PATH: lib/port/portFacts.ts (singular "port")
+import { PORT_FACTS_DATA as PORT_FACTS } from "./port/portFacts";
 
 /* =========================
  *  Types
@@ -16,7 +16,7 @@ export type Port = {
   lat: number;
   lon: number;
   category: PortCategory;
-  region: string;          // χαλαρό string (π.χ. Korinthia, Messinia, Ionian, κλπ)
+  region: string;          // χαλαρό string (Korinthia, Messinia, Ionian, κλπ)
   aliases?: string[];
   label?: string;          // δίγλωσσο label για dropdown
 };
@@ -203,13 +203,11 @@ function buildIndex(list: Port[]): PortIndex {
  *  Fetch from API & build
  * =======================*/
 async function fetchMergedApi(): Promise<Port[]> {
-  // Τραβάμε ΟΛΑ τα ports από το API (που ήδη ενώνει canonical + facts + sea_guide)
   const res = await fetch("/api/ports/merged", { cache: "no-store" });
   if (!res.ok) {
     const t = await res.text().catch(() => "");
     throw new Error(`API /api/ports/merged failed: ${res.status} ${t}`);
   }
-  // Το API επιστρέφει id,name,lat,lon,category,region,aliases
   const arr = (await res.json()) as Array<Partial<Port> & { name: string }>;
 
   const list: Port[] = arr
@@ -244,7 +242,6 @@ export function usePorts() {
     (async () => {
       try {
         const base = await fetchMergedApi();
-        // ➕ Εμπλουτισμός με aliases από portFacts
         const enriched = enrichWithFactsAliases(base).map(p => ({
           ...p,
           label: p.label ?? bilingualLabel(p.name, p.aliases ?? []),
@@ -266,18 +263,15 @@ export function usePorts() {
     if (!index || !q) return null;
     const key = normalize(q);
 
-    // exact: name/alias
     const id = index.byKey[key];
     if (id && index.byId[id]) return index.byId[id];
 
-    // exact: label
     const exact = index.options.find(o => normalize(o) === key);
     if (exact) {
       const p = index.all.find(x => normalize(x.label || x.name) === key);
       if (p) return p;
     }
 
-    // includes
     return (
       index.all.find(
         x =>
