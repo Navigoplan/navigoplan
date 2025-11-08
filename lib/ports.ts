@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 // ✅ ΣΩΣΤΟ PATH: lib/port/portFacts.ts (singular "port")
-import { PORT_FACTS_DATA as PORT_FACTS } from "./port/portFacts";
+import { PORT_FACTS_DATA as PORT_FACTS } from "./ports/portFacts";
 
 /* =========================
  *  Types
