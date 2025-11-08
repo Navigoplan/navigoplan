@@ -1,0 +1,3059 @@
+[
+    {
+    "id": "peloponnisos-korinthos-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.56, "lon": 22.94 },
+
+    "name": {
+        "el": "Λιμένας Κορίνθου",
+        "en": "Korinthos Harbour"
+    },
+
+    "aliases": {
+        "el": ["Λιμένας Κορίνθου", "Μαρίνα Κορίνθου"],
+        "en": ["Port of Korinthos", "Korinthos Marina"]
+    },
+
+    "facilities": {
+        "fuel": true,
+        "water": true,
+        "power": true,
+        "berths": 150,
+        "max_loa_m": 60,
+        "max_draft_m": 4.5,
+        "provisions": true,
+        "showers_wc": true,
+        "wifi": false,
+        "repairs_basic": true,
+        "divers": false,
+        "waste_oil": true,
+        "sewage_pumpout": false,
+        "customs": true,
+        "port_authority": true
+    },
+
+    "vhf": [
+        { "channel": "12", "usage_el": "Λιμεναρχείο Κορίνθου", "usage_en": "Port Control" },
+        { "channel": "16", "usage_el": "Κλήσεις / Κίνδυνος", "usage_en": "Distress / Calling" }
+    ],
+
+    "contacts": {
+        "harbour_office": "+30 27410 55255",
+        "port_authority": "+30 27410 37777",
+        "customs": "+30 27410 22084",
+        "police": "+30 27410 22097",
+        "medical": "+30 27410 22082",
+        "vhf_primary": "12"
+    },
+
+    "approach": {
+        "el": "Η είσοδος του λιμένα βρίσκεται στο 37°56.40′N – 22°56.50′E. Προσεγγίστε από ανατολικά, αποφεύγοντας τα ρηχά σημεία. Φάρος στο μόλο: Fl.R.3s 6m 3M.",
+        "en": "Entrance located at 37°56.40′N – 22°56.50′E. Approach from E-NE, clear of shallow patches. Breakwater light Fl.R.3s 6m 3M."
+    },
+
+    "hazards": {
+        "el": [
+        "Προσάμμωση στην είσοδο – τα βάθη ποικίλουν.",
+        "Ισχυροί βορειοανατολικοί άνεμοι επηρεάζουν την πρόσβαση."
+        ],
+        "en": [
+        "Siltation at the entrance — depths may vary.",
+        "Strong NE winds may set across the entrance."
+        ]
+    },
+
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 8 },
+        "bottom": ["mud", "sand"],
+        "holding": {
+        "el": "Καλή κράτηση σε άμμο και λάσπη.",
+        "en": "Good holding in sand and mud bottom."
+        },
+        "protection": {
+        "wind_good": ["W", "SW"],
+        "wind_poor": ["NE", "E"],
+        "sea_good": ["W", "SW"],
+        "sea_poor": ["NE", "E"]
+        },
+        "swell": {
+        "el": "Περιστασιακός κυματισμός με βορειοανατολικούς ανέμους.",
+        "en": "Occasional surge with NE winds."
+        }
+    },
+
+    "weather": {
+        "el": "Γενικά ήπιος καιρός το καλοκαίρι, με ριπές από βορειοανατολικά. Προσοχή σε ισχυρούς ανέμους κατά την είσοδο.",
+        "en": "Strong NE winds may affect entry. Generally calm in summer. Beware of gusts funnelling from mountains."
+    },
+
+    "fees": {
+        "el": "Τα τέλη λιμένος πληρώνονται στο Λιμεναρχείο.",
+        "en": "Port dues payable at Port Authority office."
+    },
+
+    "services_nearby": {
+        "el": [
+        "Σούπερ μάρκετ 500 μ. από το λιμάνι.",
+        "Εστιατόρια και καφέ στην προκυμαία.",
+        "Ναυτιλιακά είδη και πρατήριο καυσίμων κοντά."
+        ],
+        "en": [
+        "Supermarkets 500 m from port.",
+        "Restaurants and cafes along promenade.",
+        "Chandlery and fuel station nearby."
+        ]
+    },
+
+    "notes": {
+        "el": [
+        "Καλή προστασία από όλους τους ανέμους εκτός από ΒΑ.",
+        "Διαθέσιμη Τελωνειακή και Λιμενική Υπηρεσία.",
+        "Κατάλληλος σταθμός πριν τη διέλευση της Διώρυγας Κορίνθου."
+        ],
+        "en": [
+        "Good shelter from all directions except NE.",
+        "Customs and Immigration available for clearance.",
+        "Ideal base for visiting Corinth Canal."
+        ]
+    },
+
+    "sources": [
+        { "type": "SeaGuide", "volume": 3, "page": 64 }
+    ],
+
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-kiato-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 38.005, "lon": 22.765 },
+    "name": { "el": "Λιμένας Κιάτου", "en": "Kiato Harbour" },
+    "aliases": {
+        "el": ["Δημοτικός Λιμένας Κιάτου"],
+        "en": ["Municipal Boat Harbour Kiato", "Port of Kiato"]
+    },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 40, "max_loa_m": 25, "max_draft_m": 3.0,
+        "provisions": true, "showers_wc": false, "wifi": false,
+        "repairs_basic": false, "waste_oil": false, "port_authority": true
+    },
+    "vhf": [
+        { "channel": "12", "usage_el": "Λιμεναρχείο", "usage_en": "Harbour Office" },
+        { "channel": "16", "usage_el": "Κλήσεις/Κίνδυνος", "usage_en": "Distress/Calling" }
+    ],
+    "contacts": { "port_authority": "+30 27420 25277", "vhf_primary": "12" },
+    "approach": {
+        "el": "Είσοδος ~38°00.30′N – 22°45.90′E. Προσέγγιση από Β. Φάρος μόλου Fl.R.3s.",
+        "en": "Entrance ~38°00.30′N – 22°45.90′E. Approach from N. Breakwater light Fl.R.3s."
+    },
+    "hazards": {
+        "el": ["Ρηχά στην είσοδο (ιδίως Α πλευρά)."],
+        "en": ["Shallows at the entrance (especially E side)."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 4.0 },
+        "bottom": ["mud", "sand"],
+        "holding": { "el": "Μέτρια έως καλή.", "en": "Fair to good." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["N","NE"] }
+    },
+    "weather": {
+        "el": "Ήρεμα με Δ-ΝΔ, κυματισμός με ΒΑ.",
+        "en": "Calm in W winds; swell with NE."
+    },
+    "fees": { "el": "Δημοτικός λιμένας – μικρό τέλος.", "en": "Municipal harbour – small fee." },
+    "services_nearby": {
+        "el": ["Καταστήματα/ταβέρνες κοντά", "Καύσιμα με βυτιοφόρο"],
+        "en": ["Shops/tavernas nearby", "Fuel by mini-tanker"]
+    },
+    "notes": {
+        "el": ["Στάση πριν/μετά τη Διώρυγα."],
+        "en": ["Useful stop before/after Corinth Canal."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 67 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-kato-assos-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.954, "lon": 22.984 },
+    "name": { "el": "Λιμενίσκος Κάτω Άσσου", "en": "Kato Assos Harbour" },
+    "aliases": { "el": ["Κάτω Άσσος"], "en": ["Kato Assos Boat Harbour"] },
+    "facilities": {
+        "fuel": false, "water": false, "power": false,
+        "berths": 10, "max_loa_m": 15, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Μέσω Λ/Χ Κορίνθου", "usage_en": "Via Korinthos Port Control" }],
+    "approach": {
+        "el": "Είσοδος ~37°57.25′N – 22°59.04′E. Μικρή λεκάνη ανοιχτή στον Β.",
+        "en": "Entrance ~37°57.25′N – 22°59.04′E. Small basin open to N."
+    },
+    "hazards": { "el": ["Προσάμμωση/ρηχά στην είσοδο."], "en": ["Shoaling at the entrance."] },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." },
+        "protection": { "wind_good": ["S","W"], "wind_poor": ["N"] }
+    },
+    "notes": {
+        "el": ["Ήσυχο, κυρίως για ντόπιους.", "Καύσιμα από Κιάτο (βυτιοφόρο)."],
+        "en": ["Quiet, mostly local boats.", "Fuel from Kiato (tanker)."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 68 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-agia-irini-cove",
+    "region": "Peloponnisos",
+    "category": "anchorage",
+    "position": { "lat": 38.315, "lon": 22.285 },
+    "name": { "el": "Αγκυροβόλιο Αγίας Ειρήνης", "en": "Agia Irini Cove" },
+    "aliases": { "el": ["Αγία Ειρήνη"], "en": ["Agia Irini Bay"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": false },
+    "vhf": [{ "channel": "16", "usage_el": "Κλήσεις/Κίνδυνος", "usage_en": "Distress/Calling" }],
+    "approach": {
+        "el": "Αγκυροβολία περί τα 6–12 μ. Προσέγγιση από ΝΑ κρατώντας απόσταση από την ακτή και το νησίδιο στην είσοδο.",
+        "en": "Anchor in 6–12 m. Approach from SE keeping off the shore and the small islet at the entrance."
+    },
+    "hazards": {
+        "el": ["Ασήμαντες πέτρες κοντά στην ακτή.", "Ανοικτό σε Β–ΒΑ."],
+        "en": ["Unmarked rocks close inshore.", "Exposed to N–NE."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 12 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση σε άμμο.", "en": "Good in sand." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["N","NE"] },
+        "swell": { "el": "Κυματισμός με ΒΑ.", "en": "Swell with NE." }
+    },
+    "services_nearby": {
+        "el": ["Ξενοδοχείο/ταβέρνα «Poseidon» στην ακτή."],
+        "en": ["Poseidon hotel/taverna ashore."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 3 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-isthmia-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.924, "lon": 22.953 },
+    "name": { "el": "Λιμένας Ισθμίας", "en": "Isthmia Harbour" },
+    "aliases": { "el": ["Ισθμία Μαρίνα"], "en": ["Isthmia Port", "Isthmia Marina"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 60, "max_loa_m": 45, "max_draft_m": 5.5,
+        "provisions": true, "showers_wc": true, "repairs_basic": true, "waste_oil": true
+    },
+    "vhf": [
+        { "channel": "12", "usage_el": "Λιμεναρχείο", "usage_en": "Harbour Office" },
+        { "channel": "16", "usage_el": "Κλήσεις/Κίνδυνος", "usage_en": "Distress/Calling" }
+    ],
+    "contacts": { "harbour_office": "+30 27410 55255", "vhf_primary": "12" },
+    "approach": {
+        "el": "Είσοδος ~37°55.45′N – 22°57.18′E. Προσάμμωση κοντά στην είσοδο – μείνετε κεντρικά.",
+        "en": "Entrance ~37°55.45′N – 22°57.18′E. Siltation near the entrance — keep mid-channel."
+    },
+    "hazards": {
+        "el": ["Πλάγιος καιρός από Β μπορεί να επηρεάσει τον έλεγχο."],
+        "en": ["Cross-set with N winds can affect control."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 7 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Καλή.", "en": "Good." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["NE"] }
+    },
+    "notes": {
+        "el": ["Ιδανικό πριν/μετά τη Διώρυγα Κορίνθου."],
+        "en": ["Convenient before/after Corinth Canal."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 5 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-poseidonia-pier",
+    "region": "Peloponnisos",
+    "category": "spot",
+    "position": { "lat": 37.958, "lon": 22.963 },
+    "name": { "el": "Προβλήτας Ποσειδωνίας", "en": "Poseidonia Pier" },
+    "aliases": { "el": ["Ποσειδωνία"], "en": ["Poseidonia Jetty"] },
+    "facilities": { "fuel": false, "water": true, "power": false, "berths": 6, "max_loa_m": 25, "max_draft_m": 3.5, "provisions": true },
+    "vhf": [{ "channel": "12", "usage_el": "Τοπική κίνηση", "usage_en": "Local traffic" }],
+    "approach": {
+        "el": "Προσέγγιση από ΒΑ. Ρηχά κοντά στην ακτή Α του προβλήτα.",
+        "en": "Approach from NE. Shallows close inshore E of the pier."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 8 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["NE"] }
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 5 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-vrachati-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.939, "lon": 22.845 },
+    "name": { "el": "Λιμένας Βραχατίου", "en": "Vrachati Harbour" },
+    "aliases": { "el": ["Βραχάτι"], "en": ["Vrachati Port"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 30, "max_loa_m": 20, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λ/Χ Κορίνθου", "usage_en": "Korinthos Port Authority" }],
+    "approach": {
+        "el": "Προσέγγιση κρατώντας κεντρικά. Φάρος μόλου Fl.R.3s.",
+        "en": "Keep central on approach. Breakwater light Fl.R.3s."
+    },
+    "hazards": {
+        "el": ["Ρηχά κοντά στον εσωτερικό μόλο.", "Σούζα με ΒΑ."],
+        "en": ["Shallow patches near inner mole.", "Swell with NE."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 5 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 7 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-loutraki-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.971, "lon": 22.975 },
+    "name": { "el": "Λιμένας Λουτρακίου", "en": "Loutraki Harbour" },
+    "aliases": { "el": ["Λουτράκι"], "en": ["Loutraki Port"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 40, "max_loa_m": 25, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λ/Χ Κορίνθου", "usage_en": "Korinthos Port Authority" }],
+    "approach": {
+        "el": "Είσοδος ~37°58.25′N – 22°57.38′E. Προσάμμωση στην είσοδο.",
+        "en": "Entrance ~37°58.25′N – 22°57.38′E. Siltation at the entrance."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 5 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Καλή.", "en": "Good." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["NE"] }
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 8 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-molykopi-cove",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.381, "lon": 21.801 },
+    "name": { "el": "Αγκυροβόλιο Μολυκόπης", "en": "Molykopi Cove" },
+    "aliases": { "el": ["Μολυκόπη"], "en": ["Cove of Molykopi"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": true },
+    "vhf": [{ "channel": "16", "usage_el": "Κλήσεις/Κίνδυνος", "usage_en": "Distress/Calling" }],
+    "approach": {
+        "el": "Προσέγγιση από ΒΑ. Αγκυροβολία 6–10 μ. κοντά στον μικρό προβλήτα.",
+        "en": "Approach from NE. Anchor in 6–10 m near the small pier."
+    },
+    "hazards": {
+        "el": ["Πέτρες κοντά στην ακτή.", "Μικρός χώρος περιστροφής με ισχυρούς ανέμους."],
+        "en": ["Rocks close to shore.", "Limited swinging room in strong winds."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 10 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή σε άμμο.", "en": "Good in sand." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["E","NE"] }
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 8 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-nafpaktos-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.385, "lon": 21.826 },
+    "name": { "el": "Λιμένας Ναυπάκτου", "en": "Nafpaktos Harbour" },
+    "aliases": { "el": ["Ναύπακτος"], "en": ["Naupaktos Port"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 15, "max_loa_m": 18, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "vhf": [{ "channel": "16", "usage_el": "Κλήσεις/Κίνδυνος", "usage_en": "Distress/Calling" }],
+    "approach": {
+        "el": "Μικρό ιστορικό λιμάνι με στενή είσοδο. Προσέγγιση από ΝΑ, προσοχή στους υφάλους.",
+        "en": "Small historic harbour with narrow entrance. Approach from SE, beware of reefs."
+    },
+    "hazards": {
+        "el": ["Περιορισμένος χώρος και βάθη.", "Πέτρες Α της εισόδου."],
+        "en": ["Limited space/depth.", "Rocks E of the entrance."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Μέτρια.", "en": "Fair." }
+    },
+    "notes": {
+        "el": ["Γραφικό, κάτω από το κάστρο. Για μικρά σκάφη."],
+        "en": ["Picturesque below the castle. Suits small yachts."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 8 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-kiatou-main-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 38.010, "lon": 22.828 },
+    "name": { "el": "Κύριος Λιμένας Κιάτου", "en": "Kiatou Main Harbour" },
+    "aliases": {
+        "el": ["Λιμένας Κιάτου", "Κιάτο"],
+        "en": ["Port of Kiato", "Kiato Harbour"]
+    },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 60, "max_loa_m": 35, "max_draft_m": 4.5,
+        "provisions": true, "showers_wc": true, "repairs_basic": true,
+        "waste_oil": true, "port_authority": true
+    },
+    "vhf": [
+        { "channel": "12", "usage_el": "Λιμεναρχείο Κιάτου", "usage_en": "Harbour Office" },
+        { "channel": "16", "usage_el": "Κλήσεις/Κίνδυνος", "usage_en": "Distress/Calling" }
+    ],
+    "contacts": {
+        "port_authority": "+30 27420 25277",
+        "vhf_primary": "12"
+    },
+    "approach": {
+        "el": "Είσοδος στο 38°00.42′Ν – 22°48.25′Ε. Προσάμμωση κοντά στο στόμιο· κρατηθείτε στη μέση. Εξωτερικός μόλος με φάρο Fl.R.3s.",
+        "en": "Entrance 38°00.42′N – 22°48.25′E. Siltation near entrance—keep mid-channel. Outer mole light Fl.R.3s."
+    },
+    "hazards": {
+        "el": ["Ρηχά στα άκρα του μόλου.", "Κυματισμός με ΒΑ ανέμους."],
+        "en": ["Shallow patches near mole ends.", "Swell in NE winds."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 3.5, "max": 5.5 },
+        "bottom": ["mud", "sand"],
+        "holding": {
+        "el": "Καλή κράτηση σε λάσπη.",
+        "en": "Good holding in mud."
+        },
+        "protection": {
+        "wind_good": ["W", "SW"],
+        "wind_poor": ["NE"]
+        }
+    },
+    "services_nearby": {
+        "el": [
+        "Καταστήματα και τράπεζες στην πόλη.",
+        "Καύσιμα από βυτιοφόρο.",
+        "Σιδηροδρομικός σταθμός Κιάτου σε μικρή απόσταση."
+        ],
+        "en": [
+        "Shops and banks in town.",
+        "Fuel by mini-tanker.",
+        "Kiato railway station nearby."
+        ]
+    },
+    "notes": {
+        "el": [
+        "Το λιμάνι προσφέρει καλή προστασία εκτός από ΒΑ.",
+        "Βολική στάση πριν τη Διώρυγα ή μετά τη Ναύπακτο."
+        ],
+        "en": [
+        "Good shelter except NE winds.",
+        "Convenient stop before or after Corinth Canal."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 7 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-navpoliannis-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.039, "lon": 21.932 },
+    "name": { "el": "Λιμενίσκος Ν.Ο. Ναυπολιάνης", "en": "Navpoliannis Boat Harbour (Nafpaktos Sailing Club)" },
+    "aliases": {
+        "el": ["Ναύπακτος Ν.Ο.", "Ναυτικός Όμιλος Ναυπάκτου"],
+        "en": ["Nafpaktos Sailing Club Harbour", "Navpoliannis Marina"]
+    },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 40, "max_loa_m": 20, "max_draft_m": 3.0,
+        "provisions": true, "showers_wc": true,
+        "repairs_basic": false
+    },
+    "vhf": [{ "channel": "16", "usage_el": "Κλήσεις/Κίνδυνος", "usage_en": "Distress/Calling" }],
+    "contacts": {
+        "harbour_office": "+30 27440 29120",
+        "sailing_club": "+30 27440 55255"
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΔ. Κρατηθείτε στο κέντρο του διαύλου. Φάρος μόλου Fl.R.3s.",
+        "en": "Approach from SW; keep mid-channel. Breakwater light Fl.R.3s."
+    },
+    "hazards": {
+        "el": ["Ρηχά στην είσοδο και κατά μήκος του βόρειου μόλου."],
+        "en": ["Shallow near entrance and along N mole."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 4.5 },
+        "bottom": ["mud", "sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "notes": {
+        "el": [
+        "Μικρό λιμανάκι για ιστιοπλοϊκά του Ν.Ο. Ναυπάκτου.",
+        "Καλή προστασία από όλους τους ανέμους εκτός ΝΔ."
+        ],
+        "en": [
+        "Small yacht harbour of Nafpaktos Sailing Club.",
+        "Good shelter except SW."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 7 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-mylokopi-cove",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.095, "lon": 22.058 },
+    "name": { "el": "Αγκυροβόλιο Μυλοκόπης", "en": "Mylokopi Cove" },
+    "aliases": { "el": ["Όρμος Μυλοκόπης"], "en": ["Cove of Mylokopi"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": false },
+    "vhf": [{ "channel": "16", "usage_el": "Κλήσεις/Κίνδυνος", "usage_en": "Distress/Calling" }],
+    "approach": {
+        "el": "Η Μυλοκόπη βρίσκεται Δ του Λουτρακίου. Προσέγγιση από ΝΑ, αγκυροβολία στα 6–10 μ. σε καθαρό βυθό.",
+        "en": "Located W of Loutraki. Approach from SE; anchor in 6–10 m over clean bottom."
+    },
+    "hazards": {
+        "el": ["Ρηχά κοντά στην ακτή ΝΑ.", "Ανοικτό σε ΒΑ καιρικές συνθήκες."],
+        "en": ["Shallow near SE shore.", "Open to NE winds."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 10 },
+        "bottom": ["sand", "rock"],
+        "holding": { "el": "Καλή κράτηση σε άμμο.", "en": "Good in sand." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["NE"] }
+    },
+    "services_nearby": {
+        "el": ["Καμία παροχή στην ακτή – απομονωμένος όρμος."],
+        "en": ["No facilities ashore – isolated cove."]
+    },
+    "notes": {
+        "el": ["Δημοφιλής προορισμός ημερήσιων σκαφών."],
+        "en": ["Popular day anchorage."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 8 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-alkyonides-cove",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.06, "lon": 22.99 },
+    "name": { "el": "Νήσοι Αλκυονίδες (Καλά Νησιά)", "en": "Noi Alkyonides (Kalá Nisiá)" },
+    "aliases": { "el": ["Καλά Νησιά", "Νήσοι Αλκυονίδες"], "en": ["Alkyonides Islands", "Kalá Nisiá"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": false },
+    "approach": {
+        "el": "Προσοχή: να μην περάσουμε το στενό μεταξύ Ν. Δασκαλιό και Ν. Ζωοδόχου Πηγής. Αγκυροβολία πίσω από τον κυματοθραύστη της Ν. Δασκαλιό ή στο αγκυροβόλιο Ν. Ζωοδόχου Πηγής.",
+        "en": "Do not pass the strait between Nisis Daskalió and Nisis Zoodochos Pigi. Best anchorage behind the breakwater at Nisis Daskalió or inside Nisis Zoodochos Pigi anchorage."
+    },
+    "hazards": {
+        "el": ["Υπάρχουν ρηχά μεταξύ των νησιών και κλωβοί ιχθυοκαλλιέργειας."],
+        "en": ["Shallows between islets and fish-farm cages."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 5, "max": 12 },
+        "bottom": ["sand", "mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["E","NE"] }
+    },
+    "notes": {
+        "el": [
+        "Ένα από τα καλύτερα αγκυροβόλια του Κορινθιακού Κόλπου.",
+        "Δύο όρμοι παρέχουν προστασία από όλους τους καιρούς."
+        ],
+        "en": [
+        "One of the best anchorages in the Corinthiakos Gulf.",
+        "Two bays provide shelter from most winds."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 9 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-alepohori-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.090, "lon": 23.187 },
+    "name": { "el": "Λιμενίσκος Αλεποχωρίου", "en": "Alepohóri Harbour" },
+    "aliases": { "el": ["Αλεποχώρι"], "en": ["Port of Alepohori"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 25, "max_loa_m": 20, "max_draft_m": 2.5,
+        "provisions": true, "repairs_basic": true
+    },
+    "approach": {
+        "el": "Είσοδος στο 38°05.396′Ν – 23°11.209′Ε. Χρησιμοποιήστε τον μέσο διάυλο. Συνεχείς προσχώσεις στην είσοδο· βάθη έως 2,5 μ.",
+        "en": "Entrance 38°05.396′ N – 23°11.209′ E. Use the middle channel. Continuous silts in the entrance – depth ~ 2.5 m."
+    },
+    "hazards": {
+        "el": ["Προσχώσεις και ρηχά κατά μήκος του βόρειου μόλου."],
+        "en": ["Silting and shoals along the N mole."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.2, "max": 4.0 },
+        "bottom": ["sand", "mud"],
+        "holding": { "el": "Μέτρια.", "en": "Moderate." },
+        "protection": { "wind_good": ["All"], "wind_poor": [] }
+    },
+    "notes": {
+        "el": ["Λιμενίσκος για τοπικά σκάφη, προστασία από όλους τους καιρούς."],
+        "en": ["Small local harbour, sheltered from all winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 9 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agios-sotiras-bay",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.054, "lon": 23.019 },
+    "name": { "el": "Όρμος Αγίου Σωτήρα", "en": "Bay of Agios Sotiras" },
+    "aliases": { "el": ["Αγ. Σωτήρας"], "en": ["Ag. Sotira Bay"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": true },
+    "approach": {
+        "el": "Προσέγγιση από Δ. Ανοιχτός προς ΒΑ, αγκυροβολία στα 10–15 μ.",
+        "en": "Approach from W. Open to NE winds; anchor in 10–15 m."
+    },
+    "hazards": {
+        "el": ["Εκτεθειμένος σε ΒΑ καιρούς."],
+        "en": ["Exposed to NE winds."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 10, "max": 15 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή.", "en": "Good." },
+        "protection": { "wind_good": ["S","SW"], "wind_poor": ["NE"] }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες και minimarket στα 200 μ.", "Cariocas beach bar στη παραλία."],
+        "en": ["Tavernas & minimarket 200 m away.", "Cariocas beach bar on shore."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 9 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-porto-germeno-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.156, "lon": 23.219 },
+    "name": { "el": "Λιμενίσκος Πόρτο Γερμενό", "en": "Porto Germeno Harbour" },
+    "aliases": { "el": ["Πόρτο Γερμενό"], "en": ["Porto Germeno Port"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 15, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Δύσκολη είσοδος με ΝΔ άνεμο. Ρηχά στη Β πλευρά.",
+        "en": "Difficult entrance with SW wind. Shoals on N side."
+    },
+    "hazards": {
+        "el": ["Ρηχά στο βόρειο τμήμα της λεκάνης."],
+        "en": ["Shallows in N part of basin."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["sand","rock"],
+        "holding": { "el": "Κρατά καλά.", "en": "Holds well." },
+        "protection": { "wind_good": ["All"], "wind_poor": ["SW"] }
+    },
+    "services_nearby": {
+        "el": ["Σούπερ μάρκετ & πολλές ταβέρνες σε 1 χλμ.", "Τρεχούμενο νερό στο μόλο (μη πόσιμο)."],
+        "en": ["Supermarkets & tavernas 1 km away.", "Tap water on pier (non-potable)."]
+    },
+    "notes": {
+        "el": ["Ωραίος προορισμός με όμορφο τοπίο – κατάλληλο για αγκυροβολία."],
+        "en": ["Nice destination with beautiful surroundings – best for anchoring."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 10 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agios-vasileios-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.181, "lon": 23.141 },
+    "name": { "el": "Λιμενίσκος Αγίου Βασιλείου", "en": "Agios Vasileios Harbour" },
+    "aliases": { "el": ["Άγιος Βασίλειος"], "en": ["Ag. Vasileios"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 10, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Αβαθή κοντά στους προβλήτες· προσοχή στους βράχους. Σημειωμένη παραλία με κίτρινες σημαδούρες.",
+        "en": "Very shallow close to quays; beware of rocks. Beach marked by yellow buoys."
+    },
+    "hazards": {
+        "el": ["Ρηχά κοντά στην ακτή.", "ΒΑ άνεμοι δυσχεραίνουν την είσοδο."],
+        "en": ["Shallow near shore.", "NE winds make entry difficult."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 6 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "services_nearby": {
+        "el": ["Μίνι μάρκετ και ταβέρνα κοντά στο λιμάνι.", "Στάση λεωφορείου επί της παραλίας."],
+        "en": ["Mini-market and tavern near harbour.", "Bus stop on beach road."]
+    },
+    "notes": {
+        "el": ["Μικρός αλιευτικός λιμένας, φιλόξενοι κάτοικοι."],
+        "en": ["Small fishing harbour, friendly locals."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 10 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-alyki-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.197, "lon": 23.049 },
+    "name": { "el": "Λιμενίσκος Αλυκής", "en": "Alyki Harbour" },
+    "aliases": { "el": ["Αλυκή Βοιωτίας"], "en": ["Alyki Bay Port"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 20, "max_loa_m": 15, "max_draft_m": 3.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Ρηχά στο Β και ΒΑ άκρο του μόλου. Προσέγγιση με προσοχή.",
+        "en": "Rocks on N and NE quays; approach carefully."
+    },
+    "hazards": {
+        "el": ["Ισχυρός Μάιστρος δημιουργεί κυματισμό πάνω από τον νότιο μόλο."],
+        "en": ["Strong mistral creates swell over southern breakwater."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 5 },
+        "bottom": ["sand"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Σούπερ μάρκετ κοντά στην ακτή."],
+        "en": ["Supermarket near shore."]
+    },
+    "notes": {
+        "el": ["Πλήρης με τοπικά σκάφη· οι βάσεις μόνο για μέλη του Ν.Ο."],
+        "en": ["Full of local boats; pontoon for club members only."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 10 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agios-isidoros-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.620, "lon": 22.638 },
+    "name": { "el": "Λιμενίσκος Αγίου Ισιδώρου", "en": "Harbour of Agios Isidoros" },
+    "aliases": { "el": ["Άγιος Ισίδωρος Αντίκυρας"], "en": ["Agios Isidoros Port", "Ag. Isidoros Bay"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 20, "max_loa_m": 20, "max_draft_m": 3.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΒΔ. Φάρος στην είσοδο Fl.R.3s. Ρηχά κοντά στην ακτή, κρατηθείτε στο κέντρο του διαύλου.",
+        "en": "Approach from NW. Entrance light Fl.R.3s. Shallow near the shore—keep mid-channel."
+    },
+    "hazards": {
+        "el": ["Προσάμμωση στην είσοδο.", "Κυματισμός με δυνατούς δυτικούς ανέμους."],
+        "en": ["Siltation near entrance.", "Swell in strong westerlies."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["NE","E"], "wind_poor": ["W","SW"] }
+    },
+    "services_nearby": {
+        "el": ["Μία ταβέρνα στην ακτή."],
+        "en": ["One taverna ashore."]
+    },
+    "notes": {
+        "el": ["Μικρό ψαρολίμανο, φιλοξενεί κυρίως τοπικά σκάφη."],
+        "en": ["Small fishing harbour, mainly local boats."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 12 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agios-nikolaos-fishermen",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.454, "lon": 22.694 },
+    "name": { "el": "Λιμενίσκος Αγίου Νικολάου (Αλιευτικός Όμιλος)", "en": "Agios Nikolaos Fishermen’s Harbour" },
+    "aliases": { "el": ["Αλιευτικός Όμιλος Αγίου Νικολάου"], "en": ["Fishermen’s Harbour of Ag. Nikolaos"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 15, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Είσοδος στο 38°27.102′Ν – 22°37.193′Ε. Προσέγγιση από ΝΑ. Ρηχά κοντά στον μόλο.",
+        "en": "Entrance 38°27.102′N – 22°37.193′E. Approach from SE. Shallows near the mole."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 6 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνα «Ψαροταβέρνα» στον όρμο.", "Περιορισμένες παροχές."],
+        "en": ["Tavern 'Psarotaverna' nearby.", "Limited facilities."]
+    },
+    "notes": {
+        "el": ["Καλή προστασία εκτός από ΝΑ ανέμους."],
+        "en": ["Good shelter except SE winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 12 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-nousa-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.217, "lon": 22.950 },
+    "name": { "el": "Λιμάνι Νούσα", "en": "Nousa Harbour" },
+    "aliases": { "el": ["Νούσα"], "en": ["Nousa Port"] },
+    "facilities": {
+        "fuel": false, "water": false, "power": false,
+        "berths": 5, "max_loa_m": 20, "max_draft_m": 5.0
+    },
+    "approach": {
+        "el": "Με ΝΑ άνεμο υπάρχει ρεστία, με ΒΑ και Β δυνατόν να φυσά δυνατά αλλά χωρίς κύμα.",
+        "en": "Swell with SE winds; strong NW–N winds blow but no significant wave."
+    },
+    "anchorage": {
+        "depth_m": { "min": 5, "max": 10 },
+        "bottom": ["mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "notes": {
+        "el": ["Λιμένας βιομηχανικής χρήσης (εργοστάσιο σωλήνων). Χρησιμοποιείται από ψαράδες."],
+        "en": ["Harbour used by local pipe factory; fishermen unload catch here."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 13 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agios-ioannis-bay",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.209, "lon": 22.963 },
+    "name": { "el": "Όρμος Αγίου Ιωάννη", "en": "Bay of Agios Ioannis" },
+    "aliases": { "el": ["Άγιος Ιωάννης"], "en": ["Ag. Ioannis Cove"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": true },
+    "approach": {
+        "el": "Προσέγγιση από ΝΑ. Βυθός αμμώδης, κρατά καλά λόγω κλίσης. Η ταβέρνα έχει μόνιμα 3 πλωτήρες.",
+        "en": "Approach from SE. Sandy bottom holds well. Tavern has 3 permanent moorings."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 9 },
+        "bottom": ["sand"],
+        "holding": { "el": "Εξαιρετική κράτηση.", "en": "Excellent holding." },
+        "protection": { "wind_good": ["All except SE"], "wind_poor": ["SE"] }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνα 'Ψαροταβέρνα' παρέχει βοήθεια.", "Καλό φαγητό και φιλική εξυπηρέτηση."],
+        "en": ["Tavern 'Psarotaverna' assists mooring.", "Good food and friendly service."]
+    },
+    "notes": {
+        "el": ["Πολύ όμορφο σημείο, αξίζει την επίσκεψη."],
+        "en": ["Very beautiful spot, worth visiting."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 13 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-antikyra-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.379, "lon": 22.641 },
+    "name": { "el": "Λιμένας Αντίκυρας", "en": "Antikyra Harbour" },
+    "aliases": {
+        "el": ["Αντίκυρα", "Λιμάνι Αντίκυρας"],
+        "en": ["Antikyra Port", "Port of Antikira"]
+    },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 40, "max_loa_m": 25, "max_draft_m": 5.5,
+        "provisions": true, "showers_wc": true,
+        "repairs_basic": true, "waste_oil": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Αντίκυρας", "usage_en": "Harbour Office" }],
+    "approach": {
+        "el": "Προσέγγιση από Δ. Ορατή είσοδος με φάρο Fl R 3s. Ρηχά κοντά στη Ν προβλήτα.",
+        "en": "Approach from W. Visible entrance with Fl R 3s light. Shallow near the S quay."
+    },
+    "hazards": {
+        "el": ["Προσάμμωση κοντά στην προβλήτα Ν.", "Προσοχή στους ανέμους ΝΑ – ΒΑ."],
+        "en": ["Siltation near S quay.", "Beware of SE–NE winds."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 8 },
+        "bottom": ["sand", "mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["NE","E"] }
+    },
+    "services_nearby": {
+        "el": ["Σούπερ μάρκετ & ταβέρνες στην παραλία.", "Καύσιμα με βυτιοφόρο."],
+        "en": ["Supermarkets & tavernas on seafront.", "Fuel by mini-tanker."]
+    },
+    "notes": {
+        "el": ["Ιστορικό λιμάνι με καλή προστασία, ιδιαίτερα το καλοκαίρι."],
+        "en": ["Historic harbour with good shelter, especially in summer."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 15 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-vathy-cove",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.376, "lon": 22.619 },
+    "name": { "el": "Αγκυροβόλιο Βαθύ", "en": "Vathy Cove (Antikyra)" },
+    "aliases": { "el": ["Όρμος Βαθύ Αντίκυρας"], "en": ["Vathy Bay Antikyra"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": false },
+    "approach": {
+        "el": "Προσέγγιση από Α. Ρηχά σε απόσταση 100 μ. από την παραλία.",
+        "en": "Approach from E. Shallows 100 m off the beach."
+    },
+    "anchorage": {
+        "depth_m": { "min": 5, "max": 12 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση σε άμμο.", "en": "Good holding in sand." },
+        "protection": { "wind_good": ["NE","E"], "wind_poor": ["W"] }
+    },
+    "notes": {
+        "el": ["Ήσυχο φυσικό καταφύγιο, κατάλληλο για ημερήσια στάση."],
+        "en": ["Quiet natural anchorage, suitable for day stop."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 15 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agios-andreas-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.200, "lon": 22.910 },
+    "name": { "el": "Λιμενίσκος Αγίου Ανδρέα", "en": "Agios Andreas Harbour" },
+    "aliases": { "el": ["Άγιος Ανδρέας Βοιωτίας"], "en": ["Ag. Andreas Port"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 12, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση με προσοχή λόγω ρηχών (βάθη 2 – 3 μ.). Φάρος Fl G 3s στην είσοδο.",
+        "en": "Approach carefully due to shallows (2 – 3 m). Entrance light Fl G 3s."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Μέτρια έως καλή.", "en": "Fair to good." },
+        "protection": { "wind_good": ["All"], "wind_poor": ["S"] }
+    },
+    "notes": {
+        "el": ["Μικρός λιμένας ψαράδων, προστατευμένος από όλους τους καιρούς εκτός νοτίων."],
+        "en": ["Small fishing port sheltered from all but southerlies."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 15 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-diakopto-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 38.196, "lon": 22.191 },
+    "name": { "el": "Λιμένας Διακοπτού", "en": "Diakopto Harbour" },
+    "aliases": { "el": ["Διακοπτό"], "en": ["Diakopto Port"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 20, "max_loa_m": 25, "max_draft_m": 4.0,
+        "provisions": true, "showers_wc": false
+    },
+    "approach": {
+        "el": "Είσοδος ~38°11.993′ N – 22°11.912′ E. Προσοχή στη βόρεια πλευρά όπου υπάρχουν ρηχά.",
+        "en": "Entrance ~38°11.993′ N – 22°11.912′ E. Caution on the N side where shoaling occurs."
+    },
+    "hazards": {
+        "el": ["Περιορισμένος χώρος και πολλά τοπικά σκάφη."],
+        "en": ["Limited space and many local boats."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα & μίνι μάρκετ κοντά.", "Ταβέρνες στην παραλία."],
+        "en": ["Fuel and mini-market nearby.", "Tavernas on the seafront."]
+    },
+    "notes": {
+        "el": ["Μικρό λιμάνι με ήρεμη ατμόσφαιρα και καλή πρόσβαση στο οδοντωτό τρένο Καλαβρύτων."],
+        "en": ["Small harbour with calm atmosphere and easy access to Kalavryta rack railway."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 16 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-krissaios-gulf",
+    "region": "StereEllada",
+    "category": "bay",
+    "position": { "lat": 38.40, "lon": 22.40 },
+    "name": { "el": "Κρισσαίος ή Σαλώνων Κόλπος", "en": "Krissaios (or Salonon) Gulf" },
+    "aliases": { "el": ["Κόλπος Ιτέας"], "en": ["Itea Bay", "Gulf of Salona"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": false },
+    "approach": {
+        "el": "Ρεύματα κινούνται από Δ προς Α· τα μελτέμια επικρατούν το καλοκαίρι. Προσοχή στους υφάλους νότια των Ν. Αγ. Κωνσταντίνου και Αγ. Αθανασίου.",
+        "en": "Currents set W→E; the Meltemi prevails in summer. Beware of reefs S of N. Agios Konstantinos and N. Agios Athanasios."
+    },
+    "hazards": {
+        "el": ["Ρηχά και ύφαλοι κοντά στα νησάκια.", "Δυνατοί άνεμοι Ιούνη–Ιούλη."],
+        "en": ["Shoals near islets.", "Strong winds June–July."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 10, "max": 30 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["E","NE"] }
+    },
+    "notes": {
+        "el": ["Μεγάλος κόλπος με πολλά αγκυροβόλια, πρόσβαση σε Ιτέα, Κίρρα και Γαλαξίδι."],
+        "en": ["Large gulf offering several anchorages with access to Itea, Kirra and Galaxidi."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 17 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-itea-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.431, "lon": 22.424 },
+    "name": { "el": "Λιμένας Ιτέας", "en": "Itea Harbour" },
+    "aliases": { "el": ["Ιτέα Φωκίδας"], "en": ["Port of Itea"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 150, "max_loa_m": 60, "max_draft_m": 6.0,
+        "provisions": true, "showers_wc": true, "repairs_basic": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Ιτέας", "usage_en": "Itea Port Authority" }],
+    "approach": {
+        "el": "Είσοδος στο 38°25.253′Ν – 22°25.753′Ε. Ευρεία είσοδος με φάρο Fl R 3s.",
+        "en": "Entrance 38°25.253′N – 22°25.753′E. Wide entrance with Fl R 3s light."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 8 },
+        "bottom": ["mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα, ηλεκτρικό, νερό, συνεργεία.", "Καταστήματα και εστιατόρια στην πόλη."],
+        "en": ["Fuel, electricity, water, workshops.", "Shops and restaurants in town."]
+    },
+    "notes": {
+        "el": ["Μεγάλος λιμένας εμπορικός και τουριστικός. Καλή προστασία.", "Εύκολη πρόσβαση στους Δελφούς."],
+        "en": ["Large commercial & yacht harbour with good shelter.", "Easy access to Delphi."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 18 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-kirra-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.428, "lon": 22.431 },
+    "name": { "el": "Λιμενίσκος Κίρρας", "en": "Kirra Harbour" },
+    "aliases": { "el": ["Κίρρα Φωκίδας"], "en": ["Port of Kirra"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 40, "max_loa_m": 20, "max_draft_m": 3.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Είσοδος στο 38°25.533′ Ν – 22°25.640′ Ε. Κρατηθείτε κεντρικά.",
+        "en": "Entrance 38°25.533′ N – 22°25.640′ E. Keep mid-channel."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 5 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "services_nearby": {
+        "el": ["Νερό & ρεύμα στο μόλο.", "Ταβέρνες και μίνι μάρκετ κοντά."],
+        "en": ["Water & power on quay.", "Tavernas and mini-market nearby."]
+    },
+    "notes": {
+        "el": ["Καλή προστασία εκτός Ν ανέμων.", "Μικρός λιμένας τοπικών σκαφών."],
+        "en": ["Good shelter except southerlies.", "Small local harbour."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 18 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-antirrio-port",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.334, "lon": 21.777 },
+    "name": { "el": "Λιμένας Αντιρρίου", "en": "Antirrio Port" },
+    "aliases": { "el": ["Αντίρριο"], "en": ["Antirrio Ferry Harbour"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 30, "max_loa_m": 60, "max_draft_m": 5.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Κύριο λιμάνι δυτικά της γέφυρας Ρίου-Αντιρρίου. Κίνηση πορθμείων – προσοχή στα ρεύματα.",
+        "en": "Main harbour W of Rio-Antirrio bridge. Heavy ferry traffic – beware of currents."
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 12 },
+        "bottom": ["mud"],
+        "holding": { "el": "Καλή.", "en": "Good." },
+        "protection": { "wind_good": ["E","NE"], "wind_poor": ["W","SW"] }
+    },
+    "notes": {
+        "el": ["Κεντρικός κόμβος πορθμείων· ισχυρά ρεύματα και στροβιλισμοί από τη γέφυρα.", "Προσεκτική πλοήγηση σε συνθήκες με ισχυρούς ανέμους."],
+        "en": ["Main ferry hub – strong currents and eddies from the bridge.", "Navigation requires caution in strong winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 19 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-galaxidi-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.379, "lon": 22.390 },
+    "name": { "el": "Λιμένας Γαλαξιδίου", "en": "Galaxidi Harbour" },
+    "aliases": { "el": ["Γαλαξίδι"], "en": ["Port of Galaxidi"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 60, "max_loa_m": 40, "max_draft_m": 4.0,
+        "provisions": true, "showers_wc": true, "wifi": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Ιτέας", "usage_en": "Itea Port Authority" }],
+    "approach": {
+        "el": "Πολλά ρηχά και ύφαλοι· πλησιάστε με προσοχή μεταξύ Ν. Παναγιάς και Ν. Γαργώρου. Είσοδος με φαρό Fl R 3s.",
+        "en": "Numerous shoals – approach carefully between N. Panayia and N. Gargoros. Entrance marked Fl R 3s."
+    },
+    "hazards": {
+        "el": ["Υφαλοι νότια του Ν. Απόλλων και Ν. Αγάπης.", "Προσάμμωση στην παλιά λεκάνη."],
+        "en": ["Reefs south of N. Apollon & N. Agapis.", "Silting in old harbour basin."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 8 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["All except E"], "wind_poor": ["E"] }
+    },
+    "services_nearby": {
+        "el": ["Πετρελαιοφόρο (κατόπιν συνεννόησης).", "Ταβέρνες, ξενοδοχεία, mini-market κοντά στο μόλο."],
+        "en": ["Fuel truck on call.", "Tavernas, hotels and mini-markets near the quay."]
+    },
+    "notes": {
+        "el": ["Πολύ όμορφος προορισμός με ιστορικό χαρακτήρα και ήρεμα νερά."],
+        "en": ["Beautiful and historic harbour with calm waters."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 19 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agios-nikolaos-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.340, "lon": 22.490 },
+    "name": { "el": "Λιμενίσκος Αγίου Νικολάου", "en": "Agios Nikolaos Harbour" },
+    "aliases": { "el": ["Άγ. Νικόλαος Φωκίδας"], "en": ["St Nicholas Port"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 20, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από Α. Ρηχά κοντά στην ακτή.",
+        "en": "Approach from E; shallows close inshore."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["sand"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." },
+        "protection": { "wind_good": ["SW","NE"], "wind_poor": ["E"] }
+    },
+    "services_nearby": {
+        "el": ["Καταστήματα και ταβέρνες στο χωριό."],
+        "en": ["Shops and tavernas in the village."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 21 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-kablaki-cove",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.463, "lon": 22.358 },
+    "name": { "el": "Όρμος Καμπλάκι", "en": "Kablaki Cove" },
+    "aliases": { "el": ["Καμπλάκι"], "en": ["Bay of Kablaki"] },
+    "facilities": { "fuel": false, "water": false, "power": false },
+    "approach": {
+        "el": "Προσέγγιση από ΒΑ. Αμμώδης όρμος, βάθη 4 – 8 μ.",
+        "en": "Approach from NE; sandy cove, depths 4–8 m."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 8 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["NE"] }
+    },
+    "notes": {
+        "el": ["Ήσυχο φυσικό αγκυροβόλιο κατάλληλο για μπάνιο."],
+        "en": ["Quiet natural anchorage, good for swimming."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 21 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agia-irini-cove",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.319, "lon": 22.120 },
+    "name": { "el": "Αγκυροβόλιο Αγίας Ειρήνης", "en": "Cove of Agia Irini" },
+    "aliases": { "el": ["Αγία Ειρήνη Γαλαξίδι"], "en": ["Agia Irini Bay (Galaxidi)"] },
+    "facilities": { "fuel": false, "water": false, "power": false },
+    "approach": {
+        "el": "Μικρός όρμος – αγκυροβολία 6-12 μ. σε άμμο.",
+        "en": "Small bay – anchor 6-12 m in sand."
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 12 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 21 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-eratini-panormos-bays",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.356, "lon": 22.203 },
+    "name": { "el": "Όρμοι Ερατεινής και Πάνoρμου", "en": "Eratini & Panormos Bays" },
+    "aliases": { "el": ["Ερατεινή", "Πάνορμος Φωκίδας"], "en": ["Eratini Harbour", "Panormos Harbour"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 25, "max_loa_m": 25, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΔ· προσοχή στους βράχους στην είσοδο του λιμανιού.",
+        "en": "Approach from SW; beware of rocks at harbour entrance."
+    },
+    "hazards": {
+        "el": ["Βράχοι στην είσοδο του Πάνoρμου (βλ. σχέδιο)."],
+        "en": ["Rocks at Panormos entrance (see plan)."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 10 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." },
+        "protection": { "wind_good": ["All except SE"], "wind_poor": ["SE"] }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες, σούπερ μάρκετ και φαρμακείο κοντά.", "Συρόμενη γλίστρα 5 μ."],
+        "en": ["Tavernas, supermarket & pharmacy nearby.", "Slipway 5 m wide."]
+    },
+    "notes": {
+        "el": ["Πολύ καλή προστασία από όλους τους καιρούς εκτός ΝΑ.", "Κατάλληλο για ολιγοήμερη παραμονή."],
+        "en": ["Very good shelter except SE.", "Suitable for short stay."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 22 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-trizonia-marina",
+    "region": "StereEllada",
+    "category": "marina",
+    "position": { "lat": 38.369, "lon": 22.073 },
+    "name": { "el": "Μαρίνα Τριζονίων", "en": "Trizonia Marina" },
+    "aliases": { "el": ["Τριζόνια"], "en": ["Marina of Trizonia", "Trizonia Island Harbour"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 80, "max_loa_m": 40, "max_draft_m": 4.0,
+        "provisions": true, "showers_wc": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Ναυπάκτου", "usage_en": "Nafpaktos Port Authority" }],
+    "approach": {
+        "el": "Κρατηθείτε κεντρικά στον δίαυλο. Ρηχά κοντά στην ακτή ΒΑ.",
+        "en": "Keep mid-channel; shallow near NE shore."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες και mini-market στο νησί.", "Συρόμενη γλίστρα και παλαιό λιμανάκι Ν."],
+        "en": ["Tavernas and mini-market on the island.", "Slipway and old harbour to the N."]
+    },
+    "notes": {
+        "el": ["Καλή προστασία – ιδανικό για αναμονή κακοκαιρίας.", "Πολύ όμορφο περιβάλλον και ήσυχη ατμόσφαιρα."],
+        "en": ["Excellent shelter – ideal for waiting weather.", "Beautiful setting and peaceful ambience."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 23 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-nafpaktos-bay-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.391, "lon": 21.831 },
+    "name": { "el": "Όρμος & Λιμένας Ναυπάκτου", "en": "Bay and Harbour of Nafpaktos" },
+    "aliases": {
+        "el": ["Ναύπακτος", "Όρμος Ναυπάκτου"],
+        "en": ["Nafpaktos Bay", "Port of Nafpaktos"]
+    },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΑ. Η είσοδος είναι στενή με ρηχά εκατέρωθεν. Προσοχή στα ρεύματα από Β.",
+        "en": "Approach from SE. Narrow entrance with shoals on both sides. Beware of N currents."
+    },
+    "hazards": {
+        "el": ["Ρηχά στην είσοδο, περιορισμένος χώρος ελιγμών.", "Ισχυροί άνεμοι προκαλούν κυματισμό στον κόλπο."],
+        "en": ["Shoals at entrance, limited maneuvering room.", "Strong winds cause swell in bay."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 5 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Μέτρια κράτηση.", "en": "Fair holding." },
+        "protection": { "wind_good": ["W","SW"], "wind_poor": ["E","SE"] }
+    },
+    "notes": {
+        "el": [
+        "Γραφικό ιστορικό λιμάνι με μικρή λεκάνη, κατάλληλο για μικρά σκάφη.",
+        "Ιδανικό για σύντομη παραμονή, με πολλές ταβέρνες και υπηρεσίες γύρω."
+        ],
+        "en": [
+        "Picturesque historic harbour, suitable for small boats only.",
+        "Ideal short stopover with many tavernas and services nearby."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 24 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-monastiraki-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.417, "lon": 22.138 },
+    "name": { "el": "Λιμενίσκος Μοναστηρακίου", "en": "Monastiraki Harbour" },
+    "aliases": {
+        "el": ["Μοναστηράκι Φωκίδας"],
+        "en": ["Port of Monastiraki"]
+    },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 25, "max_loa_m": 20, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΒΑ. Ρηχά κοντά στην ακτή, κρατηθείτε στο κέντρο του διαύλου. Φάρος Fl G 3s.",
+        "en": "Approach from NE; shallow close inshore, keep mid-channel. Green light Fl G 3s."
+    },
+    "hazards": {
+        "el": ["Προσάμμωση στην είσοδο κατά καιρούς.", "Ρηχά ανατολικά του μόλου."],
+        "en": ["Silting occurs at entrance.", "Shallow E of the mole."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 5 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["All"], "wind_poor": ["S","SW"] }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες και ξενοδοχεία στην παραλία.", "Σούπερ μάρκετ σε μικρή απόσταση."],
+        "en": ["Tavernas and hotels on the beach.", "Supermarket nearby."]
+    },
+    "notes": {
+        "el": [
+        "Καλή προστασία από όλους τους ανέμους εκτός ΝΔ.",
+        "Εύκολη πρόσβαση στο χωριό Μοναστηράκι."
+        ],
+        "en": [
+        "Good shelter except SW winds.",
+        "Easy access to Monastiraki village."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 24 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-makrynoros-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.445, "lon": 22.200 },
+    "name": { "el": "Λιμενίσκος Μακρυνόρου", "en": "Makrynoros Harbour" },
+    "aliases": {
+        "el": ["Μακρυνόρος Φωκίδας"],
+        "en": ["Makrynoros Port"]
+    },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Ρηχά κοντά στη στεριά· προσέγγιση από ΝΑ, με βάθη 2 – 4 μ.",
+        "en": "Shallow near shore; approach from SE with depths 2–4 m."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Μέτρια κράτηση.", "en": "Fair holding." }
+    },
+    "notes": {
+        "el": [
+        "Μικρό λιμανάκι, χρησιμοποιείται από ψαράδες.",
+        "Περιορισμένος χώρος για ελιγμούς."
+        ],
+        "en": [
+        "Small harbour used by fishermen.",
+        "Limited maneuvering space."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 24 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-chiliadou-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.366, "lon": 22.235 },
+    "name": { "el": "Λιμενίσκος Χιλιαδού", "en": "Chiliadou Harbour" },
+    "aliases": {
+        "el": ["Χιλιαδού Φωκίδας"],
+        "en": ["Port of Chiliadou"]
+    },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 15, "max_loa_m": 20, "max_draft_m": 3.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από Ν. Κρατηθείτε στο κέντρο του διαύλου, καθώς υπάρχουν ρηχά βόρεια.",
+        "en": "Approach from S; keep mid-channel as shallows extend northward."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." },
+        "protection": { "wind_good": ["All except S"], "wind_poor": ["S"] }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα, φαρμακείο και μίνι μάρκετ στο χωριό.", "Ταβέρνες στην παραλία."],
+        "en": ["Fuel, pharmacy & mini-market in the village.", "Tavernas on the beach."]
+    },
+    "notes": {
+        "el": ["Καλό αγκυροβόλιο και όμορφη τοποθεσία για στάση."],
+        "en": ["Good anchorage and pleasant spot for a stop."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 24 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-makynia-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.370, "lon": 21.753 },
+    "name": { "el": "Λιμενίσκος Μακύνειας", "en": "Makynia Harbour" },
+    "aliases": { "el": ["Μακύνεια"], "en": ["Port of Makynia"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 12, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Μικρός λιμενίσκος ανοιχτός προς ΒΑ, προσέγγιση από ΝΔ.",
+        "en": "Small harbour open to NE, approach from SW."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "notes": {
+        "el": ["Μικρός ήσυχος λιμενίσκος κατάλληλος για τοπικά σκάφη."],
+        "en": ["Small and quiet harbour for local craft."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 27 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-kato-vasiliki-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.382, "lon": 21.624 },
+    "name": { "el": "Λιμενίσκος Κάτω Βασιλικής", "en": "Kato Vasiliki Harbour" },
+    "aliases": { "el": ["Κάτω Βασιλική"], "en": ["Port of Kato Vasiliki"] },
+    "facilities": {
+        "fuel": false, "water": false, "power": false,
+        "berths": 8, "max_loa_m": 10, "max_draft_m": 2.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Απλή προσέγγιση από ΒΔ, με ρηχά κοντά στην ακτή.",
+        "en": "Simple approach from NW, shallows near shore."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Μέτρια κράτηση.", "en": "Fair holding." }
+    },
+    "notes": {
+        "el": ["Μικρός λιμένας για βάρκες, κοντά στην παραλία της Κάτω Βασιλικής."],
+        "en": ["Small harbour for boats near Kato Vasiliki beach."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 27 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-agios-panteleimon-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.370, "lon": 21.716 },
+    "name": { "el": "Λιμενίσκος Αγίου Παντελεήμονα", "en": "Agios Panteleimon Harbour" },
+    "aliases": { "el": ["Άγιος Παντελεήμων"], "en": ["St Panteleimon Port"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 12, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΒΔ· προσοχή σε προσχώσεις στον μόλο. Προστασία από όλους τους ανέμους.",
+        "en": "Approach from NW; beware of silting near mole. Sheltered from all winds."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα και τρόφιμα στο Αιγίνιο (10 χλμ).", "Καλό καταφύγιο για μικρά σκάφη."],
+        "en": ["Fuel and supplies in Aigio (10 km).", "Good shelter for small craft."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 28 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-kryoneri-harbour",
+    "region": "StereEllada",
+    "category": "harbor",
+    "position": { "lat": 38.344, "lon": 21.607 },
+    "name": { "el": "Λιμενίσκος Κρυονερίου", "en": "Kryoneri Harbour" },
+    "aliases": { "el": ["Κρυονέρι"], "en": ["Port of Kryoneri"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 12, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΒΑ. Προσοχή στους ρηχούς υφάλους κοντά στην παραλία.",
+        "en": "Approach from NE; beware of shallow reefs near the beach."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες στην παραλία, μικρό σούπερ μάρκετ.", "Καλό φαγητό με θέα στον Πατραϊκό."],
+        "en": ["Beach tavernas and small market.", "Good food with view over Patraikos Gulf."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 29 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-oxeia-islands",
+    "region": "StereEllada",
+    "category": "anchorage",
+    "position": { "lat": 38.286, "lon": 21.138 },
+    "name": { "el": "Νήσοι Οξειά", "en": "Oxeia Islands" },
+    "aliases": { "el": ["Οξειά", "Ν. Οξειά και Ν. Οξεία"], "en": ["Nisis Oxeia", "Oxeia Group"] },
+    "facilities": { "fuel": false, "water": false, "power": false },
+    "approach": {
+        "el": "Προσέγγιση από Ν ή ΝΔ. Προσοχή στους υφάλους και τις ρηχές περιοχές νότια.",
+        "en": "Approach from S or SW. Beware of reefs and shallow areas south of islands."
+    },
+    "anchorage": {
+        "depth_m": { "min": 10, "max": 25 },
+        "bottom": ["sand","rock"],
+        "holding": { "el": "Μέτρια κράτηση λόγω πετρώδους βυθού.", "en": "Fair holding due to rocky bottom." },
+        "protection": { "wind_good": ["N","E"], "wind_poor": ["SW","W"] }
+    },
+    "notes": {
+        "el": ["Μη κατοικημένα νησιά, δημοφιλές αγκυροβόλιο με καθαρά νερά.", "Ανοικτό σε νοτιοδυτικούς ανέμους."],
+        "en": ["Uninhabited islands, popular anchorage with crystal waters.", "Exposed to SW winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 29 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "sterea-ellada-mesolongi-marina",
+    "region": "StereEllada",
+    "category": "marina",
+    "position": { "lat": 38.210, "lon": 21.434 },
+    "name": { "el": "Λιμένας και Μαρίνα Μεσολογγίου", "en": "Limani and Marina of Mesolongi" },
+    "aliases": { "el": ["Μεσολόγγι"], "en": ["Mesolongi Port", "Mesolongi Marina"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 120, "max_loa_m": 50, "max_draft_m": 5.0,
+        "provisions": true, "showers_wc": true, "wifi": true,
+        "repairs_basic": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Μεσολογγίου", "usage_en": "Mesolongi Port Authority" }],
+    "approach": {
+        "el": "Είσοδος μέσω διαύλου 4 ν.μ. μήκους. Επικοινωνήστε με το Λιμεναρχείο πριν την είσοδο. Βάθη 4–5 μ. στον διάυλο.",
+        "en": "Approach via a 4 nm channel. Contact Harbour Office before entering. Depths 4–5 m along the channel."
+    },
+    "hazards": {
+        "el": ["Ρηχά έξω από τον δίαυλο και περιορισμένος χώρος ελιγμών.", "Ισχυρά ρεύματα κατά περιόδους."],
+        "en": ["Shallow outside channel and limited maneuvering area.", "Occasional strong currents."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 6 },
+        "bottom": ["mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα, επισκευές, παντοπωλεία, ταβέρνες.", "Νοσοκομείο και λιμεναρχείο κοντά."],
+        "en": ["Fuel, repairs, groceries, tavernas.", "Hospital and Port Authority nearby."]
+    },
+    "notes": {
+        "el": [
+        "Μεγάλος και ασφαλής λιμένας – μαρίνα για ιδιωτικά σκάφη.",
+        "Διαθέτει πλήρεις υποδομές, ήρεμο περιβάλλον και πρόσβαση στην πόλη του Μεσολογγίου."
+        ],
+        "en": [
+        "Large and safe harbour – marina for private yachts.",
+        "Full facilities, calm surroundings, and direct access to the town of Mesolongi."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 30 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-kato-achaia-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 38.159, "lon": 21.539 },
+    "name": { "el": "Λιμάνι Παραλίας Κάτω Αχαΐας", "en": "Paralia Kato Achaia Harbour" },
+    "aliases": { "el": ["Παραλία Κάτω Αχαΐας"], "en": ["Port of Kato Achaia"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 12, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Γίνονται προσχώσεις στην είσοδο· τα βάθη μεταβάλλονται. Μην πλησιάζετε κοντύτερα από 40 μ. από τον φαρό.",
+        "en": "Continuous silting at entrance; depths vary. Do not go closer than 40 m to the light."
+    },
+    "hazards": {
+        "el": ["Προσχώσεις στη Ν πλευρά της εισόδου.", "Ρηχά κοντά στον κυματοθραύστη."],
+        "en": ["Silting on south side of entrance.", "Shallow near breakwater."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Στο χωριό (1,5 χλμ.) υπάρχουν Τράπεζες, Ταχυδρομείο, Φαρμακείο, Προμήθειες."],
+        "en": ["In the village (1.5 km) banks, Post Office, pharmacy and supplies."]
+    },
+    "notes": {
+        "el": ["Μικρό λιμάνι ψαράδων, κατάλληλο μόνο για ανάγκη.", "Προστασία από ΝΔ άνεμο."],
+        "en": ["Small fishing harbour, use only in emergency.", "Shelter from SW winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 31 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-patras-harbour-marina",
+    "region": "Peloponnisos",
+    "category": "marina",
+    "position": { "lat": 38.246, "lon": 21.735 },
+    "name": { "el": "Λιμένας και Μαρίνα Πάτρας", "en": "Patras Harbour and Marina" },
+    "aliases": { "el": ["Πάτρα"], "en": ["Port of Patras"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 250, "max_loa_m": 60, "max_draft_m": 7.0,
+        "provisions": true, "showers_wc": true, "wifi": true,
+        "repairs_basic": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Πάτρας", "usage_en": "Patras Port Authority" }],
+    "approach": {
+        "el": "Πλησιάστε με προσοχή λόγω συχνής κυκλοφορίας πλοίων και ρευμάτων. Είσοδος από Δ με φάρο Fl.R.3s.",
+        "en": "Approach with care due to heavy traffic and currents. Entrance from W marked Fl.R.3s light."
+    },
+    "hazards": {
+        "el": ["Ρεύματα από το πορθμείο.", "Κυματισμός από διερχόμενα πλοία."],
+        "en": ["Ferry currents.", "Wash from passing ships."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 10 },
+        "bottom": ["mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Όλες οι υπηρεσίες πόλης – επισκευές, καύσιμα, προμήθειες, ξενοδοχεία.", "Πρόσβαση σε αεροδρόμιο Αράξου (45 ′)."],
+        "en": ["Full city facilities – repairs, fuel, supplies, hotels.", "Access to Araxos airport (45 min)."]
+    },
+    "notes": {
+        "el": ["Μεγάλο εμπορικό και τουριστικό λιμάνι της δυτικής Ελλάδας.", "Καλή προστασία – προσοχή στα ρεύματα."],
+        "en": ["Main commercial and yacht port of western Greece.", "Good shelter – beware currents."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 32 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-kyllini-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.933, "lon": 21.150 },
+    "name": { "el": "Λιμένας Κυλλήνης", "en": "Kyllini Harbour" },
+    "aliases": { "el": ["Κυλλήνη"], "en": ["Port of Kyllini"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 100, "max_loa_m": 60, "max_draft_m": 6.0,
+        "provisions": true, "showers_wc": true, "wifi": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Κυλλήνης", "usage_en": "Kyllini Harbour Office" }],
+    "approach": {
+        "el": "Προσέγγιση από Δ, προσέξτε τα ρηχά νότια του μόλου. Φάρος Fl.R.3s.",
+        "en": "Approach from W; beware shallows S of mole. Light Fl.R.3s."
+    },
+    "anchorage": {
+        "depth_m": { "min": 5, "max": 9 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα, σούπερ μάρκετ, φαρμακείο, ξενοδοχεία κοντά.", "Ακτοπλοϊκά για Ζάκυνθο – Κεφαλονιά."],
+        "en": ["Fuel, supermarkets, pharmacy, hotels nearby.", "Ferries to Zakynthos and Kefalonia."]
+    },
+    "notes": {
+        "el": ["Κύριο λιμάνι ακτοπλοΐας προς Ιόνιο.", "Καλή προστασία εκτός ισχυρών ΝΔ."],
+        "en": ["Main Ionian ferry port.", "Good shelter except strong SW winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 33 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-glyfa-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.826, "lon": 21.093 },
+    "name": { "el": "Λιμενίσκος Γλύφας", "en": "Glyfa Harbour" },
+    "aliases": { "el": ["Γλύφα Ηλείας"], "en": ["Port of Glyfa"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 20, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Απλή προσέγγιση, κρατηθείτε στο κέντρο της εισόδου.",
+        "en": "Simple approach, keep mid-entrance."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 4 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "services_nearby": {
+        "el": ["Μικρό χωριό με ταβέρνες και minimarket."],
+        "en": ["Small village with tavernas and minimarket."]
+    },
+    "notes": {
+        "el": ["Ήσυχο λιμάνι με καλό καταφύγιο από όλους τους ανέμους."],
+        "en": ["Quiet harbour, good shelter from all winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 34 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-arkoudi-cove",
+    "region": "Peloponnisos",
+    "category": "anchorage",
+    "position": { "lat": 37.835, "lon": 21.105 },
+    "name": { "el": "Ακτή Αρκούδι", "en": "Arkoudi Cove" },
+    "aliases": { "el": ["Όρμος Αρκούδι"], "en": ["Cove of Arkoudi"] },
+    "facilities": { "fuel": false, "water": false, "power": false },
+    "approach": {
+        "el": "Προσέγγιση από Ν. Αμμώδης παραλία, βάθη 3 – 5 μ.",
+        "en": "Approach from S. Sandy beach, depths 3–5 m."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 5 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." },
+        "protection": { "wind_good": ["E","SE"], "wind_poor": ["W"] }
+    },
+    "notes": {
+        "el": ["Ανοικτό αγκυροβόλιο με ωραία θέα και καθαρά νερά."],
+        "en": ["Open anchorage with nice view and clear waters."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 34 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-kaiafas-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.586, "lon": 21.634 },
+    "name": { "el": "Λιμενίσκος Καϊάφα", "en": "Kaiafas Harbour" },
+    "aliases": { "el": ["Καϊάφας"], "en": ["Port of Kaiafas"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 12, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΑ. Ρηχά κοντά στην παραλία, κρατηθείτε στο κέντρο του διαύλου.",
+        "en": "Approach from SE. Shallow near the beach; keep mid-channel."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Μέτρια κράτηση.", "en": "Fair holding." }
+    },
+    "services_nearby": {
+        "el": ["Ξενοδοχεία και ταβέρνες γύρω από τη λίμνη.", "Ιαματικές πηγές σε κοντινή απόσταση."],
+        "en": ["Hotels & tavernas around the lake.", "Thermal springs nearby."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 35 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-katakolo-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.647, "lon": 21.317 },
+    "name": { "el": "Λιμένας Κατακόλου", "en": "Katakolo Harbour" },
+    "aliases": { "el": ["Κατάκολο"], "en": ["Port of Katakolo"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 100, "max_loa_m": 250, "max_draft_m": 10.0,
+        "provisions": true, "showers_wc": true, "wifi": true,
+        "repairs_basic": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Κατακόλου", "usage_en": "Katakolo Harbour Office" }],
+    "approach": {
+        "el": "Είσοδος 37°39.182′ N – 21°19.120′ E. Ευρεία προσέγγιση με φάρο Fl R 5 s. Προσοχή σε ρηχά βόρεια.",
+        "en": "Entrance 37°39.182′ N – 21°19.120′ E. Wide approach with Fl R 5 s light; beware shoals to north."
+    },
+    "anchorage": {
+        "depth_m": { "min": 5, "max": 15 },
+        "bottom": ["mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["All"], "wind_poor": ["S"] }
+    },
+    "services_nearby": {
+        "el": ["Εφοδιασμός, καύσιμα, τουριστικά καταστήματα.", "Σταθμός τρένου για Ολυμπία (12 χλμ)."],
+        "en": ["Provisions, fuel, tourist shops.", "Train station to Olympia (12 km)."]
+    },
+    "notes": {
+        "el": ["Μεγάλο λιμάνι κρουαζιέρας και αλιείας.", "Καλή προστασία – δημοφιλές αγκυροβόλιο σκαφών αναψυχής."],
+        "en": ["Major cruise & fishing port.", "Good shelter – popular yacht anchorage."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 36 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-palouki-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.767, "lon": 21.292 },
+    "name": { "el": "Λιμένας Παλούκι", "en": "Palouki Harbour" },
+    "aliases": {
+        "el": ["Παλούκι Ηλείας"],
+        "en": ["Port of Palouki"]
+    },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 20, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από Ν. Ρηχά βόρεια του μόλου. Φάρος Fl.R.3s στην είσοδο.",
+        "en": "Approach from S. Shoals north of mole. Entrance light Fl.R.3s."
+    },
+    "hazards": {
+        "el": ["Προσχώσεις και ρηχά στο εσωτερικό τμήμα του λιμένα."],
+        "en": ["Silting and shallow patches inside harbour."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 4.5 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["All"], "wind_poor": ["S"] }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες στην παραλία, κοντά στο Κατάκολο.", "Προστατευμένο καταφύγιο για μικρά σκάφη."],
+        "en": ["Beach tavernas near Katakolo.", "Protected harbour for small boats."]
+    },
+    "notes": {
+        "el": ["Λιμάνι υπό ανάπτυξη, φιλοξενεί κυρίως τοπικά σκάφη."],
+        "en": ["Developing harbour, mainly local boats."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 35 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-alykes-zakynthos-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.818, "lon": 20.817 },
+    "name": { "el": "Λιμενίσκος Αλυκών (Ζάκυνθος)", "en": "Alykes Harbour (Zakynthos)" },
+    "aliases": {
+        "el": ["Αλυκές Ζακύνθου"],
+        "en": ["Port of Alykes", "Alykes Bay"]
+    },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 12, "max_loa_m": 10, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΑ· προσοχή στα ρηχά στην είσοδο. Φάρος Fl.R.3s.",
+        "en": "Approach from SE; beware shallows at entrance. Light Fl.R.3s."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες και minimarket κοντά στο μόλο."],
+        "en": ["Tavernas and minimarket near the pier."]
+    },
+    "notes": {
+        "el": ["Μικρό αγκυροβόλιο με καλή προστασία από όλους τους ανέμους εκτός ΝΑ."],
+        "en": ["Small anchorage with good shelter except SE winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 37 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-zakynthos-main-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.788, "lon": 20.895 },
+    "name": { "el": "Λιμένας Ζακύνθου", "en": "Zakynthos Harbour" },
+    "aliases": {
+        "el": ["Πόλη Ζακύνθου", "Λιμάνι Ζακύνθου"],
+        "en": ["Port of Zakynthos", "Zakynthos Town Harbour"]
+    },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 120, "max_loa_m": 60, "max_draft_m": 6.0,
+        "provisions": true, "showers_wc": true, "wifi": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Ζακύνθου", "usage_en": "Zakynthos Harbour Office" }],
+    "approach": {
+        "el": "Η είσοδος έχει προσχώσεις· προσεγγίστε από ΝΑ. Φάρος Fl.R.3s. Κρατηθείτε μακριά από τα καλώδια αγκυροβολίων.",
+        "en": "Silting at entrance – approach from SE. Light Fl.R.3s. Keep clear of anchorage cables."
+    },
+    "hazards": {
+        "el": ["Ρηχά στην είσοδο, δυνατά ρεύματα κατά περιόδους."],
+        "en": ["Shallows at entrance, occasional currents."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 10 },
+        "bottom": ["mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα, ηλεκτρικό, νερό, προμήθειες, ξενοδοχεία.", "Πολύ κοντά στο κέντρο της Ζακύνθου."],
+        "en": ["Fuel, electricity, water, supplies, hotels.", "Very close to Zakynthos town centre."]
+    },
+    "notes": {
+        "el": ["Κύριο λιμάνι του νησιού – ασφαλές αγκυροβόλιο για σκάφη.", "Προσοχή στα ρεύματα και στη διέλευση πλοίων."],
+        "en": ["Main harbour of the island – safe yacht anchorage.", "Beware currents and ferry traffic."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 39 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-tragaki-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.835, "lon": 20.846 },
+    "name": { "el": "Λιμενίσκος Τραγακίου (Ζάκυνθος)", "en": "Tragaki Harbour (Zakynthos)" },
+    "aliases": {
+        "el": ["Τραγάκι Ζακύνθου"],
+        "en": ["Port of Tragaki", "Tragaki Bay"]
+    },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 8, "max_loa_m": 10, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από Α. Ρηχά στην είσοδο, βάθη 2 – 3 μ.",
+        "en": "Approach from E. Shallow entrance, depths 2–3 m."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "notes": {
+        "el": ["Μικρό αγκυροβόλιο γεμάτο με τοπικά σκάφη.", "Προστατευμένο από όλους τους ανέμους."],
+        "en": ["Small harbour full of local boats.", "Sheltered from all winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 39 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-meso-gerakari-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.843, "lon": 20.478 },
+    "name": { "el": "Λιμενίσκος Μεσό Γερακάρι (Κάβος)", "en": "Meso Gerakari (Kavos) Harbour" },
+    "aliases": { "el": ["Μεσό Γερακάρι", "Κάβος Ζακύνθου"], "en": ["Port of Gerakari", "Kavos Harbour"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 10, "max_loa_m": 12, "max_draft_m": 2.0,
+        "provisions": false
+    },
+    "approach": {
+        "el": "Προσοχή σε προσχώσεις στην είσοδο. Φάρος στο βόρειο άκρο του μόλου.",
+        "en": "Beware of silting at the entrance. Light on north mole tip."
+    },
+    "anchorage": {
+        "depth_m": { "min": 1, "max": 3 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Νερό και ρεύμα στο μόλο· η πλησιέστερη κατοικημένη περιοχή απέχει 3 χλμ."],
+        "en": ["Water & power on pier; nearest village about 3 km away."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 40 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-alikanas-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.844, "lon": 20.778 },
+    "name": { "el": "Λιμενίσκος Αλυκανά (Αγίας Κυριακής)", "en": "Alikanas Harbour (Agia Kyriaki)" },
+    "aliases": { "el": ["Αλυκανάς"], "en": ["Port of Alikanas"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 15, "max_loa_m": 15, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσοχή σε βράχους κοντά στο κρηπίδωμα που μειώνουν το βάθος.",
+        "en": "Beware of rocks near the quay reducing depth."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Νερό στο κρηπίδωμα· στο χωριό (1 χλμ) υπάρχουν όλες οι παροχές."],
+        "en": ["Water on quay; full services in the village (1 km)."]
+    },
+    "notes": {
+        "el": ["Μικρό γραφικό λιμάνι γεμάτο με τοπικά σκάφη.", "Καλή προστασία από όλους τους καιρούς."],
+        "en": ["Small scenic harbour with local boats.", "Good shelter all year."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 40 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-porto-limnionas-cove",
+    "region": "Ionian",
+    "category": "anchorage",
+    "position": { "lat": 37.740, "lon": 20.697 },
+    "name": { "el": "Όρμος Πόρτο Λιμνιώνα", "en": "Porto Limnionas Cove" },
+    "aliases": { "el": ["Πόρτο Λιμνιώνα"], "en": ["Limnionas Bay"] },
+    "facilities": { "fuel": false, "water": true, "power": false, "provisions": true },
+    "approach": {
+        "el": "Στενός βραχώδης όρμος· προσέγγιση με καλό καιρό μόνο για μικρά σκάφη.",
+        "en": "Narrow rocky inlet; approach only in calm weather with small craft."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 10 },
+        "bottom": ["sand","rock"],
+        "holding": { "el": "Καλή κράτηση στο κέντρο του όρμου.", "en": "Good holding mid-bay." },
+        "protection": { "wind_good": ["All except SW"], "wind_poor": ["SW"] }
+    },
+    "services_nearby": {
+        "el": ["Μία ταβέρνα παρέχει νερό και βασικές ανάγκες."],
+        "en": ["Single tavern supplies limited water & needs."]
+    },
+    "notes": {
+        "el": ["Πανέμορφο φυσικό αγκυροβόλιο – καθαρά νερά και βραχώδεις ακτές."],
+        "en": ["Beautiful natural anchorage – clear water & rocky scenery."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 40 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-porto-vromi-cove",
+    "region": "Ionian",
+    "category": "anchorage",
+    "position": { "lat": 37.815, "lon": 20.695 },
+    "name": { "el": "Όρμος Βρώμης (Πόρτο Βρώμη)", "en": "Porto Vromi Bay" },
+    "aliases": { "el": ["Πόρτο Βρώμη"], "en": ["Vromi Cove"] },
+    "facilities": { "fuel": false, "water": true, "power": false, "provisions": true },
+    "approach": {
+        "el": "Προσέγγιση μέσω στενού μεταξύ Ν. Αγ. Ιωάννη και Β. Γιαννάκη – πλάτος ≈ 80 μ.",
+        "en": "Approach via narrow strait between N. Ag. Ioannis and V. Giannaki – width ≈ 80 m."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 12 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." },
+        "protection": { "wind_good": ["All except SW"], "wind_poor": ["SW"] }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνα και τουαλέτες στην ακτή."],
+        "en": ["Tavern & WC ashore."]
+    },
+    "notes": {
+        "el": ["Όμορφος όρμος με καθαρά νερά, δημοφιλής στους ημερήσιους περιηγητές."],
+        "en": ["Beautiful bay with clear water, popular with day-trippers."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 41 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-keri-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.683, "lon": 20.837 },
+    "name": { "el": "Λιμενίσκος Κερίου (Ζάκυνθος)", "en": "Keri Harbour (Zakynthos)" },
+    "aliases": { "el": ["Κέρι"], "en": ["Port of Keri"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 20, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true, "showers_wc": true
+    },
+    "approach": {
+        "el": "Είσοδος 37°40.960′ N – 20°50.410′ E. Ρηχά κοντά στον μόλο, κρατηθείτε κεντρικά.",
+        "en": "Entrance 37°40.960′ N – 20°50.410′ E. Shallow near mole – keep mid-channel."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 6 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα, τρόφιμα, ΑΤΜ, σχολή καταδύσεων.", "Ταβέρνες στην παραλία."],
+        "en": ["Fuel, supplies, ATM, diving school.", "Beachfront tavernas."]
+    },
+    "notes": {
+        "el": ["Πολύ καλή προστασία – συχνά γεμάτο με τουριστικά σκάφη.", "Αφετηρία εκδρομών προς Μαραθονήσι."],
+        "en": ["Very good shelter – often crowded with tour boats.", "Starting point for trips to Marathonisi."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 41 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-tsilivi-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.820, "lon": 20.820 },
+    "name": { "el": "Λιμενίσκος Τσιλιβή (Ζάκυνθος)", "en": "Tsilivi Harbour (Zakynthos)" },
+    "aliases": { "el": ["Τσιλιβή"], "en": ["Port of Tsilivi"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 10, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσοχή σε ρηχά κοντά στην παραλία. Βάθη 1–2 μ. στο στόμιο, αυξάνονται στο κέντρο.",
+        "en": "Shallow near beach; depths 1–2 m at entrance, deeper mid-basin."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες και beach bar στην ακτή.", "Χωριό Τσιλιβή 1,5 χλμ μακριά."],
+        "en": ["Tavernas & beach bar ashore.", "Village 1.5 km away."]
+    },
+    "notes": {
+        "el": ["Πολύ μικρός λιμενίσκος για βάρκες, καλός για προσωρινή στάση."],
+        "en": ["Very small harbour for boats, suitable for short stop."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 41 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-makrys-gialos-cove",
+    "region": "Ionian",
+    "category": "anchorage",
+    "position": { "lat": 37.884, "lon": 20.728 },
+    "name": { "el": "Όρμος Μακρύς Γιαλός (Ζάκυνθος)", "en": "Makrys Gialos Cove (Zakynthos)" },
+    "aliases": { "el": ["Μακρύς Γιαλός"], "en": ["Makris Gialos Bay"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": true },
+    "approach": {
+        "el": "Το πέρασμα μεταξύ Ν. Κάπαρη και ακτής είναι καθαρό. Προσέγγιση από ΝΑ – βάθη 6-8 μ.",
+        "en": "Passage between N. Kapari and coast is clear. Approach from SE – depths 6-8 m."
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 8 },
+        "bottom": ["sand","stone"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." },
+        "protection": { "wind_good": ["SE","NW"], "wind_poor": ["N","NE"] }
+    },
+    "services_nearby": {
+        "el": ["Μία ταβέρνα και minimarket στο χωριό (1 χλμ)."],
+        "en": ["One tavern & minimarket in village (1 km)."]
+    },
+    "notes": {
+        "el": ["Αγκυροβόλιο με καθαρά νερά, κοντά στις Γαλάζιες Σπηλιές."],
+        "en": ["Anchorage with clear waters near Blue Caves."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 41 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-kyparissia-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.259, "lon": 21.672 },
+    "name": { "el": "Λιμένας Κυπαρισσίας", "en": "Kyparissia Harbour" },
+    "aliases": { "el": ["Κυπαρισσία"], "en": ["Port of Kyparissia"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 80, "max_loa_m": 50, "max_draft_m": 5.0,
+        "provisions": true, "showers_wc": true, "repairs_basic": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Κυπαρισσίας", "usage_en": "Kyparissia Harbour Office" }],
+    "approach": {
+        "el": "Προσέγγιση από ΒΑ ή ΝΑ. Ρηχά κοντά στη βόρεια πλευρά του μόλου. Η είσοδος διακρίνεται εύκολα από απόσταση.",
+        "en": "Approach from NE or SE. Shallow near north mole; entrance clearly visible from afar."
+    },
+    "hazards": {
+        "el": ["Τμήμα του μόλου έχει καταστραφεί και δημιουργεί ρηχά.", "Προσάμμωση στο εσωτερικό του λιμένα κατά περιόδους."],
+        "en": ["Part of the mole destroyed forming shoals.", "Periodic silting inside the harbour."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 7 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." },
+        "protection": { "wind_good": ["N","E","S"], "wind_poor": ["W","NW"] }
+    },
+    "services_nearby": {
+        "el": ["Καύσιμα, τρόφιμα, ξενοδοχεία, φαρμακείο και μηχανικός στην πόλη.", "Απόσταση από το κέντρο 500 μ."],
+        "en": ["Fuel, supplies, hotels, pharmacy, and mechanic in town.", "Town centre 500 m away."]
+    },
+    "notes": {
+        "el": [
+        "Μεγάλο και ασφαλές λιμάνι με εμπορική και αλιευτική δραστηριότητα.",
+        "Καλή προστασία από όλους τους καιρούς εκτός ΝΔ."
+        ],
+        "en": [
+        "Large and safe harbour with both commercial and fishing activity.",
+        "Good shelter from all winds except SW."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 41 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-agrili-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.213, "lon": 21.593 },
+    "name": { "el": "Λιμενίσκος Αγριλιού", "en": "Agrili Harbour" },
+    "aliases": { "el": ["Αγρίλι Μεσσηνίας"], "en": ["Port of Agrili"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 8, "max_loa_m": 10, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΑ. Ρηχά κοντά στην είσοδο· τα βάθη μειώνονται σε 1,5 μ. κοντά στο κρηπίδωμα.",
+        "en": "Approach from SE. Shallow near entrance; depths reduce to 1.5 m near quay."
+    },
+    "anchorage": {
+        "depth_m": { "min": 1.5, "max": 3 },
+        "bottom": ["sand"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Νερό διαθέσιμο εντός λιμένα. Κοντά υπάρχουν ταβέρνες και μικρές προμήθειες.", "Απόσταση από Κυπαρισσία 2 χλμ."],
+        "en": ["Water available inside harbour. Nearby tavernas and small provisions.", "2 km from Kyparissia."]
+    },
+    "notes": {
+        "el": ["Μικρός και όμορφος λιμενίσκος, κατάλληλος μόνο για βάρκες και καλά καιρό.", "Πολύ ρηχά στην είσοδο – προσοχή στο προσάραγμα."],
+        "en": ["Small and charming harbour, suitable only for small craft in calm weather.", "Very shallow at entrance – beware grounding."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 42 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-agios-nikolaos-skinari-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.841, "lon": 20.726 },
+    "name": { "el": "Λιμένας Αγίου Νικολάου (Σκινάρι)", "en": "Agios Nikolaos Skínari Harbour" },
+    "aliases": { "el": ["Σκινάρι Ζακύνθου"], "en": ["Port of Agios Nikolaos", "Skinari Bay"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 20, "max_loa_m": 15, "max_draft_m": 3.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Η είσοδος είναι ανοιχτή στα ΝΑ. Προσοχή στις συνεχείς προσχώσεις και στα ρηχά κοντά στον μόλο.",
+        "en": "Entrance open to SE. Beware continuous silting and shallow water near the mole."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 5 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["S","E"], "wind_poor": ["N","NW"] }
+    },
+    "services_nearby": {
+        "el": ["Νερό και ηλεκτρικό στο μόλο.", "Μίνι μάρκετ και ταβέρνες σε κοντινή απόσταση."],
+        "en": ["Water and electricity on quay.", "Mini-market and tavernas nearby."]
+    },
+    "notes": {
+        "el": [
+        "Καλή προστασία από ΝΑ καιρούς, εκτεθειμένο σε Μάιστρο.",
+        "Αφετηρία εκδρομών στις Γαλάζιες Σπηλιές και στο Ναυάγιο."
+        ],
+        "en": [
+        "Good shelter from SE winds, exposed to NW mistral.",
+        "Departure point for Blue Caves and Shipwreck Bay excursions."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 43 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-agios-nikolaos-elies-harbour",
+    "region": "Ionian",
+    "category": "harbor",
+    "position": { "lat": 37.828, "lon": 20.749 },
+    "name": { "el": "Λιμένας Αγίου Νικολάου (Ελιές)", "en": "Agios Nikolaos Elies Harbour" },
+    "aliases": { "el": ["Ελιές Ζακύνθου"], "en": ["Port of Agios Nikolaos Elies"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 10, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΒΔ. Προσοχή στους βράχους βόρεια του μόλου.",
+        "en": "Approach from NW. Beware rocks north of mole."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Μέτρια κράτηση.", "en": "Fair holding." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνα και ενοικιαζόμενα δωμάτια.", "Πολύ ήσυχη τοποθεσία."],
+        "en": ["Tavern and small lodgings.", "Very quiet location."]
+    },
+    "notes": {
+        "el": ["Μικρό καταφύγιο, κυρίως για ντόπιες βάρκες.", "Καλό σημείο για διανυκτέρευση με καλό καιρό."],
+        "en": ["Small shelter mainly for local boats.", "Nice overnight stop in settled weather."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 43 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "ionian-limiona-bay",
+    "region": "Ionian",
+    "category": "anchorage",
+    "position": { "lat": 37.741, "lon": 20.695 },
+    "name": { "el": "Όρμος Λιμιώνα", "en": "Bay of Limiona" },
+    "aliases": { "el": ["Λιμιώνας"], "en": ["Limiona Cove"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": true },
+    "approach": {
+        "el": "Προσέγγιση από ΒΑ, βαθιά είσοδος με βραχώδεις ακτές. Αγκυροβολία στο κέντρο.",
+        "en": "Approach from NE, deep entrance with rocky shores. Anchor mid-bay."
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 15 },
+        "bottom": ["sand","rock"],
+        "holding": { "el": "Κρατά καλά σε άμμο.", "en": "Good holding in sand." }
+    },
+    "notes": {
+        "el": ["Ανοιχτός όρμος, όμορφα νερά – προσοχή σε βοριάδες."],
+        "en": ["Open bay, beautiful waters – exposed to northerlies."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 43 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-agia-kyriaki-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.119, "lon": 21.570 },
+    "name": { "el": "Λιμενίσκος Αγίας Κυριακής", "en": "Agia Kyriaki Harbour" },
+    "aliases": { "el": ["Άγια Κυριακή Μεσσηνίας"], "en": ["Port of Agia Kyriaki"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 8, "max_loa_m": 10, "max_draft_m": 2.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Ρηχά κοντά στα δύο άκρα του μόλου. Προσεγγίστε κεντρικά με προσοχή.",
+        "en": "Shallow near both ends of mole. Approach mid-channel with care."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "notes": {
+        "el": ["Μικρό ψαρολίμανο, ήσυχο και προστατευμένο.", "Δίπλα ταβέρνα και μίνι μάρκετ."],
+        "en": ["Small fishing harbour, calm and sheltered.", "Nearby tavern and mini-market."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 45 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-marmari-bay",
+    "region": "Peloponnisos",
+    "category": "anchorage",
+    "position": { "lat": 36.427, "lon": 22.465 },
+    "name": { "el": "Όρμος Μαρμάρι", "en": "Bay of Marmari" },
+    "aliases": { "el": ["Μαρμάρι Λακωνίας"], "en": ["Marmari Bay Mani"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": true },
+    "approach": {
+        "el": "Προσέγγιση με καλό καιρό. Προσοχή στα ρηχά και στις πέτρες βόρεια και νότια του όρμου.",
+        "en": "Approach in calm weather. Beware shallows and rocks on N and S side of the bay."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 12 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση σε άμμο.", "en": "Good holding in sand." }
+    },
+    "services_nearby": {
+        "el": ["Εποχικές ταβέρνες, ξαπλώστρες και καντίνα στην παραλία."],
+        "en": ["Seasonal tavernas, sunbeds and canteen on the beach."]
+    },
+    "notes": {
+        "el": [
+        "Εξαιρετικός όρμος για μπάνιο, μία από τις καλύτερες παραλίες της Μάνης.",
+        "Ήταν το αρχαίο λιμάνι Αχίλλειον και ορμητήριο του Λάμπρου Κατσώνη."
+        ],
+        "en": [
+        "Superb bay for swimming, considered the best beach of Mani.",
+        "Was the ancient Achilleion port and base of Lambros Katsonis."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 46 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-stomio-cove",
+    "region": "Peloponnisos",
+    "category": "anchorage",
+    "position": { "lat": 37.186, "lon": 21.575 },
+    "name": { "el": "Αγκάλη Στομίου", "en": "Cove of Stomio" },
+    "aliases": { "el": ["Στόμιο"], "en": ["Stomio Bay"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": true },
+    "approach": {
+        "el": "Προσέγγιση με καλό καιρό μόνο για μικρά σκάφη. Υψωμένος πυθμένας 100 μ. δυτικά της εισόδου – προσοχή.",
+        "en": "Approach only in fair weather for small craft. Raised seabed 100 m W of entrance – caution."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 10 },
+        "bottom": ["sand"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Εποχικό beach bar στην ακτή."],
+        "en": ["Seasonal beach bar ashore."]
+    },
+    "notes": {
+        "el": ["Μοναχικό αγκυροβόλιο σε όμορφο τοπίο· μόνο για μικρά σκάφη."],
+        "en": ["Isolated anchorage in a beautiful setting; for small vessels only."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 45 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-proti-marathopoli-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 37.060, "lon": 21.630 },
+    "name": { "el": "Νήσος Πρώτη και Λιμενίσκος Μαραθόπολης", "en": "Nisis Proti and Marathopoli Harbour" },
+    "aliases": { "el": ["Πρώτη", "Μαραθόπολη"], "en": ["Proti Island", "Marathopoli Port"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 25, "max_loa_m": 20, "max_draft_m": 3.5,
+        "provisions": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Κυπαρισσίας", "usage_en": "Kyparissia Port Authority" }],
+    "approach": {
+        "el": "Προσέγγιση από ΝΔ. Αποφύγετε το κανάλι μεταξύ Πρώτης και ακτής σε ισχυρούς ανέμους. Είσοδος λιμένα στο 37°03.685′ Ν – 21°34.416′ Ε.",
+        "en": "Approach from SW. Avoid the channel between Proti and mainland in strong winds. Harbour entrance 37°03.685′ N – 21°34.416′ E."
+    },
+    "hazards": {
+        "el": ["Ισχυρά ρεύματα μεταξύ νησιού και στεριάς.", "Ρηχά στην είσοδο σε ορισμένα σημεία."],
+        "en": ["Strong currents between island and coast.", "Some shallow patches near entrance."]
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 8 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["E","S","W"], "wind_poor": ["N"] }
+    },
+    "services_nearby": {
+        "el": ["Υπηρεσίες στην Μαραθόπολη: καύσιμα, τρόφιμα, ιατρικό κέντρο, φαρμακείο.", "Αφετηρία εκδρομών στη Νήσο Πρώτη."],
+        "en": ["Marathopoli facilities: fuel, supplies, health center, pharmacy.", "Starting point for trips to Nisis Proti."]
+    },
+    "notes": {
+        "el": [
+        "Ασφαλές λιμάνι με καλή προστασία και ήσυχη ατμόσφαιρα.",
+        "Η Πρώτη είναι ιστορικό νησί με ερείπια οχυρώσεων και παλιάς μονής."
+        ],
+        "en": [
+        "Safe harbour with good shelter and peaceful environment.",
+        "Proti Island has ruins of fortifications and an old monastery."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 47 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-vrononeri-bay",
+    "region": "Peloponnisos",
+    "category": "anchorage",
+    "position": { "lat": 37.118, "lon": 21.715 },
+    "name": { "el": "Όρμος Βρονόνερι", "en": "Bay of Vrononeri" },
+    "aliases": { "el": ["Βρονόνερι"], "en": ["Vrononeri Cove"] },
+    "facilities": { "fuel": false, "water": false, "power": false, "provisions": true },
+    "approach": {
+        "el": "Προσοχή στους βράχους και στα ρηχά στα βόρεια. Προσέγγιση από ΝΑ.",
+        "en": "Beware rocks and shoals to north. Approach from SE."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 8 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." },
+        "protection": { "wind_good": ["E","S"], "wind_poor": ["NW"] }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνα και beach bar στην παραλία.", "Καλή προστασία με νότιους ανέμους."],
+        "en": ["Tavern and beach bar ashore.", "Good shelter with southern winds."]
+    },
+    "notes": {
+        "el": ["Ήσυχο και όμορφο αγκυροβόλιο με καθαρά νερά."],
+        "en": ["Peaceful and beautiful anchorage with clear waters."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 47 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-proti-vourlia-anchorage",
+    "region": "Peloponnisos",
+    "category": "anchorage",
+    "position": { "lat": 37.037, "lon": 21.620 },
+    "name": { "el": "Αγκυροβόλιο Βουρλιάς (Νήσος Πρώτη)", "en": "Vourlia Anchorage (Nisis Proti)" },
+    "aliases": { "el": ["Βουρλιά Πρώτης"], "en": ["Vourlia Bay Proti"] },
+    "facilities": { "fuel": false, "water": false, "power": false },
+    "approach": {
+        "el": "Είσοδος από ΒΑ. Ο κόλπος είναι βαθύς και παρέχει καλή προστασία. Αποφύγετε την προσέγγιση με δυνατό άνεμο από ΒΑ.",
+        "en": "Enter from NE. Deep bay with good shelter. Avoid approach in strong NE winds."
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 15 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "notes": {
+        "el": ["Κόλπος ιδανικός για προσωρινή αγκυροβολία με ήπιους καιρούς.", "Καθαρά νερά και ήρεμο τοπίο."],
+        "en": ["Ideal temporary anchorage in calm conditions.", "Clear waters and tranquil surroundings."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 47 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-pylos-harbour-marina",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.917, "lon": 21.698 },
+    "name": {
+        "el": "Όρμος Ναυαρίνου, Λιμένας και Μαρίνα Πύλου",
+        "en": "Bay of Navarino, Limani and Marina Pylos"
+    },
+    "aliases": {
+        "el": ["Πύλος", "Όρμος Ναυαρίνου", "Μαρίνα Πύλου"],
+        "en": ["Pylos", "Navarino Bay", "Pylos Marina"]
+    },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 150, "max_loa_m": 60, "max_draft_m": 6.5,
+        "provisions": true, "showers_wc": true, "wifi": true,
+        "repairs_basic": true, "customs": true, "port_authority": true
+    },
+    "vhf": [
+        { "channel": "12", "usage_el": "Λιμεναρχείο Πύλου", "usage_en": "Pylos Harbour Office" },
+        { "channel": "16", "usage_el": "Κλήσεις / Κίνδυνος", "usage_en": "Distress / Calling" }
+    ],
+    "approach": {
+        "el": "Είσοδος μέσω του στενού Σφακτηρίας (ΝΑ άκρο του όρμου). Το βάθος στο κέντρο του διαύλου είναι 8 – 12 μ.· αποφύγετε το ρηχό τμήμα κοντά στις ακτές. Κατά τους Β ανέμους μπορεί να παρουσιαστούν ριπές.",
+        "en": "Enter through the Sfaktiria strait at SE end of the bay. Depth mid-channel 8–12 m; avoid the shallow parts near the coasts. With N winds, gusts may occur inside."
+    },
+    "hazards": {
+        "el": [
+        "Αντίρρευμα κυκλικής φοράς σε ισχυρούς Β ανέμους.",
+        "Προσάμμωση κοντά στην ανατολική προβλήτα της μαρίνας."
+        ],
+        "en": [
+        "Counter-current sets under strong N winds.",
+        "Silting near the eastern pier of the marina."
+        ]
+    },
+    "anchorage": {
+        "depth_m": { "min": 6, "max": 15 },
+        "bottom": ["mud","sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." },
+        "protection": { "wind_good": ["All"], "wind_poor": ["NE"] }
+    },
+    "services_nearby": {
+        "el": [
+        "Καύσιμα, νερό, ρεύμα, λιμεναρχείο, τελωνείο, μηχανικοί και προμήθειες.",
+        "Η πόλη της Πύλου διαθέτει εστιατόρια, τράπεζες και φαρμακείο σε απόσταση < 500 μ."
+        ],
+        "en": [
+        "Fuel, water, power, Port Authority, Customs, mechanics and supplies.",
+        "Town of Pylos offers restaurants, banks and pharmacy within 500 m."
+        ]
+    },
+    "notes": {
+        "el": [
+        "Ένα από τα ασφαλέστερα φυσικά λιμάνια της Μεσογείου, με ιστορική σημασία από τη Ναυμαχία του Ναυαρίνου (1827).",
+        "Κατάλληλο για αγκυροβόλιο κάθε τύπου σκάφους· προσοχή στις ριπές με ισχυρούς ΒΑ ανέμους.",
+        "Η Πύλος είναι εξαιρετικός σταθμός ανεφοδιασμού πριν ή μετά τη Μεθώνη."
+        ],
+        "en": [
+        "One of the safest natural harbours in the Mediterranean, famous for the Battle of Navarino (1827).",
+        "Excellent anchorage for all vessel types; beware gusts under strong NE winds.",
+        "Pylos is an ideal stop for provisioning before or after Methoni."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 48 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-pylos-marina",
+    "region": "Peloponnisos",
+    "category": "marina",
+    "position": { "lat": 36.917, "lon": 21.696 },
+    "name": { "el": "Μαρίνα Πύλου", "en": "Marina of Pylos" },
+    "aliases": { "el": ["Πύλος Μαρίνα"], "en": ["Pylos Marina"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 130, "max_loa_m": 60, "max_draft_m": 6.0,
+        "provisions": true, "showers_wc": true, "wifi": true,
+        "repairs_basic": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Πύλου", "usage_en": "Pylos Harbour Office" }],
+    "approach": {
+        "el": "Είσοδος στη μαρίνα 36°55.155′ N – 21°41.263′ E. Προσεγγίστε κεντρικά, αποφεύγοντας το ρηχό τμήμα της ανατολικής πλευράς.",
+        "en": "Marina entrance 36°55.155′ N – 21°41.263′ E. Approach mid-channel avoiding the shallow eastern side."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 10 },
+        "bottom": ["mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Στην πόλη Πύλου: καύσιμα, προμήθειες, φαρμακείο, λιμεναρχείο.", "Πρόσβαση σε ξενοδοχεία και εστιατόρια σε απόσταση 500 μ."],
+        "en": ["In Pylos town: fuel, provisions, pharmacy, Port Authority.", "Hotels and restaurants within 500 m."]
+    },
+    "notes": {
+        "el": [
+        "Ασφαλές αγκυροβόλιο για κάθε τύπο σκάφους.",
+        "Πολύ καλή προστασία και ευκολίες ανεφοδιασμού."
+        ],
+        "en": [
+        "Safe harbour for all yacht types.",
+        "Excellent shelter and provisioning facilities."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 49 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-voidokilia-bay",
+    "region": "Peloponnisos",
+    "category": "anchorage",
+    "position": { "lat": 36.961, "lon": 21.659 },
+    "name": { "el": "Όρμος Βοϊδοκοιλιάς", "en": "Voidokilia Bay" },
+    "aliases": { "el": ["Βοϊδοκοιλιά"], "en": ["Voidokilia Cove"] },
+    "facilities": { "fuel": false, "water": false, "power": false },
+    "approach": {
+        "el": "Προσέγγιση από Δ. Μην πλησιάζετε την ακτή λόγω ρηχών και αμμωδών περιοχών. Βάθη 4 – 8 μ.",
+        "en": "Approach from W. Do not get too close to the shore as it is very shallow and sandy. Depths 4–8 m."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 8 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση σε άμμο.", "en": "Good holding in sand." }
+    },
+    "notes": {
+        "el": [
+        "Μία από τις πιο διάσημες παραλίες της Ελλάδας, με κυκλικό σχήμα και καθαρά νερά.",
+        "Κατάλληλη μόνο για ημερήσια στάση λόγω έλλειψης προστασίας."
+        ],
+        "en": [
+        "One of the most famous beaches in Greece, of perfect circular shape and crystal water.",
+        "Suitable for day stop only due to exposure."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 49 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-methoni-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.818, "lon": 21.703 },
+    "name": { "el": "Λιμένας Μεθώνης", "en": "Methoni Harbour" },
+    "aliases": { "el": ["Μεθώνη"], "en": ["Port of Methoni"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 20, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Μεθώνης", "usage_en": "Methoni Harbour Office" }],
+    "approach": {
+        "el": "Είσοδος από Ν. Ρηχά κοντά στον μόλο. Προσοχή στα απόνερα και στα ρεύματα.",
+        "en": "Approach from S. Shallow near mole. Beware of wash and local currents."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["sand"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Προμήθειες και ταβέρνες στο χωριό Μεθώνη.", "Εξαιρετική θέα στο φρούριο της Μεθώνης."],
+        "en": ["Supplies and tavernas in Methoni village.", "Excellent view of Methoni fortress."]
+    },
+    "notes": {
+        "el": [
+        "Μικρό λιμάνι με καλή προστασία από ΝΑ ανέμους.",
+        "Κατάλληλο για αγκυροβόλιο μικρών σκαφών."
+        ],
+        "en": [
+        "Small port well sheltered from SE winds.",
+        "Suitable anchorage for small boats."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 49 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-finikounda-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.800, "lon": 21.812 },
+    "name": { "el": "Λιμένας Φοινικούντας", "en": "Finikounda Harbour" },
+    "aliases": { "el": ["Φοινικούντα"], "en": ["Port of Finikounda"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 25, "max_loa_m": 18, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "vhf": [{ "channel": "12", "usage_el": "Λιμεναρχείο Μεθώνης", "usage_en": "Methoni Port Authority" }],
+    "approach": {
+        "el": "Είσοδος από Ν. Το βάθος είναι 3–5 μ. στο κέντρο. Προσοχή στα ρηχά κοντά στην ακτή.",
+        "en": "Entrance from S. Depths 3–5 m in centre. Beware of shallows near shore."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 5 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες, καύσιμα με βυτιοφόρο, σούπερ μάρκετ, φαρμακείο.", "Ιδανική στάση πριν την Πύλο ή τη Μεθώνη."],
+        "en": ["Tavernas, fuel truck, supermarkets, pharmacy.", "Ideal stop before Pylos or Methoni."]
+    },
+    "notes": {
+        "el": [
+        "Όμορφο τουριστικό χωριό με καλή προστασία και εύκολη πρόσβαση στην ακτή.",
+        "Κατάλληλο αγκυροβόλιο για σκάφη μικρού και μεσαίου μεγέθους."
+        ],
+        "en": [
+        "Beautiful tourist village with good shelter and easy shore access.",
+        "Good anchorage for small to medium-sized yachts."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 49 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-sapientza-islands",
+    "region": "Peloponnisos",
+    "category": "anchorage",
+    "position": { "lat": 36.758, "lon": 21.730 },
+    "name": { "el": "Νήσοι Οινούσσες (Σαπιέντσες)", "en": "Noi Oinousses (Sapientza Islands)" },
+    "aliases": { "el": ["Σαπιέντζα", "Νήσος Οινούσσα"], "en": ["Sapientza", "Oinoussa Island"] },
+    "facilities": { "fuel": false, "water": false, "power": false },
+    "approach": {
+        "el": "Η περιοχή προσφέρει αρκετά καλά αγκυροβόλια. Καλύτερη προστασία νότια της Ν. Σχίζας και στον Όρμο Μαραθίου.",
+        "en": "The area offers several good anchorages. Best shelter S of N. Schiza and in Ormos Marathios."
+    },
+    "anchorage": {
+        "depth_m": { "min": 5, "max": 20 },
+        "bottom": ["sand","rock"],
+        "holding": { "el": "Καλή κράτηση στα περισσότερα σημεία.", "en": "Good holding in most places." }
+    },
+    "notes": {
+        "el": [
+        "Ιδανική περιοχή για ημερήσιο αγκυροβόλιο, με καταγάλανα νερά και βυθό από άμμο.",
+        "Προσοχή στις νησίδες και τους υφάλους γύρω από τη Ν. Καλιών και Σχίζα."
+        ],
+        "en": [
+        "Ideal area for day anchorage, with turquoise waters and sandy bottom.",
+        "Beware of reefs and islets around N. Kalion and Schiza."
+        ]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 50 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-methoni-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.818, "lon": 21.703 },
+    "name": { "el": "Λιμένας Μεθώνης", "en": "Methoni Harbour" },
+    "aliases": { "el": ["Μεθώνη"], "en": ["Port of Methoni"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": true,
+        "berths": 20, "max_loa_m": 15, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΔ. Ρηχά κοντά στη νότια πλευρά, κρατηθείτε κεντρικά.",
+        "en": "Approach from SW. Shallow near south side, keep mid-channel."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 6 },
+        "bottom": ["sand"],
+        "holding": { "el": "Κρατά καλά.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Προμήθειες και ταβέρνες στην παραλία.", "Θέα στο μεσαιωνικό κάστρο."],
+        "en": ["Supplies and tavernas on the beach.", "View to the medieval castle."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 51 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-petalidi-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.959, "lon": 21.960 },
+    "name": { "el": "Λιμένας Πεταλιδίου", "en": "Petalidi Harbour" },
+    "aliases": { "el": ["Πεταλίδι"], "en": ["Port of Petalidi"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 35, "max_loa_m": 25, "max_draft_m": 4.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΑ, βάθη 3-5 μ. στο κέντρο. Προσοχή στα ρηχά βόρεια.",
+        "en": "Approach from SE, depths 3–5 m mid-basin. Shallows to N."
+    },
+    "anchorage": {
+        "depth_m": { "min": 3, "max": 5 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "services_nearby": {
+        "el": ["Αστυνομία, ιατρικό κέντρο, καύσιμα, σούπερ μάρκετ.", "Προστασία από ΝΔ ανέμους."],
+        "en": ["Police, health centre, fuel, supermarkets.", "Shelter from SW winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 51 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-koroni-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.798, "lon": 21.960 },
+    "name": { "el": "Λιμένας Κορώνης", "en": "Koroni Harbour" },
+    "aliases": { "el": ["Κορώνη"], "en": ["Port of Koroni"] },
+    "facilities": {
+        "fuel": true, "water": true, "power": true,
+        "berths": 60, "max_loa_m": 40, "max_draft_m": 5.0,
+        "provisions": true, "showers_wc": true
+    },
+    "approach": {
+        "el": "Είσοδος στο 36°47.991′ Ν – 21°57.921′ Ε. Προσέγγιση από ΝΑ, ρηχά βόρεια του μόλου.",
+        "en": "Entrance 36°47.991′ N – 21°57.921′ E. Approach from SE; shoals north of mole."
+    },
+    "anchorage": {
+        "depth_m": { "min": 4, "max": 8 },
+        "bottom": ["sand","mud"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Προμήθειες, καύσιμα, ταβέρνες, φαρμακείο.", "Πολύ καλή προστασία από Α και ΝΑ."],
+        "en": ["Provisions, fuel, tavernas, pharmacy.", "Very good shelter from E and SE winds."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 52 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-stoupa-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.845, "lon": 22.242 },
+    "name": { "el": "Λιμενίσκος Στούπας", "en": "Stoupa Harbour" },
+    "aliases": { "el": ["Στούπα Μάνης"], "en": ["Port of Stoupa"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 10, "max_loa_m": 10, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Μικρός λιμένας για βάρκες. Προσέγγιση με καλό καιρό· ρηχά βόρεια και ύφαλοι σε απόσταση 500 μ.",
+        "en": "Small harbour for boats. Approach in calm weather; rocks extend 500 m off N side."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες, mini-market και beach bars στην παραλία."],
+        "en": ["Tavernas, mini-market and beach bars ashore."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 52 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-agios-andreas-logga-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.852, "lon": 21.938 },
+    "name": { "el": "Λιμενίσκος Αγίου Ανδρέα (Λογγά)", "en": "Agios Andreas Logga Harbour" },
+    "aliases": { "el": ["Αγ. Ανδρέας Μεσσηνίας"], "en": ["Port of Agios Andreas (Logga)"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 8, "max_loa_m": 12, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από Ν. Προσοχή στους βράχους και ρηχά έξω από το λιμάνι.",
+        "en": "Approach from S; beware rocks and shallows outside harbour."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Μέτρια κράτηση.", "en": "Fair holding." }
+    },
+    "notes": {
+        "el": ["Μικρός λιμενίσκος κυρίως για ψαράδικα.", "Περιορισμένος χώρος ελιγμών."],
+        "en": ["Small fishing harbour.", "Limited maneuvering space."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 52 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-kardamyli-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.888, "lon": 22.234 },
+    "name": { "el": "Λιμενίσκος Καρδαμύλης", "en": "Kardamyli Harbour" },
+    "aliases": { "el": ["Καρδαμύλη Μάνης"], "en": ["Port of Kardamyli"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 6, "max_loa_m": 10, "max_draft_m": 2.5,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσεγγίστε με προσοχή· ύφαλοι στα ΒΑ. Βάθη 1.5 – 3 μ.",
+        "en": "Approach carefully; reefs to NE. Depth 1.5 – 3 m."
+    },
+    "anchorage": {
+        "depth_m": { "min": 1.5, "max": 3 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή.", "en": "Good." }
+    },
+    "services_nearby": {
+        "el": ["Προμήθειες, ταβέρνες, φαρμακείο, mini-market."],
+        "en": ["Supplies, tavernas, pharmacy, mini-market."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 52 }],
+    "last_updated": "2025-11-08"
+    },
+    {
+    "id": "peloponnisos-agios-nikolaos-mani-harbour",
+    "region": "Peloponnisos",
+    "category": "harbor",
+    "position": { "lat": 36.821, "lon": 22.284 },
+    "name": { "el": "Λιμενίσκος Αγίου Νικολάου (Μάνη)", "en": "Agios Nikolaos Harbour (Mani)" },
+    "aliases": { "el": ["Άγιος Νικόλαος Μεσσηνίας"], "en": ["Port of Agios Nikolaos Mani"] },
+    "facilities": {
+        "fuel": false, "water": true, "power": false,
+        "berths": 12, "max_loa_m": 12, "max_draft_m": 3.0,
+        "provisions": true
+    },
+    "approach": {
+        "el": "Προσέγγιση από ΝΑ – κρατηθείτε στο κέντρο του διαύλου. Προσοχή στους ύφαλους ΒΑ του λιμένα.",
+        "en": "Approach from SE – keep mid-channel. Beware reefs NE of harbour."
+    },
+    "anchorage": {
+        "depth_m": { "min": 2.5, "max": 4 },
+        "bottom": ["sand"],
+        "holding": { "el": "Καλή κράτηση.", "en": "Good holding." }
+    },
+    "services_nearby": {
+        "el": ["Ταβέρνες και φαρμακείο στο χωριό. Καύσιμα σε κοντινή απόσταση (1 χλμ)."],
+        "en": ["Tavernas and pharmacy in village. Fuel nearby (1 km)."]
+    },
+    "sources": [{ "type": "SeaGuide", "volume": 3, "page": 52 }],
+    "last_updated": "2025-11-08"
+    }
+]
+    

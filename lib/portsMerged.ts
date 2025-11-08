@@ -3,7 +3,7 @@
 // Sea Guide master (/public/data/sea_guide_vol3_master.json) [optional],
 // και PortFacts (/public/data/port-facts.v1.json) [optional].
 //
-// ΣΗΜΕΙΩΣΗ: Καμία module-level cache – να διαβάζει ΠΑΝΤΑ φρέσκα αρχεία.
+// ΣΚΟΠΙΜΑ: ΧΩΡΙΣ CACHE για να πιάνουμε άμεσα αλλαγές στα JSON.
 
 import { promises as fs } from "fs";
 import path from "path";
@@ -23,12 +23,13 @@ export type CanonicalPort = {
 };
 
 export type SeaGuideRecord = {
-  id: string;
+  id?: string;
   region?: string;
   category?: "harbor" | "marina" | "anchorage" | "spot" | "bay";
   position?: { lat?: number; lon?: number };
   name?: { el?: string; en?: string };
   aliases?: { el?: string[]; en?: string[] };
+  // κρατάμε μόνο τα απολύτως απαραίτητα για UI/coords
 };
 
 export type PortFact = {
@@ -51,10 +52,12 @@ export type MergedPort = {
   region?: string;
   category?: "harbor" | "marina" | "anchorage" | "spot";
   aliases?: string[];
-  // ops fields (μελλοντική χρήση)
+
+  // ops πεδία (για μελλοντική χρήση στα Quick Facts)
   vhf?: string; vhfVerified?: boolean; marina?: string;
   anchorage?: { holding?: string; notes?: string };
   shelter?: string; exposure?: string; hazards?: Hazard[]; notes?: string[]; sources?: string[];
+
   __source: "canonical" | "facts" | "seaguide" | "merged";
 };
 
@@ -64,11 +67,11 @@ const FILE_FACTS = "port-facts.v1.json";
 const FILE_SG    = "sea_guide_vol3_master.json";
 
 function normalize(s: string) {
-  return String(s ?? "").trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-}
-function asArray<T>(v: T | T[] | undefined | null): T[] {
-  if (!v) return [];
-  return Array.isArray(v) ? v : [v];
+  return String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
 }
 function uniqStrings(arr: string[]) {
   const out: string[] = [];
@@ -81,27 +84,30 @@ function uniqStrings(arr: string[]) {
   }
   return out;
 }
-
 async function readJSON<T = any>(fileName: string): Promise<T | null> {
-  const full = path.join(DATA_DIR, fileName);
   try {
+    const full = path.join(DATA_DIR, fileName);
     const buf = await fs.readFile(full, "utf8");
     return JSON.parse(buf) as T;
-  } catch (e) {
-    console.error(`[portsMerged] Failed to read ${full}:`, e);
+  } catch {
     return null;
   }
 }
 
-/** Μετατροπή SeaGuide -> MergedPort (μόνο όσα χρειάζονται για dropdown/coords) */
+function mapCategory(cat?: MergedPort["category"] | "bay"): MergedPort["category"] {
+  if (cat === "bay") return "anchorage";
+  return (cat as MergedPort["category"]) ?? "harbor";
+}
+
+/** Από εγγραφή SeaGuide φτιάχνουμε “port-like” αντικείμενο */
 function fromSeaGuide(r: SeaGuideRecord): MergedPort | null {
   const nameEn = r.name?.en?.trim();
   const nameEl = r.name?.el?.trim();
   const name = nameEn || nameEl;
   if (!name) return null;
 
-  const lat = typeof r.position?.lat === "number" ? r.position!.lat : undefined;
-  const lon = typeof r.position?.lon === "number" ? r.position!.lon : undefined;
+  const lat = r.position?.lat;
+  const lon = r.position?.lon;
 
   const aliases = uniqStrings([
     ...(r.aliases?.en ?? []),
@@ -109,35 +115,35 @@ function fromSeaGuide(r: SeaGuideRecord): MergedPort | null {
     ...(nameEn && nameEl && normalize(nameEn) !== normalize(nameEl) ? [nameEl] : []),
   ]);
 
-  const category =
-    r.category === "bay" ? "anchorage" :
-    (r.category as MergedPort["category"]) ?? "harbor";
-
   return {
     id: r.id,
     name,
     lat,
     lon,
     region: r.region,
-    category,
+    category: mapCategory(r.category),
     aliases,
     __source: "seaguide",
   };
 }
 
-/** Δημιουργεί ΠΑΝΤΑ φρέσκια merged λίστα για το API */
+/** Επιστρέφει ΠΑΝΤΑ νέα merged λίστα (χωρίς cache). */
 export async function buildMergedPorts(): Promise<MergedPort[]> {
   // 1) Canonical
   const canonRaw = await readJSON<CanonicalPort[] | { list: CanonicalPort[] }>(FILE_CANON);
   const CANON: CanonicalPort[] = Array.isArray(canonRaw) ? canonRaw : (canonRaw?.list ?? []);
 
-  // 2) Port facts (προαιρετικό)
+  // 2) Port facts (προαιρετικό, σήμερα δεν τα ρίχνουμε στο UI list)
   const factsRaw = await readJSON<{ version?: string; facts?: any[] }>(FILE_FACTS);
 
   // 3) Sea Guide (προαιρετικό)
   const sgRaw = await readJSON<SeaGuideRecord[]>(FILE_SG);
 
   const out: MergedPort[] = [];
+
+  // === Canonical σε map τόσο από name όσο ΚΑΙ από aliases για πιο έξυπνο merge ===
+  const canonByKey = new Map<string, number>();    // name -> idx
+  const canonAliasToIdx = new Map<string, number>(); // alias -> idx
 
   // Canonical → βάση
   for (const c of CANON) {
@@ -149,54 +155,55 @@ export async function buildMergedPorts(): Promise<MergedPort[]> {
       lon: c.lon,
       region: c.region,
       category: c.category,
-      aliases: asArray(c.aliases),
-      notes: asArray(c.notes),
-      sources: asArray(c.sources),
+      aliases: uniqStrings(c.aliases ?? []),
+      notes: c.notes,
+      sources: c.sources,
       __source: "canonical",
     });
+    const idx = out.length - 1;
+    canonByKey.set(normalize(c.name), idx);
+    for (const a of (c.aliases ?? [])) canonAliasToIdx.set(normalize(a), idx);
   }
 
-  // SeaGuide → merge by name (ή νέα εγγραφή)
+  // SeaGuide → merge σε canonical by name/alias, αλλιώς push ως νέο (με coords)
   if (Array.isArray(sgRaw)) {
     for (const rec of sgRaw) {
-      const s = fromSeaGuide(rec);
-      if (!s) continue;
+      const m = fromSeaGuide(rec);
+      if (!m) continue;
 
-      // Κουμπώνουμε με βάση το όνομα (canonical) ή κάποιο alias
-      const k = normalize(s.name);
-      const idx = out.findIndex(p =>
-        normalize(p.name) === k ||
-        (p.aliases ?? []).some(a => normalize(a) === k)
-      );
+      const k = normalize(m.name);
+      let idx =
+        canonByKey.get(k) ??
+        canonAliasToIdx.get(k) ??
+        out.findIndex(p => normalize(p.name) === k || (p.aliases ?? []).some(a => normalize(a) === k));
 
       if (idx >= 0) {
         const base = out[idx];
         out[idx] = {
           ...base,
-          region: base.region ?? s.region,
-          category: base.category ?? s.category,
-          lat: typeof base.lat === "number" ? base.lat : s.lat,
-          lon: typeof base.lon === "number" ? base.lon : s.lon,
-          aliases: uniqStrings([...(base.aliases ?? []), ...(s.aliases ?? [])]),
+          region: base.region ?? m.region,
+          category: base.category ?? m.category,
+          lat: typeof base.lat === "number" ? base.lat : m.lat,
+          lon: typeof base.lon === "number" ? base.lon : m.lon,
+          aliases: uniqStrings([...(base.aliases ?? []), ...(m.aliases ?? [])]),
           __source: "merged",
         };
       } else {
-        out.push(s);
+        // Αν δεν ταυτίζεται με όνομα/alias, πρόσθεσέ το ΜΟΝΟ αν έχει coords (για να δουλέψει ο χάρτης)
+        if (typeof m.lat === "number" && typeof m.lon === "number") {
+          out.push(m);
+        }
       }
     }
   }
 
-  // Facts (αν υπάρχει JSON facts με names.* aliases)
+  // (optional) facts εμπλουτισμός aliases από JSON “facts”
   if (factsRaw?.facts?.length) {
     for (const f of factsRaw.facts) {
       const label = f?.names?.en || f?.names?.el || f?.id || null;
       if (!label) continue;
-      const key = normalize(String(label));
-
-      const idx = out.findIndex(p =>
-        normalize(p.name) === key ||
-        (p.aliases ?? []).some(a => normalize(a) === key)
-      );
+      const k = normalize(String(label));
+      const idx = out.findIndex(p => normalize(p.name) === k || (p.aliases ?? []).some(a => normalize(a) === k));
       if (idx >= 0) {
         const aliases = uniqStrings([
           ...(out[idx].aliases ?? []),
@@ -204,16 +211,11 @@ export async function buildMergedPorts(): Promise<MergedPort[]> {
           f?.names?.en ?? "",
           f?.names?.el ?? "",
         ]);
-        out[idx] = {
-          ...out[idx],
-          aliases,
-          __source: out[idx].__source === "canonical" ? "merged" : out[idx].__source,
-        };
+        out[idx] = { ...out[idx], aliases, __source: out[idx].__source === "canonical" ? "merged" : out[idx].__source };
       }
     }
   }
 
-  // Επιστρέφουμε ΜΟΝΟ όσα έχουν name + region (τα coords μπορεί να λείπουν,
-  // αλλά στο route φιλτράρουμε όσα δεν έχουν lat/lon).
-  return out.filter(p => p?.name && p?.region);
+  // Τελικό καθάρισμα: κρατάμε όσα έχουν name + region (coords προαιρετικά· το API θα φιλτράρει τα χωρίς coords)
+  return out.filter(p => !!p?.name && !!p?.region);
 }
