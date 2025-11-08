@@ -2,45 +2,18 @@
 
 import { useMemo, useState } from "react";
 import type React from "react";
+import { toPickerOptions, type PortCore, type PickerOption } from "@/lib/portsDisplay";
 
-/* ========= Local types & helpers (no external imports) ========= */
-
-export type PortCore = {
-  id: string;
-  name: string;                           // canonical
-  aliases?: string[];                     // e.g. ["Agia Marina (Aegina)", "Agia Marina"]
-  region?: string;
-  type?: "port" | "marina" | "anchorage";
-};
-
-type PickerOption = {
-  value: string;                          // port id
-  label: string;                          // ONLY display name (no facts)
-  searchText: string;                     // name + aliases (lowercased)
-};
-
-function chooseDisplayName(p: PortCore): string {
-  const withIsland = p.aliases?.find((a) => /\(.+\)/.test(a));
-  return withIsland ?? p.name;
-}
-
-function buildSearchText(p: PortCore): string {
-  const aliasStr = (p.aliases ?? []).join(" ");
-  return `${p.name} ${aliasStr} ${p.region ?? ""}`.toLowerCase().trim();
-}
-
-function toPickerOptions(ports: PortCore[]): PickerOption[] {
-  return ports.map((p) => ({
-    value: p.id,
-    label: chooseDisplayName(p), // show ONLY the display name
-    searchText: buildSearchText(p),
-  }));
-}
-
-/* ===================== Component ===================== */
+/**
+ * PortPicker
+ * - Δείχνει ΜΟΝΟ την ονομασία (displayLabel) στο dropdown
+ * - Κάνει αναζήτηση σε name + aliases (όχι στα facts)
+ *
+ * Πέρνα του το ports[] από όπου ήδη τα φορτώνεις (usePorts / merged dataset).
+ */
 
 type Props = {
-  ports: PortCore[];                // raw ports (no facts in here)
+  ports: PortCore[];                // [{ id, name, aliases?, region?, type? }, ...]
   value?: string;                   // selected port id
   onChange: (id: string) => void;
   placeholder?: string;
@@ -58,13 +31,15 @@ export default function PortPicker({
 }: Props) {
   const [query, setQuery] = useState<string>("");
 
-  // ports -> options with ONLY displayLabel
+  // ports -> options με ΜΟΝΟ displayLabel
   const options: PickerOption[] = useMemo(() => toPickerOptions(ports), [ports]);
 
   const filtered: PickerOption[] = useMemo(() => {
     if (!query) return options.slice(0, maxResults);
     const q = query.toLowerCase();
-    return options.filter((o: PickerOption) => o.searchText.includes(q)).slice(0, maxResults);
+    return options
+      .filter((o: PickerOption) => o.searchText.includes(q))
+      .slice(0, maxResults);
   }, [options, query, maxResults]);
 
   const selected: PickerOption | undefined = value
@@ -83,7 +58,9 @@ export default function PortPicker({
       />
 
       {/* Dropdown */}
-      {(query !== "" || filtered.length > 0) && (
+      {(
+        query !== "" || filtered.length > 0
+      ) && (
         <div
           className="absolute z-50 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg"
           role="listbox"
@@ -100,18 +77,18 @@ export default function PortPicker({
               aria-selected={o.value === selected?.value}
               onClick={() => {
                 onChange(o.value);
-                setQuery(o.label); // fill input with ONLY the name
+                setQuery(o.label); // γεμίζει το input με ΜΟΝΟ το όνομα
               }}
               type="button"
             >
-              {/* Show ONLY the label (display name) */}
+              {/* ⚠️ Εμφανίζουμε ΜΟΝΟ το label (displayLabel) */}
               {o.label}
             </button>
           ))}
         </div>
       )}
 
-      {/* Hidden field if you need it in forms */}
+      {/* Hidden field αν χρειάζεται σε form submit */}
       {selected && <input type="hidden" name="portId" value={selected.value} />}
     </div>
   );
