@@ -67,11 +67,7 @@ const BANK: RegionRing = {
   Ionian: ["Corfu","Paxos","Antipaxos","Lefkada","Meganisi","Kalamos","Kastos","Ithaca","Kefalonia","Zakynthos","Lefkada"],
   Dodecanese: ["Rhodes","Symi","Kos","Kalymnos","Patmos","Rhodes"],
   Sporades: ["Volos","Skiathos","Skopelos","Alonissos","Volos"],
-  NorthAegean: [
-    "Thessaloniki","Nea Moudania","Sani Marina","Nikiti","Vourvourou",
-    "Ormos Panagias","Ouranoupoli","Kavala","Thassos","Samothraki",
-    "Lemnos","Lesvos","Chios","Samos","Ikaria"
-  ],
+  NorthAegean: ["Thessaloniki","Nea Moudania","Sani Marina","Nikiti","Vourvourou","Ormos Panagias","Ouranoupoli","Kavala","Thassos","Samothraki","Lemnos","Lesvos","Chios","Samos","Ikaria"],
   Crete: ["Chania","Rethymno","Heraklion","Agios Nikolaos","Chania"],
 };
 function autoPickRegion(start: string, end: string): RegionKey {
@@ -85,16 +81,14 @@ function autoPickRegion(start: string, end: string): RegionKey {
   return "Cyclades";
 }
 
-/* ========= CLEAN LABELS for port inputs ========= */
-/** λέξεις/μοτίβα που δείχνουν ότι η παρένθεση είναι σχόλιο και όχι τοπωνύμιο */
+/* ========= CLEAN LABELS (global helpers) ========= */
 const BANNED_IN_PARENS = [
   "traffic","change-over","change over","crowd","crowded","meltemi","swell",
   "fuel","water","power","taxi","shops","supermarket","notes",
-  "πολύ","παρασκευή","σάββατο","άνεμο","άνεμοι","κύμα","ρηχ", "βράχ", "τηλέφ", "σημείωση"
+  "πολύ","παρασκευή","σάββατο","άνεμο","άνεμοι","κύμα","ρηχ","βράχ","τηλέφ","σημείωση"
 ];
-
 function isCleanParen(inner: string) {
-  const s = inner.trim().toLowerCase();
+  const s = (inner || "").trim().toLowerCase();
   if (!s) return false;
   if (BANNED_IN_PARENS.some(w => s.includes(w))) return false;
   if (/[0-9!:;.,/\\#@%&*=_+<>?|]/.test(s)) return false;
@@ -103,7 +97,6 @@ function isCleanParen(inner: string) {
   if (s.length > 28) return false;
   return true;
 }
-
 function sanitizeName(raw: string) {
   let s = (raw || "").trim();
   if (!s) return s;
@@ -115,18 +108,19 @@ function sanitizeName(raw: string) {
   const base = s.replace(/\s+/g, " ");
   return `${base} ${firstClean[0]}`.replace(/\s+/g, " ").trim();
 }
-
+/** takes ANY string (even from portFacts) and returns a clean label */
+function sanitizeLabelString(raw: string) { return sanitizeName(raw); }
 function chooseLabelFromPort(p: any): string {
   const name = sanitizeName(p?.name ?? "");
   const aliases: string[] = Array.isArray(p?.aliases) ? p.aliases : [];
   for (const a of aliases) {
     const s = sanitizeName(a);
-    if (/\(.+\)/.test(s)) return s;
+    if (/\(.+\)/.test(s)) return s; // prefer alias with clean "(Island)"
   }
   return name;
 }
 
-/* ========= Autocomplete ========= */
+/* ========= Autocomplete (double-sanitize) ========= */
 function AutoCompleteInput({
   value, onChange, placeholder, options,
 }: { value: string; onChange: (v: string) => void; placeholder: string; options: string[] }) {
@@ -136,12 +130,22 @@ function AutoCompleteInput({
   const [showAll, setShowAll] = useState(false);
   const [hasFocus, setHasFocus] = useState(false);
 
+  // clean everything that comes in
+  const CLEAN_OPTIONS = useMemo(() => {
+    const set = new Set<string>();
+    for (const o of options || []) {
+      const clean = sanitizeLabelString(o);
+      if (clean) set.add(clean);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [options]);
+
   const filtered = useMemo(() => {
     const v = value.trim().toLowerCase();
-    if (showAll) return options.slice(0, 300);
-    if (!v) return options.filter(Boolean).slice(0, 8);
-    return options.filter((o) => o.toLowerCase().includes(v)).slice(0, 12);
-  }, [value, options, showAll]);
+    if (showAll) return CLEAN_OPTIONS.slice(0, 300);
+    if (!v) return CLEAN_OPTIONS.filter(Boolean).slice(0, 8);
+    return CLEAN_OPTIONS.filter((o) => o.toLowerCase().includes(v)).slice(0, 12);
+  }, [value, CLEAN_OPTIONS, showAll]);
 
   function pick(v: string) { onChange(v); setOpen(false); setShowAll(false); }
   function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -522,7 +526,7 @@ function suggestWindow(region: RegionKey, hours: number, weatherAware: boolean) 
 function AIPlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // IMPORTANT: δεν παίρνουμε πλέον "options" από usePorts (είχε σχόλια μέσα)
+  // usePorts χωρίς options (options είχαν σχόλια)
   const { ready, error, ports, findPort: findPortRaw } = usePorts();
 
   const findPort = (input: string): PortCoord | null => {
@@ -531,16 +535,14 @@ function AIPlannerInner() {
     return p ? ({ id: (p as any).id, name: p.name, lat: p.lat, lon: p.lon, aliases: (p as any).aliases }) : null;
   };
 
-  // ✅ Καθαρά labels μόνο από ports[]
+  // ✅ Καθαρά labels μόνο από ports[] και επιπλέον clean aliases
   const PORT_OPTIONS = useMemo(() => {
     const set = new Set<string>();
     for (const p of (ports as any[] ?? [])) {
       const label = chooseLabelFromPort(p);
       if (label) set.add(label);
-      // επίσης πρόσθεσε και το καθαρισμένο canonical name αν διαφέρει
       const cleanName = sanitizeName(p?.name ?? "");
       if (cleanName && cleanName !== label) set.add(cleanName);
-      // και 1-2 καθαρά aliases
       if (Array.isArray(p?.aliases)) {
         for (const a of p.aliases) {
           const s = sanitizeName(a);
