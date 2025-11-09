@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, useAnimation } from "framer-motion";
 
-/* ========= Local minimal UI (χωρίς shadcn) ========= */
+/* === Disable prerender for this page === */
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+/* ---------- Minimal UI (no shadcn) ---------- */
 function UIButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const { className = "", ...rest } = props;
   return (
@@ -17,13 +21,7 @@ function UIButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
     />
   );
 }
-function UICard({
-  title,
-  children,
-}: {
-  title?: React.ReactNode;
-  children?: React.ReactNode;
-}) {
+function UICard({ title, children }: { title?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div className="bg-white/90 backdrop-blur-md border border-white/40 shadow-xl rounded-2xl overflow-hidden">
       {title && (
@@ -36,7 +34,7 @@ function UICard({
   );
 }
 
-/* ================= Types ================= */
+/* ---------- Types ---------- */
 type DayInfo = {
   day: number;
   date?: string;
@@ -47,16 +45,10 @@ type DayInfo = {
   eta?: { dep?: string; arr?: string; window?: string };
   leg?: { from: string; to: string; nm?: number; hours?: number; fuelL?: number };
 };
-type Stop = {
-  id: string;
-  name: string;
-  pos: [number, number]; // 0..100
-  day: number;
-  info: DayInfo;
-};
+type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
 type FinalData = { title?: string; stops: Stop[] };
 
-/* ========== Helpers ========== */
+/* ---------- Helpers ---------- */
 function decodeFromQuery(sp: URLSearchParams): FinalData | null {
   const encoded = sp.get("data");
   if (!encoded) return null;
@@ -68,69 +60,18 @@ function decodeFromQuery(sp: URLSearchParams): FinalData | null {
   }
 }
 
-/* ========== Demo αν λείπουν δεδομένα ========== */
+/* ---------- Demo fallback ---------- */
 const DEMO: FinalData = {
   title: "Cyclades Sunset Demo",
   stops: [
-    {
-      id: "athens",
-      name: "Athens",
-      pos: [18, 66],
-      day: 1,
-      info: {
-        day: 1,
-        title: "Embarkation – Athens",
-        port: "Alimos Marina",
-        notes: "Welcome on board. Sunset cruise & dinner on deck.",
-        eta: { dep: "17:30" },
-        leg: { from: "Athens", to: "Kea", nm: 37, hours: 2.2, fuelL: 380 },
-      },
-    },
-    {
-      id: "kea",
-      name: "Kea",
-      pos: [35, 48],
-      day: 2,
-      info: {
-        day: 2,
-        title: "Kea – Kolona Bay",
-        port: "Kolona Anchorage",
-        notes: "Morning swim, lunch on board, sunset at Kolona.",
-        eta: { dep: "10:00", arr: "12:15" },
-        leg: { from: "Kea", to: "Syros", nm: 32, hours: 1.9, fuelL: 330 },
-      },
-    },
-    {
-      id: "syros",
-      name: "Syros",
-      pos: [58, 40],
-      day: 3,
-      info: {
-        day: 3,
-        title: "Syros – Hermoupolis",
-        port: "Hermoupolis",
-        notes: "Town stroll & fine dining.",
-        eta: { dep: "11:00", arr: "13:00" },
-        leg: { from: "Syros", to: "Mykonos", nm: 20, hours: 1.2, fuelL: 200 },
-      },
-    },
-    {
-      id: "mykonos",
-      name: "Mykonos",
-      pos: [82, 44],
-      day: 4,
-      info: {
-        day: 4,
-        title: "Mykonos – Ornos",
-        port: "Ornos Bay",
-        notes: "Beach clubs & farewell dinner.",
-        eta: { dep: "09:30", arr: "11:00" },
-      },
-    },
+    { id: "athens", name: "Athens", pos: [18, 66], day: 1, info: { day: 1, title: "Embarkation – Athens", port: "Alimos Marina", notes: "Welcome on board. Sunset cruise & dinner on deck.", eta: { dep: "17:30" }, leg: { from: "Athens", to: "Kea", nm: 37, hours: 2.2, fuelL: 380 } } },
+    { id: "kea", name: "Kea", pos: [35, 48], day: 2, info: { day: 2, title: "Kea – Kolona Bay", port: "Kolona Anchorage", notes: "Morning swim, lunch on board, sunset at Kolona.", eta: { dep: "10:00", arr: "12:15" }, leg: { from: "Kea", to: "Syros", nm: 32, hours: 1.9, fuelL: 330 } } },
+    { id: "syros", name: "Syros", pos: [58, 40], day: 3, info: { day: 3, title: "Syros – Hermoupolis", port: "Hermoupolis", notes: "Town stroll & fine dining.", eta: { dep: "11:00", arr: "13:00" }, leg: { from: "Syros", to: "Mykonos", nm: 20, hours: 1.2, fuelL: 200 } } },
+    { id: "mykonos", name: "Mykonos", pos: [82, 44], day: 4, info: { day: 4, title: "Mykonos – Ornos", port: "Ornos Bay", notes: "Beach clubs & farewell dinner.", eta: { dep: "09:30", arr: "11:00" } } },
   ],
 };
 
-/* ========== Visual Layers ========== */
+/* ---------- Visual layers ---------- */
 function Islands({ target }: { target: Stop | null }) {
   const v = target ? target.id.length % 3 : 0;
   return (
@@ -188,16 +129,8 @@ function YachtStern({ label = "NAVIGOPLAN" }: { label?: string }) {
   );
 }
 
-/* ========== HUD ========== */
-function DayCardHUD({
-  info,
-  onContinue,
-  isLast,
-}: {
-  info: DayInfo;
-  onContinue: () => void;
-  isLast: boolean;
-}) {
+/* ---------- HUD ---------- */
+function DayCardHUD({ info, onContinue, isLast }: { info: DayInfo; onContinue: () => void; isLast: boolean }) {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="absolute left-6 bottom-6 max-w-[520px] z-30">
       <UICard
@@ -224,9 +157,7 @@ function DayCardHUD({
               {info.leg.fuelL != null && <span>{info.leg.fuelL} L</span>}
             </div>
           )}
-          {info.activities && info.activities.length > 0 && (
-            <div>Activities: {info.activities.join(" • ")}</div>
-          )}
+          {info.activities && info.activities.length > 0 && <div>Activities: {info.activities.join(" • ")}</div>}
           {info.notes && <p>{info.notes}</p>}
           <div className="pt-3">
             <UIButton onClick={onContinue}>{isLast ? "Finish & Show Overview" : "Continue"}</UIButton>
@@ -237,8 +168,8 @@ function DayCardHUD({
   );
 }
 
-/* ========== Page ========== */
-export default function FinalItineraryPage() {
+/* ---------- Inner component that uses useSearchParams ---------- */
+function FinalItineraryInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -261,26 +192,17 @@ export default function FinalItineraryPage() {
   useEffect(() => {
     if (!curr) return;
     setArrived(false);
-
     const dest = (next ?? curr).pos;
     const hours = curr.info.leg?.hours ?? 1.2;
     const duration = Math.max(2.8, Math.min(10, hours * 6));
-
     yachtControls
-      .start({
-        left: `${dest[0]}%`,
-        top: `${dest[1]}%`,
-        transition: { duration, ease: "easeInOut" },
-      })
+      .start({ left: `${dest[0]}%`, top: `${dest[1]}%`, transition: { duration, ease: "easeInOut" } })
       .then(() => setArrived(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, curr?.pos[0], curr?.pos[1]]);
 
   function handleContinue() {
-    if (idx >= stops.length - 1) {
-      setOverview(true);
-      return;
-    }
+    if (idx >= stops.length - 1) { setOverview(true); return; }
     setIdx((s) => s + 1);
   }
 
@@ -292,10 +214,7 @@ export default function FinalItineraryPage() {
         initial={{ opacity: 0.18 }}
         animate={{ opacity: [0.18, 0.28, 0.18] }}
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-        style={{
-          background:
-            "radial-gradient(800px 400px at 70% 55%, rgba(255,200,120,0.45), transparent 60%)",
-        }}
+        style={{ background: "radial-gradient(800px 400px at 70% 55%, rgba(255,200,120,0.45), transparent 60%)" }}
       />
     </div>
   );
@@ -304,22 +223,11 @@ export default function FinalItineraryPage() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-40">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <motion.div
-          initial={{ scale: 0.9 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 0.8 }}
-          className="relative w-[92vw] h-[78vh] rounded-2xl overflow-hidden shadow-2xl"
-        >
+        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ duration: 0.8 }} className="relative w-[92vw] h-[78vh] rounded-2xl overflow-hidden shadow-2xl">
           <div className="absolute inset-0 bg-gradient-to-b from-[#0b1226] to-[#030712]" />
           <Waves />
           <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <polyline
-              points={stops.map((s) => `${s.pos[0]},${s.pos[1]}`).join(" ")}
-              fill="none"
-              stroke="rgba(255,255,255,0.7)"
-              strokeWidth="0.8"
-              strokeDasharray="2 1"
-            />
+            <polyline points={stops.map((s) => `${s.pos[0]},${s.pos[1]}`).join(" ")} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="0.8" strokeDasharray="2 1" />
             {stops.map((s) => (
               <g key={s.id}>
                 <circle cx={s.pos[0]} cy={s.pos[1]} r={1.8} fill="#d0a84b" />
@@ -336,9 +244,7 @@ export default function FinalItineraryPage() {
                 {stops.length} days • {stops[0]?.name} → {stops[stops.length - 1]?.name}
               </div>
             </div>
-            <UIButton onClick={() => router.push("/ai")} className="w-auto px-4">
-              Back to Planner
-            </UIButton>
+            <UIButton onClick={() => router.push("/ai")} className="w-auto px-4">Back to Planner</UIButton>
           </div>
         </motion.div>
       </div>
@@ -354,23 +260,19 @@ export default function FinalItineraryPage() {
         initial={{ scale: 0.95, opacity: 0.9 }}
         animate={{ scale: [0.95, 1, 0.95], opacity: [0.9, 1, 0.9] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        style={{
-          width: 140,
-          height: 140,
-          background:
-            "radial-gradient(circle at 50% 50%, #ffd08a 0%, #ffb45f 35%, rgba(255,114,58,0.0) 70%)",
-          filter: "blur(0.3px)",
-        }}
+        style={{ width: 140, height: 140, background: "radial-gradient(circle at 50% 50%, #ffd08a 0%, #ffb45f 35%, rgba(255,114,58,0.0) 70%)", filter: "blur(0.3px)" }}
       />
       <Waves />
       <Islands target={stops[idx] ?? null} />
       {/* Yacht */}
       <motion.div
         className="absolute z-20"
-        initial={{
-          left: `${stops[0]?.pos[0] ?? 20}%`,
-          top: `${stops[0]?.pos[1] ?? 70}%`,
-        }}
+        initial={{ left: `${stops[0]?.pos[0] ?? 20}%`, top: `${stops[0]?.pos[1] ?? 70}%` }}
+        animate={useAnimation()}
+      />
+      <motion.div
+        className="absolute z-20"
+        initial={{ left: `${stops[0]?.pos[0] ?? 20}%`, top: `${stops[0]?.pos[1] ?? 70}%` }}
         animate={yachtControls}
       >
         <YachtStern label="NAVIGOPLAN" />
@@ -378,27 +280,26 @@ export default function FinalItineraryPage() {
 
       {/* HUD */}
       {stops[idx] && !overview && (
-        <DayCardHUD
-          info={stops[idx].info}
-          isLast={idx >= stops.length - 1}
-          onContinue={handleContinue}
-        />
+        <DayCardHUD info={stops[idx].info} isLast={idx >= stops.length - 1} onContinue={handleContinue} />
       )}
 
       {/* Title */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white z-30">
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="px-5 py-2 rounded-full bg-white/10 border border-white/30 backdrop-blur-md"
-        >
-          <span className="font-semibold tracking-wide">
-            {data.title ?? "Final Itinerary"}
-          </span>
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="px-5 py-2 rounded-full bg-white/10 border border-white/30 backdrop-blur-md">
+          <span className="font-semibold tracking-wide">{data.title ?? "Final Itinerary"}</span>
         </motion.div>
       </div>
 
       {overview && overviewLayer}
     </div>
+  );
+}
+
+/* ---------- Page wrapper WITH Suspense ---------- */
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <FinalItineraryInner />
+    </Suspense>
   );
 }
