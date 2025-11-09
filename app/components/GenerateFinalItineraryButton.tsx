@@ -20,6 +20,13 @@ type DayInfo = {
 type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
 type FinalData = { title?: string; stops: Stop[] };
 
+/* ===== Unicode-safe Base64 helpers ===== */
+function safeBtoa(obj: unknown) {
+  const json = JSON.stringify(obj);
+  // encode Unicode -> base64
+  return btoa(unescape(encodeURIComponent(json)));
+}
+
 export default function GenerateFinalItineraryButton({
   dayCards,
   yacht,
@@ -73,11 +80,16 @@ export default function GenerateFinalItineraryButton({
   }
 
   function openFinal() {
-    const stops = buildStopsFromPlan(dayCards || []);
-    const title = tripTitle ?? triptitle ?? "Final Itinerary";
-    const data: FinalData = { title, stops };
-    const encoded = btoa(JSON.stringify(data));
-    router.push(`/itinerary/final?data=${encodeURIComponent(encoded)}`);
+    try {
+      const stops = buildStopsFromPlan(Array.isArray(dayCards) ? dayCards : []);
+      const title = tripTitle ?? triptitle ?? "Final Itinerary";
+      const data: FinalData = { title, stops };
+      const encoded = safeBtoa(data);
+      router.push(`/itinerary/final?data=${encodeURIComponent(encoded)}`);
+    } catch (err) {
+      console.error("GenerateFinalItineraryButton error:", err);
+      alert("Κάτι πήγε στραβά στο άνοιγμα του Final Itinerary. Δοκίμασε ξανά.");
+    }
   }
 
   return (
