@@ -123,6 +123,61 @@ function YachtStern({ label = "NAVIGOPLAN" }: { label?: string }) {
   );
 }
 
+/* ---------- HUD (ΠΡΟΣΤΕΘΗΚΕ) ---------- */
+function DayCardHUD({
+  info,
+  onContinue,
+  isLast,
+}: {
+  info: DayInfo;
+  onContinue: () => void;
+  isLast: boolean;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="absolute left-6 bottom-6 max-w-[520px] z-30"
+    >
+      <UICard
+        title={
+          <div className="flex items-center gap-3">
+            <span className="text-xl">Day {info.day}</span>
+            {info.title && <span className="text-neutral-600">— {info.title}</span>}
+          </div>
+        }
+      >
+        <div className="space-y-2 text-sm">
+          {info.eta && (
+            <div>
+              {info.eta.dep && <span className="mr-3">Dep: {info.eta.dep}</span>}
+              {info.eta.arr && <span className="mr-3">Arr: {info.eta.arr}</span>}
+              {info.eta.window && <span>Window: {info.eta.window}</span>}
+            </div>
+          )}
+          {info.port && <div>Port: {info.port}</div>}
+          {info.leg && (info.leg.nm || info.leg.hours || info.leg.fuelL) && (
+            <div>
+              {info.leg.nm != null && <span className="mr-3">{info.leg.nm} nm</span>}
+              {info.leg.hours != null && <span className="mr-3">{info.leg.hours} h</span>}
+              {info.leg.fuelL != null && <span>{info.leg.fuelL} L</span>}
+            </div>
+          )}
+          {info.activities && info.activities.length > 0 && (
+            <div>Activities: {info.activities.join(" • ")}</div>
+          )}
+          {info.notes && <p>{info.notes}</p>}
+          <div className="pt-3">
+            <UIButton onClick={onContinue}>
+              {isLast ? "Finish & Show Overview" : "Continue"}
+            </UIButton>
+          </div>
+        </div>
+      </UICard>
+    </motion.div>
+  );
+}
+
 /* ---------- Client page ---------- */
 export default function FinalClient() {
   const searchParams = useSearchParams();
@@ -134,7 +189,10 @@ export default function FinalClient() {
     return decoded && Array.isArray(decoded.stops) && decoded.stops.length ? decoded : DEMO;
   }, [searchParams]);
 
-  const stops = useMemo(() => [...data.stops].sort((a, b) => a.day - b.day), [data.stops]);
+  const stops = useMemo(
+    () => [...data.stops].sort((a, b) => a.day - b.day),
+    [data.stops]
+  );
 
   const [idx, setIdx] = useState(0);
   const [overview, setOverview] = useState(false);
@@ -157,7 +215,10 @@ export default function FinalClient() {
   }, [idx, curr?.pos[0], curr?.pos[1]]);
 
   function handleContinue() {
-    if (idx >= stops.length - 1) { setOverview(true); return; }
+    if (idx >= stops.length - 1) {
+      setOverview(true);
+      return;
+    }
     setIdx((s) => s + 1);
   }
 
@@ -169,13 +230,20 @@ export default function FinalClient() {
         initial={{ opacity: 0.18 }}
         animate={{ opacity: [0.18, 0.28, 0.18] }}
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-        style={{ background: "radial-gradient(800px 400px at 70% 55%, rgba(255,200,120,0.45), transparent 60%)" }}
+        style={{
+          background:
+            "radial-gradient(800px 400px at 70% 55%, rgba(255,200,120,0.45), transparent 60%)",
+        }}
       />
     </div>
   );
 
   const overviewLayer = (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-40">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="absolute inset-0 z-40"
+    >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div className="absolute inset-0 flex items-center justify-center">
         <motion.div
@@ -186,21 +254,43 @@ export default function FinalClient() {
         >
           <div className="absolute inset-0 bg-gradient-to-b from-[#0b1226] to-[#030712]" />
           <Waves />
-          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <polyline points={stops.map((s) => `${s.pos[0]},${s.pos[1]}`).join(" ")} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="0.8" strokeDasharray="2 1" />
+          <svg
+            className="absolute inset-0 w-full h-full"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+          >
+            <polyline
+              points={stops.map((s) => `${s.pos[0]},${s.pos[1]}`).join(" ")}
+              fill="none"
+              stroke="rgba(255,255,255,0.7)"
+              strokeWidth="0.8"
+              strokeDasharray="2 1"
+            />
             {stops.map((s) => (
               <g key={s.id}>
                 <circle cx={s.pos[0]} cy={s.pos[1]} r={1.8} fill="#d0a84b" />
-                <text x={s.pos[0] + 1.5} y={s.pos[1] - 1.5} fontSize="3" fill="#f8fafc">{`D${s.day}: ${s.name}`}</text>
+                <text
+                  x={s.pos[0] + 1.5}
+                  y={s.pos[1] - 1.5}
+                  fontSize="3"
+                  fill="#f8fafc"
+                >{`D${s.day}: ${s.name}`}</text>
               </g>
             ))}
           </svg>
           <div className="absolute left-4 bottom-4 right-4 flex items-center justify-between text-white">
             <div>
-              <div className="text-lg font-semibold">{data.title ?? "Final Itinerary"}</div>
-              <div className="text-sm opacity-80">{stops.length} days • {stops[0]?.name} → {stops[stops.length - 1]?.name}</div>
+              <div className="text-lg font-semibold">
+                {data.title ?? "Final Itinerary"}
+              </div>
+              <div className="text-sm opacity-80">
+                {stops.length} days • {stops[0]?.name} →{" "}
+                {stops[stops.length - 1]?.name}
+              </div>
             </div>
-            <UIButton onClick={() => router.push("/ai")} className="w-auto px-4">Back to Planner</UIButton>
+            <UIButton onClick={() => router.push("/ai")} className="w-auto px-4">
+              Back to Planner
+            </UIButton>
           </div>
         </motion.div>
       </div>
@@ -216,25 +306,48 @@ export default function FinalClient() {
         initial={{ scale: 0.95, opacity: 0.9 }}
         animate={{ scale: [0.95, 1, 0.95], opacity: [0.9, 1, 0.9] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        style={{ width: 140, height: 140, background: "radial-gradient(circle at 50% 50%, #ffd08a 0%, #ffb45f 35%, rgba(255,114,58,0.0) 70%)", filter: "blur(0.3px)" }}
+        style={{
+          width: 140,
+          height: 140,
+          background:
+            "radial-gradient(circle at 50% 50%, #ffd08a 0%, #ffb45f 35%, rgba(255,114,58,0.0) 70%)",
+          filter: "blur(0.3px)",
+        }}
       />
       <Waves />
       <Islands target={stops[idx] ?? null} />
 
       {/* Yacht */}
-      <motion.div className="absolute z-20" initial={{ left: `${stops[0]?.pos[0] ?? 20}%`, top: `${stops[0]?.pos[1] ?? 70}%` }} animate={yachtControls}>
+      <motion.div
+        className="absolute z-20"
+        initial={{
+          left: `${stops[0]?.pos[0] ?? 20}%`,
+          top: `${stops[0]?.pos[1] ?? 70}%`,
+        }}
+        animate={yachtControls}
+      >
         <YachtStern label="NAVIGOPLAN" />
       </motion.div>
 
       {/* HUD */}
       {stops[idx] && !overview && (
-        <DayCardHUD info={stops[idx].info} isLast={idx >= stops.length - 1} onContinue={handleContinue} />
+        <DayCardHUD
+          info={stops[idx].info}
+          isLast={idx >= stops.length - 1}
+          onContinue={handleContinue}
+        />
       )}
 
       {/* Title */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white z-30">
-        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="px-5 py-2 rounded-full bg-white/10 border border-white/30 backdrop-blur-md">
-          <span className="font-semibold tracking-wide">{data.title ?? "Final Itinerary"}</span>
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="px-5 py-2 rounded-full bg-white/10 border border-white/30 backdrop-blur-md"
+        >
+          <span className="font-semibold tracking-wide">
+            {data.title ?? "Final Itinerary"}
+          </span>
         </motion.div>
       </div>
 
