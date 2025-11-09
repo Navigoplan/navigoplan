@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, useAnimation } from "framer-motion";
 
-/* ---------- Minimal UI (no shadcn) ---------- */
+/* ---------- Minimal UI ---------- */
 function UIButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const { className = "", ...rest } = props;
   return (
@@ -44,11 +44,14 @@ type DayInfo = {
 type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
 type FinalData = { title?: string; stops: Stop[] };
 
-/* ---------- Helpers ---------- */
-function decodeFromQuery(sp: URLSearchParams): FinalData | null {
-  const encoded = sp.get("data");
-  if (!encoded) return null;
-  try { return JSON.parse(atob(encoded)) as FinalData; } catch { return null; }
+/* ===== Unicode-safe Base64 helpers ===== */
+function safeAtobToJSON<T = any>(s: string): T | null {
+  try {
+    const json = decodeURIComponent(escape(atob(s)));
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
 }
 
 /* ---------- Demo fallback ---------- */
@@ -120,53 +123,15 @@ function YachtStern({ label = "NAVIGOPLAN" }: { label?: string }) {
   );
 }
 
-/* ---------- HUD ---------- */
-function DayCardHUD({ info, onContinue, isLast }: { info: DayInfo; onContinue: () => void; isLast: boolean }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="absolute left-6 bottom-6 max-w-[520px] z-30">
-      <UICard
-        title={
-          <div className="flex items-center gap-3">
-            <span className="text-xl">Day {info.day}</span>
-            {info.title && <span className="text-neutral-600">— {info.title}</span>}
-          </div>
-        }
-      >
-        <div className="space-y-2 text-sm">
-          {info.eta && (
-            <div>
-              {info.eta.dep && <span className="mr-3">Dep: {info.eta.dep}</span>}
-              {info.eta.arr && <span className="mr-3">Arr: {info.eta.arr}</span>}
-              {info.eta.window && <span>Window: {info.eta.window}</span>}
-            </div>
-          )}
-          {info.port && <div>Port: {info.port}</div>}
-          {info.leg && (info.leg.nm || info.leg.hours || info.leg.fuelL) && (
-            <div>
-              {info.leg.nm != null && <span className="mr-3">{info.leg.nm} nm</span>}
-              {info.leg.hours != null && <span className="mr-3">{info.leg.hours} h</span>}
-              {info.leg.fuelL != null && <span>{info.leg.fuelL} L</span>}
-            </div>
-          )}
-          {info.activities && info.activities.length > 0 && <div>Activities: {info.activities.join(" • ")}</div>}
-          {info.notes && <p>{info.notes}</p>}
-          <div className="pt-3">
-            <UIButton onClick={onContinue}>{isLast ? "Finish & Show Overview" : "Continue"}</UIButton>
-          </div>
-        </div>
-      </UICard>
-    </motion.div>
-  );
-}
-
 /* ---------- Client page ---------- */
 export default function FinalClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const data = useMemo<FinalData>(() => {
-    const decoded = decodeFromQuery(searchParams as unknown as URLSearchParams);
-    return decoded && decoded.stops?.length ? decoded : DEMO;
+    const encoded = searchParams.get("data");
+    const decoded = encoded ? safeAtobToJSON<FinalData>(encoded) : null;
+    return decoded && Array.isArray(decoded.stops) && decoded.stops.length ? decoded : DEMO;
   }, [searchParams]);
 
   const stops = useMemo(() => [...data.stops].sort((a, b) => a.day - b.day), [data.stops]);
