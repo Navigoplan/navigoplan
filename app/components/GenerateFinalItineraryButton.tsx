@@ -18,6 +18,7 @@ type DayInfo = {
 type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
 type FinalData = { title?: string; stops: Stop[] };
 
+/* ===== Unicode-safe Base64 helpers ===== */
 function safeBtoa(obj: unknown) {
   const json = JSON.stringify(obj);
   return btoa(unescape(encodeURIComponent(json)));
@@ -36,6 +37,7 @@ export default function GenerateFinalItineraryButton({
   disabled?: boolean;
   label?: string;
 }) {
+
   function buildStopsFromPlan(plan: DayCard[]): Stop[] {
     const N = plan.length;
     const x0 = 12, x1 = 85;
@@ -71,34 +73,43 @@ export default function GenerateFinalItineraryButton({
     });
   }
 
-  function openFinal(e: React.MouseEvent<HTMLButtonElement>) {
+  function handleClick(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
 
-    const stops = buildStopsFromPlan(Array.isArray(dayCards) ? dayCards : []);
-    const title = tripTitle || "Final Itinerary";
-    const data: FinalData = { title, stops };
-
     try {
+      const plan = Array.isArray(dayCards) ? dayCards : [];
+      const stops = buildStopsFromPlan(plan);
+      const title = tripTitle || "Final Itinerary";
+
+      // 1) σώζω όλο το full plan στο sessionStorage (δεύτερο κανάλι)
       if (typeof window !== "undefined") {
-        // γράφω και sessionStorage ως δεύτερο κανάλι
-        sessionStorage.setItem("navigoplan.finalItinerary", JSON.stringify({ dayCards, yacht, tripTitle: title, createdAt: Date.now() }));
+        const payload = { dayCards: plan, yacht, tripTitle: title, createdAt: Date.now() };
+        sessionStorage.setItem("navigoplan.finalItinerary", JSON.stringify(payload));
+
+        // 2) φτιάχνω compact data= για τη νέα σελίδα
+        const data: FinalData = { title, stops };
         const encoded = encodeURIComponent(safeBtoa(data));
         const url = `/itinerary/final?data=${encoded}`;
 
-        // ανοίγω ΝΕΑ καρτέλα (user-gesture)
+        // 3) ΑΝΟΙΓΩ ΜΟΝΟ ΝΕΑ ΚΑΡΤΕΛΑ (ΔΕΝ χρησιμοποιώ router.push)
         const win = window.open(url, "_blank", "noopener,noreferrer");
-        if (!win) window.location.href = url; // fallback στο ίδιο tab (popup blocker)
+        if (!win) {
+          // αν ο browser μπλοκάρει pop-ups, ανοίγω στο ίδιο tab
+          window.location.href = url;
+        }
       }
     } catch (err) {
       console.error("GenerateFinalItineraryButton error:", err);
-      if (typeof window !== "undefined") window.location.href = "/itinerary/final";
+      if (typeof window !== "undefined") {
+        window.location.href = "/itinerary/final";
+      }
     }
   }
 
   return (
     <button
       type="button"
-      onClick={openFinal}
+      onClick={handleClick}
       disabled={disabled}
       className="inline-flex items-center justify-center rounded-xl px-5 py-3 bg-black text-white hover:bg-black/85 disabled:opacity-40 shadow-md transition"
     >
