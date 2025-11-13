@@ -91,8 +91,7 @@ function Water() {
     const t = clock.getElapsedTime();
     if (matRef.current) {
       const base = 0.5 + Math.sin(t * 0.3) * 0.02;
-      // μπλε-πράσινο νερό με λίγο "ζωντανό" χρώμα
-      matRef.current.color.setHSL(0.56, 0.55, base);
+      matRef.current.color.setHSL(0.56, 0.55, base); // ήρεμη θάλασσα
       matRef.current.roughness = 0.8;
       matRef.current.metalness = 0.12;
     }
@@ -145,13 +144,95 @@ function FollowCam({
     const obj = target.current;
     if (!obj) return;
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(obj.quaternion);
-    const dist =  zoomOut ? 16 : 8;
+    const dist = zoomOut ? 16 : 8;
     const height = zoomOut ? 6 : 3;
     const desired = obj.position.clone().addScaledVector(dir, -dist);
     desired.y += height;
     camera.position.lerp(desired, 0.08);
     camera.lookAt(obj.position.x, obj.position.y + 0.3, obj.position.z);
   });
+  return null;
+}
+
+/* ========= YachtMover (ΟΛΟ το useFrame ΜΕΣΑ στο Canvas) ========= */
+
+type YachtMoverProps = {
+  yachtRef: React.MutableRefObject<THREE.Object3D | null>;
+  pathPoints: THREE.Vector3[];
+  days: DayCard[];
+  idx: number;
+  phase: "sail" | "stop" | "done";
+  setPhase: React.Dispatch<React.SetStateAction<"sail" | "stop" | "done">>;
+  setIdx: React.Dispatch<React.SetStateAction<number>>;
+  setZoomOut: React.Dispatch<React.SetStateAction<boolean>>;
+};
+
+function YachtMover({
+  yachtRef,
+  pathPoints,
+  days,
+  idx,
+  phase,
+  setPhase,
+  setIdx,
+  setZoomOut,
+}: YachtMoverProps) {
+  const progressRef = useRef(0);
+  const durationRef = useRef(3);
+
+  // όταν ξεκινάει η πλεύση, υπολογίζουμε διάρκεια από τα hours
+  useEffect(() => {
+    if (phase === "sail") {
+      const h = days[idx]?.leg?.hours ?? 1;
+      durationRef.current = Math.min(6, Math.max(1, h * 0.9));
+      progressRef.current = 0;
+    }
+  }, [phase, idx, days]);
+
+  useFrame((_, delta) => {
+    const yacht = yachtRef.current;
+    if (!yacht) return;
+
+    if (phase === "sail") {
+      const N = pathPoints.length - 1;
+      const s = Math.min(idx, N - 1);
+      const e = Math.min(idx + 1, N);
+      const start = pathPoints[s];
+      const end = pathPoints[e];
+
+      progressRef.current = Math.min(
+        1,
+        progressRef.current + delta / durationRef.current
+      );
+      const tt = easeInOut(progressRef.current);
+
+      const pos = start.clone().lerp(end, tt);
+      yacht.position.lerp(pos, 0.3);
+      yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
+
+      const dir = end.clone().sub(start).normalize();
+      const targetQuat = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, 1),
+        dir
+      );
+      yacht.quaternion.slerp(targetQuat, 0.12);
+
+      if (progressRef.current >= 1) {
+        if (idx < days.length - 1) {
+          setIdx((i) => i + 1);
+          setPhase("stop");
+        } else {
+          setPhase("done");
+          setZoomOut(true);
+        }
+      }
+    } else {
+      const p = pathPoints[Math.min(idx, pathPoints.length - 1)];
+      yacht.position.lerp(p.clone().setY(0.2), 0.15);
+      yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
+    }
+  });
+
   return null;
 }
 
@@ -205,57 +286,6 @@ function Scene3D({ data }: { data: Payload }) {
   }, [days.length]);
 
   const yachtRef = useRef<THREE.Object3D>(null);
-  const progressRef = useRef(0);
-  const durationRef = useRef(3);
-
-  useEffect(() => {
-    if (phase === "sail") {
-      const h = days[idx]?.leg?.hours ?? 1;
-      durationRef.current = Math.min(6, Math.max(1, h * 0.9));
-      progressRef.current = 0;
-    }
-  }, [phase, idx, days]);
-
-  useFrame((_, delta) => {
-    const yacht = yachtRef.current;
-    if (!yacht) return;
-
-    if (phase === "sail") {
-      const N = pathPoints.length - 1;
-      const s = Math.min(idx, N - 1);
-      const e = Math.min(idx + 1, N);
-      const start = pathPoints[s];
-      const end = pathPoints[e];
-
-      progressRef.current = Math.min(1, progressRef.current + delta / durationRef.current);
-      const tt = easeInOut(progressRef.current);
-
-      const pos = start.clone().lerp(end, tt);
-      yacht.position.lerp(pos, 0.3);
-      yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
-
-      const dir = end.clone().sub(start).normalize();
-      const targetQuat = new THREE.Quaternion().setFromUnitVectors(
-        new THREE.Vector3(0, 0, 1),
-        dir
-      );
-      yacht.quaternion.slerp(targetQuat, 0.12);
-
-      if (progressRef.current >= 1) {
-        if (idx < days.length - 1) {
-          setIdx(i => i + 1);
-          setPhase("stop");
-        } else {
-          setPhase("done");
-          setZoomOut(true);
-        }
-      }
-    } else {
-      const p = pathPoints[Math.min(idx, pathPoints.length - 1)];
-      yacht.position.lerp(p.clone().setY(0.2), 0.15);
-      yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
-    }
-  });
 
   return (
     <div className="relative w-full">
@@ -301,7 +331,7 @@ function Scene3D({ data }: { data: Payload }) {
             </div>
             <div className="mt-4 flex justify-end">
               <button
-                className="rounded-xl px-4 py-2 bg-black text-white font-medium shadow hover:shadow-lg"
+                className="rounded-xl px-4 py-2 bg_black text_white font-medium shadow hover:shadow-lg"
                 onClick={() => {
                   if (idx < days.length - 1) {
                     setPhase("sail");
@@ -350,7 +380,7 @@ function Scene3D({ data }: { data: Payload }) {
       <Canvas
         shadows
         camera={{ position: [0, 3, 8], fov: 45 }}
-        className="aspect-[16/9] w-full rounded-2xl border border-slate-200 bg-black"
+        className="aspect-[16/9] w_full rounded-2xl border border-slate-200 bg-black"
       >
         <ambientLight intensity={0.45} />
         <directionalLight
@@ -373,6 +403,16 @@ function Scene3D({ data }: { data: Payload }) {
         <group ref={yachtRef} position={[-24, 0, 20]}>
           <YachtModel />
         </group>
+        <YachtMover
+          yachtRef={yachtRef}
+          pathPoints={pathPoints}
+          days={days}
+          idx={idx}
+          phase={phase}
+          setPhase={setPhase}
+          setIdx={setIdx}
+          setZoomOut={setZoomOut}
+        />
         <FollowCam target={yachtRef} zoomOut={zoomOut} />
       </Canvas>
     </div>
@@ -380,6 +420,7 @@ function Scene3D({ data }: { data: Payload }) {
 }
 
 /* ========= Page ========= */
+
 export default function FinalItineraryPage() {
   const [payload, setPayload] = useState<Payload | null>(null);
 
@@ -428,7 +469,7 @@ export default function FinalItineraryPage() {
           Final Itinerary (3D Yacht)
         </h1>
         <p className="text-sm text-gray-500">
-          Real-time 3D yacht σε ηλιοβασίλεμα • κάρτες ανά ημέρα • τελικό summary
+          3D yacht σε ηλιοβασίλεμα • κάρτες ανά ημέρα • zoom-out στο τέλος
         </p>
       </div>
       <Scene3D data={payload} />
