@@ -97,7 +97,7 @@ function easeInOut(t: number) {
     : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-/* ========= 3D Components ========= */
+/* ========= 3D components ========= */
 
 /** 3D θάλασσα από ocean-water.glb */
 function OceanGLB() {
@@ -106,22 +106,22 @@ function OceanGLB() {
   return (
     <primitive
       object={gltf.scene}
-      scale={50}                    // μεγέθυνση για να καλύπτει τον ορίζοντα
+      scale={40}                    // αρκετά μεγάλο για να γεμίσει το πλάνο
       position={[0, -1.5, 0]}       // λίγο κάτω από το yacht
-      rotation={[-Math.PI / 2, 0, 0]} // συνήθως ocean mesh είναι “όρθιο”
+      rotation={[-Math.PI / 2, 0, 0]} // αν το mesh ήταν όρθιο, το “ξαπλώνουμε”
       receiveShadow
     />
   );
 }
 useGLTF.preload("/models/ocean-water.glb");
 
-/** GLB yacht από super-yacht.glb */
+/** GLB Yacht από super-yacht.glb */
 function YachtGLB() {
   const gltf = useGLTF("/models/super-yacht.glb") as any;
   return (
     <primitive
       object={gltf.scene}
-      scale={0.25}        // μικρό scale για να χωράει στο κάδρο
+      scale={0.25}                 // μικρό scale για να μην γεμίζει όλο το κάδρο
       position={[0, 0, 0]}
       castShadow
       receiveShadow
@@ -150,14 +150,14 @@ function YachtRig({
   const group = useRef<THREE.Group>(null);
   const { camera } = useThree();
   const tRef = useRef(0);
-  const [startZ, setStartZ] = useState(60);
-  const [endZ, setEndZ] = useState(40);
+  const [startZ, setStartZ] = useState(40);
+  const [endZ, setEndZ] = useState(20);
   const arrivedRef = useRef(false);
 
   useEffect(() => {
     if (!group.current) return;
-    const zStart = group.current.position.z || 60;
-    const zEnd = zStart - 20; // κάθε leg πάει 20 units μπροστά
+    const zStart = group.current.position.z || 40;
+    const zEnd = zStart - 20; // 20 units ανά leg
     setStartZ(zStart);
     setEndZ(zEnd);
     tRef.current = 0;
@@ -169,20 +169,20 @@ function YachtRig({
     if (!g) return;
 
     const t = clock.getElapsedTime();
-    g.position.y = 0.5 + Math.sin(t * 1.8) * 0.06; // ελαφρύ bobbing
+    g.position.y = 0.5 + Math.sin(t * 1.8) * 0.06;
 
     if (phase === "sail") {
-      const h = days[dayIndex]?.leg?.hours ?? 1;
-      const duration = Math.max(3, Math.min(8, h * 0.9));
+      const hours = days[dayIndex]?.leg?.hours ?? 1;
+      const duration = Math.max(3, Math.min(8, hours * 0.9));
       tRef.current = Math.min(1, tRef.current + delta / duration);
 
       const p = easeInOut(tRef.current);
       const z = THREE.MathUtils.lerp(startZ, endZ, p);
       g.position.z = z;
 
-      // Κάμερα τύπου drone - ΠΟΛΥ πίσω για να φαίνεται θάλασσα
-      camera.position.lerp(new THREE.Vector3(0, 12, z + 45), 0.08);
-      camera.lookAt(g.position.x, g.position.y + 1, g.position.z);
+      // Drone κάμερα: ψηλά και πολύ πίσω, να φαίνεται yacht + νερό
+      camera.position.lerp(new THREE.Vector3(0, 14, z + 55), 0.08);
+      camera.lookAt(g.position.x, g.position.y + 1.2, g.position.z);
 
       if (tRef.current >= 1 && !arrivedRef.current) {
         arrivedRef.current = true;
@@ -190,16 +190,16 @@ function YachtRig({
         else onFinish();
       }
     } else if (phase === "stop") {
-      camera.position.lerp(new THREE.Vector3(0, 12, g.position.z + 45), 0.08);
-      camera.lookAt(g.position.x, g.position.y + 1, g.position.z);
+      camera.position.lerp(new THREE.Vector3(0, 14, g.position.z + 55), 0.08);
+      camera.lookAt(g.position.x, g.position.y + 1.2, g.position.z);
     } else if (phase === "done") {
-      camera.position.lerp(new THREE.Vector3(0, 28, g.position.z + 90), 0.04);
+      camera.position.lerp(new THREE.Vector3(0, 30, g.position.z + 110), 0.04);
       camera.lookAt(g.position.x, g.position.y, g.position.z);
     }
   });
 
   return (
-    <group ref={group} position={[0, 0, 60]}>
+    <group ref={group} position={[0, 0, 40]}>
       <YachtGLB />
     </group>
   );
@@ -213,7 +213,6 @@ function ScenePlayer({ data }: { data: Payload }) {
 
   const days: DayCard[] = useMemo(() => {
     if (data.dayCards?.length) return data.dayCards;
-    // fallback demo αν δεν υπάρχουν δεδομένα
     return [
       {
         day: 1,
@@ -321,19 +320,19 @@ function ScenePlayer({ data }: { data: Payload }) {
         )}
 
         {/* Canvas */}
-        <Canvas shadows camera={{ position: [0, 10, 80], fov: 40 }}>
+        <Canvas shadows camera={{ position: [0, 16, 80], fov: 40 }}>
           <color attach="background" args={["#020617"]} />
           <ambientLight intensity={0.45} />
           <directionalLight
             castShadow
             intensity={1.4}
             color="#f97316"
-            position={[15, 15, -10]}
+            position={[15, 18, -10]}
           />
           <Sky sunPosition={[10, 12, -6]} turbidity={7} />
           <Environment preset="sunset" />
 
-          {/* Θάλασσα GLB */}
+          {/* Οcean GLB */}
           <Suspense fallback={null}>
             <OceanGLB />
           </Suspense>
