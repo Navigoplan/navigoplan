@@ -1,21 +1,40 @@
 "use client";
 
+import type React from "react";
+
 type YachtType = "Motor" | "Sailing";
 type Leg = {
-  from: string; to: string;
-  nm?: number; hours?: number; fuelL?: number;
+  from: string;
+  to: string;
+  nm?: number;
+  hours?: number;
+  fuelL?: number;
   eta?: { dep?: string; arr?: string; window?: string };
 };
+
 type DayCard = {
-  day: number; date?: string; leg?: Leg; port?: string; notes?: string; activities?: string[]; title?: string;
+  day: number;
+  date?: string;
+  leg?: Leg;
+  port?: string;
+  notes?: string;
+  activities?: string[];
+  title?: string;
 };
 
 type DayInfo = {
-  day: number; date?: string; title?: string; notes?: string; port?: string; activities?: string[];
+  day: number;
+  date?: string;
+  title?: string;
+  notes?: string;
+  port?: string;
+  activities?: string[];
   eta?: { dep?: string; arr?: string; window?: string };
   leg?: { from: string; to: string; nm?: number; hours?: number; fuelL?: number };
 };
+
 type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
+
 type FinalData = { title?: string; stops: Stop[] };
 
 /* ===== Unicode-safe Base64 helpers ===== */
@@ -37,11 +56,12 @@ export default function GenerateFinalItineraryButton({
   disabled?: boolean;
   label?: string;
 }) {
-
   function buildStopsFromPlan(plan: DayCard[]): Stop[] {
     const N = plan.length;
-    const x0 = 12, x1 = 85;
-    const yTop = 38, yBottom = 66;
+    const x0 = 12;
+    const x1 = 85;
+    const yTop = 38;
+    const yBottom = 66;
     const wiggle = 6;
 
     return (plan || []).map((d, i) => {
@@ -50,22 +70,36 @@ export default function GenerateFinalItineraryButton({
       const yBase = i % 2 === 0 ? yBottom : yTop;
       const y = yBase + ((i % 3) - 1) * (wiggle * 0.6);
 
-      const name = d.leg?.to ?? d.port ?? d.title ?? (i === 0 ? (d.leg?.from ?? "Start") : `Stop ${i + 1}`);
+      const name =
+        d.leg?.to ??
+        d.port ??
+        d.title ??
+        (i === 0 ? d.leg?.from ?? "Start" : `Stop ${i + 1}`);
 
       const info: DayInfo = {
         day: d.day ?? i + 1,
         date: d.date,
-        title: d.title ?? (d.leg?.from && d.leg?.to ? `${d.leg.from} → ${d.leg.to}` : name),
+        title:
+          d.title ??
+          (d.leg?.from && d.leg?.to ? `${d.leg.from} → ${d.leg.to}` : name),
         notes: d.notes,
         port: d.port ?? d.leg?.to,
         activities: d.activities,
         eta: d.leg?.eta,
-        leg: d.leg ? { from: d.leg.from, to: d.leg.to, nm: d.leg.nm, hours: d.leg.hours, fuelL: d.leg.fuelL } : undefined,
+        leg: d.leg
+          ? {
+              from: d.leg.from,
+              to: d.leg.to,
+              nm: d.leg.nm,
+              hours: d.leg.hours,
+              fuelL: d.leg.fuelL,
+            }
+          : undefined,
       };
 
       return {
         id: `${i + 1}-${name}`.toLowerCase().replace(/\s+/g, "-"),
-        name,
+      name,
         pos: [x, y],
         day: info.day,
         info,
@@ -83,26 +117,35 @@ export default function GenerateFinalItineraryButton({
 
       if (typeof window !== "undefined") {
         // 1) Σώζω ΠΛΗΡΕΣ plan στο sessionStorage (fallback)
-        const payload = { dayCards: plan, yacht, tripTitle: title, createdAt: Date.now() };
-        sessionStorage.setItem("navigoplan.finalItinerary", JSON.stringify(payload));
+        const payload = {
+          dayCards: plan,
+          yacht,
+          tripTitle: title,
+          createdAt: Date.now(),
+        };
+        sessionStorage.setItem(
+          "navigoplan.finalItinerary",
+          JSON.stringify(payload)
+        );
 
         // 2) Compact δεδομένα για το URL της νέας σελίδας
         const data: FinalData = { title, stops };
         const encoded = encodeURIComponent(safeBtoa(data));
         const url = `/itinerary/final?data=${encoded}`;
 
-        // 3) Ανοίγω ΜΟΝΟ ΝΕΑ ΚΑΡΤΕΛΑ
+        // 3) Ανοίγω ΜΟΝΟ νέα καρτέλα – δεν πειράζω την τρέχουσα σελίδα
         const win = window.open(url, "_blank", "noopener,noreferrer");
+
+        // Αν ο browser μπλοκάρει pop-ups, ενημερώνω τον χρήστη αλλά ΔΕΝ κάνω redirect
         if (!win) {
-          // Αν ο browser μπλοκάρει popups → fallback στο ΙΔΙΟ tab
-          window.location.href = url;
+          alert(
+            "Ο browser μπλόκαρε το νέο παράθυρο.\nΕπιτρέψτε pop-ups για το navigoplan.com ή αντιγράψτε το link χειροκίνητα από την μπάρα διευθύνσεων."
+          );
         }
       }
     } catch (err) {
       console.error("GenerateFinalItineraryButton error:", err);
-      if (typeof window !== "undefined") {
-        window.location.href = "/itinerary/final";
-      }
+      alert("Κάτι πήγε στραβά στο άνοιγμα του Final Itinerary. Δοκίμασε ξανά.");
     }
   }
 

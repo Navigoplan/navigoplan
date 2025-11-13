@@ -1,5 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Sky, Environment } from "@react-three/drei";
@@ -80,42 +83,22 @@ function easeInOut(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-/* μικρός timer για “sail” phase */
-function useLegTimer(hours: number, onDone: () => void, playing: boolean) {
-  const [t, setT] = useState(0);
-  useEffect(() => {
-    if (!playing) {
-      setT(0);
-      return;
-    }
-    const dur = Math.min(6, Math.max(1, (hours || 1) * 0.9)) * 1000;
-    const start = performance.now();
-    let af: number;
-    const loop = (now: number) => {
-      const p = Math.min(1, (now - start) / dur);
-      setT(p);
-      if (p < 1) af = requestAnimationFrame(loop);
-      else onDone();
-    };
-    af = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(af);
-  }, [hours, playing, onDone]);
-  return t;
-}
-
-/* ========= 3D Components ========= */
+/* ========= 3D components ========= */
 
 function Water() {
   const matRef = useRef<THREE.MeshStandardMaterial>(null);
+
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     if (matRef.current) {
       const base = 0.5 + Math.sin(t * 0.3) * 0.02;
-      matRef.current.color.setHSL(0.57, 0.5, base);
+      // ΜΙΚΡΗ ΚΙΝΗΣΗ ΣΤΟ ΧΡΩΜΑ ΓΙΑ ΝΑ ΦΑΙΝΕΤΑΙ ΖΩΝΤΑΝΗ Η ΘΑΛΑΣΣΑ
+      matRef.current.color.setHSL(0.56, 0.55, base);
       matRef.current.roughness = 0.8;
-      matRef.current.metalness = 0.1;
+      matRef.current.metalness = 0.12;
     }
   });
+
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <planeGeometry args={[500, 500, 64, 64]} />
@@ -129,18 +112,23 @@ function YachtModel() {
     <group>
       {/* hull */}
       <mesh castShadow position={[0, 0.2, 0]}>
-        <cylinderGeometry args={[0.25, 0.5, 2.4, 20]} />
+        <cylinderGeometry args={[0.25, 0.55, 2.4, 24]} />
         <meshStandardMaterial color="#f4f6f7" metalness={0.2} roughness={0.4} />
       </mesh>
-      {/* deck */}
+      {/* main deck */}
       <mesh castShadow position={[0, 0.7, 0]}>
-        <boxGeometry args={[0.7, 0.25, 1.3]} />
+        <boxGeometry args={[0.8, 0.25, 1.4]} />
         <meshStandardMaterial color="#d1d5db" />
       </mesh>
-      {/* bridge */}
-      <mesh castShadow position={[0, 1.0, 0.15]}>
-        <boxGeometry args={[0.4, 0.22, 0.45]} />
+      {/* upper deck / bridge */}
+      <mesh castShadow position={[0, 1.05, 0.15]}>
+        <boxGeometry args={[0.45, 0.22, 0.5]} />
         <meshStandardMaterial color="#cbd5e1" />
+      </mesh>
+      {/* mast */}
+      <mesh castShadow position={[0, 1.4, 0.1]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.6, 8]} />
+        <meshStandardMaterial color="#fefce8" />
       </mesh>
     </group>
   );
@@ -158,17 +146,18 @@ function FollowCam({
     const obj = target.current;
     if (!obj) return;
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(obj.quaternion);
-    const dist = zoomOut ? 14 : 7;
-    const height = zoomOut ? 5 : 2.5;
+    const dist = zoomOut ? 16 : 8;
+    const height = zoomOut ? 6 : 3;
     const desired = obj.position.clone().addScaledVector(dir, -dist);
     desired.y += height;
     camera.position.lerp(desired, 0.08);
-    camera.lookAt(obj.position.x, obj.position.y + 0.4, obj.position.z);
+    camera.lookAt(obj.position.x, obj.position.y + 0.3, obj.position.z);
   });
   return null;
 }
 
 /* ========= Main 3D Scene ========= */
+
 function Scene3D({ data }: { data: Payload }) {
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<"sail" | "stop" | "done">("stop");
@@ -183,11 +172,13 @@ function Scene3D({ data }: { data: Payload }) {
               day: 1,
               date: "Day 1",
               leg: { from: "Alimos", to: "Hydra", nm: 37, hours: 2.2, fuelL: 320 },
+              notes: "Demo route Alimos → Hydra",
             },
             {
               day: 2,
               date: "Day 2",
-              leg: { from: "Hydra", to: "Spetses", nm: 20, hours: 1.2, fuelL: 160 },
+              leg: { from: "Hydra", to:"Spetses", nm: 20, hours: 1.2, fuelL: 160 },
+              notes: "Demo route Hydra → Spetses",
             },
           ],
     [data]
@@ -202,62 +193,78 @@ function Scene3D({ data }: { data: Payload }) {
 
   const title = data.tripTitle || "VIP Final Itinerary";
 
-  const points = useMemo(() => {
+  // path των legs
+  const pathPoints = useMemo(() => {
     const N = Math.max(days.length, 2);
-    const arr: THREE.Vector3[] = [];
+    const pts: THREE.Vector3[] = [];
     for (let i = 0; i < N; i++) {
       const t = N === 1 ? 0 : i / (N - 1);
-      const x = THREE.MathUtils.lerp(-20, 20, t);
-      const z = THREE.MathUtils.lerp(15, -15, t) + Math.sin(t * Math.PI * 1.3) * 4;
-      arr.push(new THREE.Vector3(x, 0, z));
+      const x = THREE.MathUtils.lerp(-24, 24, t);
+      const z = THREE.MathUtils.lerp(20, -20, t) + Math.sin(t * Math.PI * 1.2) * 5;
+      pts.push(new THREE.Vector3(x, 0, z));
     }
-    return arr;
+    return pts;
   }, [days.length]);
 
   const yachtRef = useRef<THREE.Object3D>(null);
+  const progressRef = useRef(0);
+  const durationRef = useRef(3);
 
-  const hours = days[idx]?.leg?.hours ?? 1;
-  const t = useLegTimer(
-    hours,
-    () => {
-      if (idx < days.length - 1) {
-        setIdx((i) => i + 1);
-        setPhase("stop");
-      } else {
-        setPhase("done");
-        setZoomOut(true);
-      }
-    },
-    phase === "sail"
-  );
-
-  useFrame(() => {
-    if (!yachtRef.current) return;
-    let pos: THREE.Vector3;
+  useEffect(() => {
     if (phase === "sail") {
-      const N = points.length - 1;
-      const startIndex = Math.min(idx, N - 1);
-      const endIndex = Math.min(idx + 1, N);
-      const start = points[startIndex];
-      const end = points[endIndex];
-      const tt = easeInOut(t);
-      pos = start.clone().lerp(end, tt);
+      const h = days[idx]?.leg?.hours ?? 1;
+      durationRef.current = Math.min(6, Math.max(1, h * 0.9));
+      progressRef.current = 0;
+    }
+  }, [phase, idx, days]);
+
+  useFrame((_, delta) => {
+    const yacht = yachtRef.current;
+    if (!yacht) return;
+
+    if (phase === "sail") {
+      const N = pathPoints.length - 1;
+      const s = Math.min(idx, N - 1);
+      const e = Math.min(idx + 1, N);
+      const start = pathPoints[s];
+      const end = pathPoints[e];
+
+      progressRef.current = Math.min(
+        1,
+        progressRef.current + delta / durationRef.current
+      );
+      const tt = easeInOut(progressRef.current);
+
+      const pos = start.clone().lerp(end, tt);
+      yacht.position.lerp(pos, 0.3);
+      yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
+
       const dir = end.clone().sub(start).normalize();
-      const q = new THREE.Quaternion().setFromUnitVectors(
+      const targetQuat = new THREE.Quaternion().setFromUnitVectors(
         new THREE.Vector3(0, 0, 1),
         dir
       );
-      yachtRef.current.quaternion.slerp(q, 0.1);
+      yacht.quaternion.slerp(targetQuat, 0.12);
+
+      if (progressRef.current >= 1) {
+        if (idx < days.length - 1) {
+          setIdx((i) => i + 1);
+          setPhase("stop");
+        } else {
+          setPhase("done");
+          setZoomOut(true);
+        }
+      }
     } else {
-      pos = points[Math.min(idx, points.length - 1)].clone();
+      const p = pathPoints[Math.min(idx, pathPoints.length - 1)];
+      yacht.position.lerp(p.clone().setY(0.2), 0.15);
+      yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
     }
-    yachtRef.current.position.lerp(pos, 0.2);
-    yachtRef.current.position.y = 0.2 + Math.sin(Date.now() * 0.0015) * 0.05;
   });
 
   return (
     <div className="relative w-full">
-      {/* Overlay UI πάνω από το 3D */}
+      {/* Overlay UI πάνω από την 3D σκηνή */}
       <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
         {phase === "stop" && days[idx] && (
           <div className="pointer-events-auto max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/95 backdrop-blur border border-white/60 shadow-xl p-5">
@@ -301,8 +308,9 @@ function Scene3D({ data }: { data: Payload }) {
               <button
                 className="rounded-xl px-4 py-2 bg-black text-white font-medium shadow hover:shadow-lg"
                 onClick={() => {
-                  if (idx < days.length - 1) setPhase("sail");
-                  else {
+                  if (idx < days.length - 1) {
+                    setPhase("sail");
+                  } else {
                     setPhase("done");
                     setZoomOut(true);
                   }
@@ -349,26 +357,31 @@ function Scene3D({ data }: { data: Payload }) {
         camera={{ position: [0, 3, 8], fov: 45 }}
         className="aspect-[16/9] w-full rounded-2xl border border-slate-200 bg-black"
       >
-        <ambientLight intensity={0.5} />
+        {/* φωτισμός sunset */}
+        <ambientLight intensity={0.45} />
         <directionalLight
           castShadow
           intensity={1.2}
-          position={[10, 12, 6]}
+          position={[10, 15, 8]}
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
         />
         <Sky
-          sunPosition={[10, 15, -10]}
+          sunPosition={[10, 12, -10]}
           turbidity={6}
           rayleigh={2}
-          mieCoefficient={0.02}
-          mieDirectionalG={0.9}
+          mieCoefficient={0.015}
+          mieDirectionalG={0.95}
+          azimuth={0.3}
         />
         <Environment preset="sunset" />
+
         <Water />
-        <group ref={yachtRef} position={[-20, 0, 15]}>
+
+        <group ref={yachtRef} position={[-24, 0, 20]}>
           <YachtModel />
         </group>
+
         <FollowCam target={yachtRef} zoomOut={zoomOut} />
       </Canvas>
     </div>
@@ -381,16 +394,21 @@ export default function FinalItineraryPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     const sp = new URLSearchParams(window.location.search);
     const dataParam = sp.get("data");
     if (dataParam) {
       const decoded = safeAtobToJSON<FinalData>(dataParam);
       if (decoded?.stops?.length) {
         const dayCards = buildDayCardsFromStops(decoded.stops);
-        setPayload({ dayCards, tripTitle: decoded.title || "VIP Final Itinerary" });
+        setPayload({
+          dayCards,
+          tripTitle: decoded.title || "VIP Final Itinerary",
+        });
         return;
       }
     }
+
     const raw = sessionStorage.getItem("navigoplan.finalItinerary");
     if (raw) {
       try {
@@ -403,7 +421,12 @@ export default function FinalItineraryPage() {
         return;
       } catch {}
     }
-    setPayload({ dayCards: [], tripTitle: "VIP Final Itinerary" });
+
+    // demo fallback
+    setPayload({
+      dayCards: [],
+      tripTitle: "VIP Final Itinerary",
+    });
   }, []);
 
   if (!payload) return null;
@@ -411,11 +434,11 @@ export default function FinalItineraryPage() {
   return (
     <main className="p-4 sm:p-8">
       <div className="mb-4">
-        <h1 className="text-2xl sm:text-3xl font-semibold">
-          Final Itinerary (3D Sea)
+        <h1 className="text-2xl sm:px-0 sm:text-3xl font-semibold">
+          Final Itinerary (3D Yacht)
         </h1>
         <p className="text-sm text-gray-500">
-          3D yacht που πλέει σε ηλιοβασίλεμα • Day-by-day VIP cards
+          Real-time 3D yacht σε ηλιοβασίλεμα • κάρτες ανά ημέρα • τελικό summary
         </p>
       </div>
       <Scene3D data={payload} />
