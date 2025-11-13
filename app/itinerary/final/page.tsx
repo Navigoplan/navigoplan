@@ -11,7 +11,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Sky, Environment, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
-/* ========= Types από itinerary ========= */
+/* ========= Types ========= */
 type Leg = {
   from: string;
   to: string;
@@ -20,6 +20,7 @@ type Leg = {
   fuelL?: number;
   eta?: { dep?: string; arr?: string; window?: string };
 };
+
 type DayCard = {
   day: number;
   date?: string;
@@ -27,6 +28,7 @@ type DayCard = {
   notes?: string;
   title?: string;
 };
+
 type DayInfo = {
   day: number;
   date?: string;
@@ -37,8 +39,17 @@ type DayInfo = {
   eta?: { dep?: string; arr?: string; window?: string };
   leg?: { from: string; to: string; nm?: number; hours?: number; fuelL?: number };
 };
-type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
+
+type Stop = {
+  id: string;
+  name: string;
+  pos: [number, number];
+  day: number;
+  info: DayInfo;
+};
+
 type FinalData = { title?: string; stops: Stop[] };
+
 type Payload = { dayCards: DayCard[]; tripTitle?: string };
 
 /* ========= Helpers ========= */
@@ -86,7 +97,7 @@ function easeInOut(t: number) {
     : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-/* ========= 3D components ========= */
+/* ========= 3D Components ========= */
 
 /** 3D θάλασσα από ocean-water.glb */
 function OceanGLB() {
@@ -95,10 +106,9 @@ function OceanGLB() {
   return (
     <primitive
       object={gltf.scene}
-      // θα χρειαστεί να πειραματιστείς με αυτά τα 3:
-      scale={10}
-      position={[0, 0, 0]}
-      rotation={[-Math.PI / 2, 0, 0]} // συνήθως τα ocean meshes είναι “όρθια”
+      scale={50}                    // μεγέθυνση για να καλύπτει τον ορίζοντα
+      position={[0, -1.5, 0]}       // λίγο κάτω από το yacht
+      rotation={[-Math.PI / 2, 0, 0]} // συνήθως ocean mesh είναι “όρθιο”
       receiveShadow
     />
   );
@@ -108,11 +118,19 @@ useGLTF.preload("/models/ocean-water.glb");
 /** GLB yacht από super-yacht.glb */
 function YachtGLB() {
   const gltf = useGLTF("/models/super-yacht.glb") as any;
-  return <primitive object={gltf.scene} scale={0.7} castShadow receiveShadow />;
+  return (
+    <primitive
+      object={gltf.scene}
+      scale={0.25}        // μικρό scale για να χωράει στο κάδρο
+      position={[0, 0, 0]}
+      castShadow
+      receiveShadow
+    />
+  );
 }
 useGLTF.preload("/models/super-yacht.glb");
 
-/* ========= YachtRig: κίνηση σκάφους ========= */
+/* ========= Yacht Rig ========= */
 
 type YachtRigProps = {
   days: DayCard[];
@@ -132,14 +150,14 @@ function YachtRig({
   const group = useRef<THREE.Group>(null);
   const { camera } = useThree();
   const tRef = useRef(0);
-  const [startZ, setStartZ] = useState(20);
-  const [endZ, setEndZ] = useState(12);
+  const [startZ, setStartZ] = useState(60);
+  const [endZ, setEndZ] = useState(40);
   const arrivedRef = useRef(false);
 
   useEffect(() => {
     if (!group.current) return;
-    const zStart = group.current.position.z || 20;
-    const zEnd = zStart - 8;
+    const zStart = group.current.position.z || 60;
+    const zEnd = zStart - 20; // κάθε leg πάει 20 units μπροστά
     setStartZ(zStart);
     setEndZ(zEnd);
     tRef.current = 0;
@@ -151,20 +169,20 @@ function YachtRig({
     if (!g) return;
 
     const t = clock.getElapsedTime();
-    g.position.y = 0.25 + Math.sin(t * 1.8) * 0.05; // bobbing
+    g.position.y = 0.5 + Math.sin(t * 1.8) * 0.06; // ελαφρύ bobbing
 
     if (phase === "sail") {
       const h = days[dayIndex]?.leg?.hours ?? 1;
-      const duration = Math.max(2.5, Math.min(6, h * 0.8));
+      const duration = Math.max(3, Math.min(8, h * 0.9));
       tRef.current = Math.min(1, tRef.current + delta / duration);
 
       const p = easeInOut(tRef.current);
       const z = THREE.MathUtils.lerp(startZ, endZ, p);
       g.position.z = z;
 
-      // camera follow από πίσω
-      camera.position.lerp(new THREE.Vector3(0, 4, z + 10), 0.08);
-      camera.lookAt(g.position.x, g.position.y + 0.6, g.position.z);
+      // Κάμερα τύπου drone - ΠΟΛΥ πίσω για να φαίνεται θάλασσα
+      camera.position.lerp(new THREE.Vector3(0, 12, z + 45), 0.08);
+      camera.lookAt(g.position.x, g.position.y + 1, g.position.z);
 
       if (tRef.current >= 1 && !arrivedRef.current) {
         arrivedRef.current = true;
@@ -172,16 +190,16 @@ function YachtRig({
         else onFinish();
       }
     } else if (phase === "stop") {
-      camera.position.lerp(new THREE.Vector3(0, 4, g.position.z + 10), 0.08);
-      camera.lookAt(g.position.x, g.position.y + 0.6, g.position.z);
+      camera.position.lerp(new THREE.Vector3(0, 12, g.position.z + 45), 0.08);
+      camera.lookAt(g.position.x, g.position.y + 1, g.position.z);
     } else if (phase === "done") {
-      camera.position.lerp(new THREE.Vector3(0, 15, g.position.z + 40), 0.04);
+      camera.position.lerp(new THREE.Vector3(0, 28, g.position.z + 90), 0.04);
       camera.lookAt(g.position.x, g.position.y, g.position.z);
     }
   });
 
   return (
-    <group ref={group} position={[0, 0, 20]}>
+    <group ref={group} position={[0, 0, 60]}>
       <YachtGLB />
     </group>
   );
@@ -195,6 +213,7 @@ function ScenePlayer({ data }: { data: Payload }) {
 
   const days: DayCard[] = useMemo(() => {
     if (data.dayCards?.length) return data.dayCards;
+    // fallback demo αν δεν υπάρχουν δεδομένα
     return [
       {
         day: 1,
@@ -302,19 +321,19 @@ function ScenePlayer({ data }: { data: Payload }) {
         )}
 
         {/* Canvas */}
-        <Canvas shadows camera={{ position: [0, 4, 14], fov: 45 }}>
+        <Canvas shadows camera={{ position: [0, 10, 80], fov: 40 }}>
           <color attach="background" args={["#020617"]} />
           <ambientLight intensity={0.45} />
           <directionalLight
             castShadow
             intensity={1.4}
             color="#f97316"
-            position={[10, 12, -6]}
+            position={[15, 15, -10]}
           />
           <Sky sunPosition={[10, 12, -6]} turbidity={7} />
           <Environment preset="sunset" />
 
-          {/* 3D θάλασσα από GLB */}
+          {/* Θάλασσα GLB */}
           <Suspense fallback={null}>
             <OceanGLB />
           </Suspense>
