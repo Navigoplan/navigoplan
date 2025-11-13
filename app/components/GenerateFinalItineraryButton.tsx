@@ -1,7 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-
 type YachtType = "Motor" | "Sailing";
 type Leg = {
   from: string; to: string;
@@ -20,37 +18,31 @@ type DayInfo = {
 type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
 type FinalData = { title?: string; stops: Stop[] };
 
-/* ===== Unicode-safe Base64 helpers ===== */
 function safeBtoa(obj: unknown) {
   const json = JSON.stringify(obj);
-  // encode Unicode -> base64
   return btoa(unescape(encodeURIComponent(json)));
 }
 
 export default function GenerateFinalItineraryButton({
   dayCards,
   yacht,
-  tripTitle,   // προτιμώμενο prop
-  triptitle,   // backward-compat
+  tripTitle,
   disabled,
   label = "Generate Final Itinerary",
 }: {
   dayCards: DayCard[];
-  yacht: { type: YachtType; speed: number; lph: number };
+  yacht?: { type: YachtType; speed: number; lph: number };
   tripTitle?: string;
-  triptitle?: string;
   disabled?: boolean;
   label?: string;
 }) {
-  const router = useRouter();
-
   function buildStopsFromPlan(plan: DayCard[]): Stop[] {
     const N = plan.length;
     const x0 = 12, x1 = 85;
     const yTop = 38, yBottom = 66;
     const wiggle = 6;
 
-    return plan.map((d, i) => {
+    return (plan || []).map((d, i) => {
       const t = N > 1 ? i / (N - 1) : 0.5;
       const x = x0 + (x1 - x0) * t;
       const yBase = i % 2 === 0 ? yBottom : yTop;
@@ -79,16 +71,27 @@ export default function GenerateFinalItineraryButton({
     });
   }
 
-  function openFinal() {
+  function openFinal(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+
+    const stops = buildStopsFromPlan(Array.isArray(dayCards) ? dayCards : []);
+    const title = tripTitle || "Final Itinerary";
+    const data: FinalData = { title, stops };
+
     try {
-      const stops = buildStopsFromPlan(Array.isArray(dayCards) ? dayCards : []);
-      const title = tripTitle ?? triptitle ?? "Final Itinerary";
-      const data: FinalData = { title, stops };
-      const encoded = safeBtoa(data);
-      router.push(`/itinerary/final?data=${encodeURIComponent(encoded)}`);
+      if (typeof window !== "undefined") {
+        // γράφω και sessionStorage ως δεύτερο κανάλι
+        sessionStorage.setItem("navigoplan.finalItinerary", JSON.stringify({ dayCards, yacht, tripTitle: title, createdAt: Date.now() }));
+        const encoded = encodeURIComponent(safeBtoa(data));
+        const url = `/itinerary/final?data=${encoded}`;
+
+        // ανοίγω ΝΕΑ καρτέλα (user-gesture)
+        const win = window.open(url, "_blank", "noopener,noreferrer");
+        if (!win) window.location.href = url; // fallback στο ίδιο tab (popup blocker)
+      }
     } catch (err) {
       console.error("GenerateFinalItineraryButton error:", err);
-      alert("Κάτι πήγε στραβά στο άνοιγμα του Final Itinerary. Δοκίμασε ξανά.");
+      if (typeof window !== "undefined") window.location.href = "/itinerary/final";
     }
   }
 
