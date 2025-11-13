@@ -42,6 +42,8 @@ function buildDayCardsFromStops(stops: Stop[]): DayCard[] {
 
 /* ========= Player (photo-matched backplate) ========= */
 function easeInOut(t:number){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+/** timer που τρέχει ΜΟΝΟ όταν phase === "sail" */
 function useLegTimer(hours:number,onDone:()=>void,playing:boolean){
   const [t,setT]=useState(0);
   useEffect(()=>{
@@ -62,7 +64,7 @@ function useLegTimer(hours:number,onDone:()=>void,playing:boolean){
 
 function ScenePlayer({ data }: { data: Payload }) {
   const [idx, setIdx] = useState(0);
-  const [phase, setPhase] = useState<"sail" | "stop" | "done">("sail");
+  const [phase, setPhase] = useState<"sail" | "stop" | "done">("stop"); // ΞΕΚΙΝΑΜΕ ΜΕ ΚΑΡΤΑ
   const [zoomOut, setZoomOut] = useState(false);
 
   const days: DayCard[] = useMemo(()=> data.dayCards?.length ? data.dayCards : [
@@ -72,7 +74,22 @@ function ScenePlayer({ data }: { data: Payload }) {
   ], [data]);
 
   const hours = days[idx]?.leg?.hours ?? 1;
-  const t = useLegTimer(hours, ()=>setPhase("stop"), phase==="sail");
+
+  // όταν phase === "sail" → παίζει ένα μικρό “ταξίδι”
+  const t = useLegTimer(
+    hours,
+    () => {
+      // όταν τελειώσει το "sail", πάμε στην επόμενη μέρα ή summary
+      if (idx < days.length - 1) {
+        setIdx(i => i + 1);
+        setPhase("stop");
+      } else {
+        setPhase("done");
+        setZoomOut(true);
+      }
+    },
+    phase === "sail"
+  );
 
   const totals = useMemo(()=>{
     const nm = days.reduce((a,d)=>a+(d.leg?.nm||0),0);
@@ -93,7 +110,10 @@ function ScenePlayer({ data }: { data: Payload }) {
             alt="Navigoplan sunset"
             className="absolute inset-0 h-full w-full object-cover"
             style={{
-              transform: `scale(${1 + (zoomOut ? 0.1 : 0.04*(1-easeInOut(t)))}) translateY(${(1-easeInOut(t))*2}%)`,
+              // όταν phase === "sail" → κάνει πιο έντονο κούνημα (σαν πλεύση)
+              transform: `scale(${
+                1 + (zoomOut ? 0.15 : phase === "sail" ? 0.06 : 0.03*(1-easeInOut(t)))
+              }) translateY(${phase === "sail" ? 1.5 : (1-easeInOut(t))*1.5}%)`,
               transition: "transform 600ms ease"
             }}
           />
@@ -101,27 +121,47 @@ function ScenePlayer({ data }: { data: Payload }) {
 
           {/* Overlay UI (cards) */}
           <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
+            {/* ΚΑΡΤΑ ΗΜΕΡΑΣ: φαίνεται μόνο όταν phase === "stop" */}
             {phase==="stop" && days[idx] && (
               <div className="pointer-events-auto max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/92 backdrop-blur border border-white/60 shadow-xl p-5">
                 <div className="text-xs uppercase tracking-wide text-gray-500">VIP Day {days[idx].day}</div>
-                <div className="text-2xl font-semibold mt-1">{days[idx].leg?.to ?? days[idx].title ?? "Destination"}</div>
+                <div className="text-2xl font-semibold mt-1">
+                  {days[idx].leg?.to ?? days[idx].title ?? "Destination"}
+                </div>
                 <div className="mt-2 text-sm text-gray-700">
                   <div>📅 {days[idx].date || "-"}</div>
                   {days[idx].leg && (
                     <div className="mt-2 grid grid-cols-3 gap-3 text-center">
-                      <div className="rounded-lg bg-gray-50 p-2"><div className="text-xs text-gray-500">NM</div><div className="font-semibold">{(days[idx].leg!.nm??0).toFixed(1)}</div></div>
-                      <div className="rounded-lg bg-gray-50 p-2"><div className="text-xs text-gray-500">Hours</div><div className="font-semibold">{formatHM(days[idx].leg!.hours ?? 0)}</div></div>
-                      <div className="rounded-lg bg-gray-50 p-2"><div className="text-xs text-gray-500">Fuel (L)</div><div className="font-semibold">{(days[idx].leg!.fuelL??0).toFixed(0)}</div></div>
+                      <div className="rounded-lg bg-gray-50 p-2">
+                        <div className="text-xs text-gray-500">NM</div>
+                        <div className="font-semibold">{(days[idx].leg!.nm??0).toFixed(1)}</div>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-2">
+                        <div className="text-xs text-gray-500">Hours</div>
+                        <div className="font-semibold">{formatHM(days[idx].leg!.hours ?? 0)}</div>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-2">
+                        <div className="text-xs text-gray-500">Fuel (L)</div>
+                        <div className="font-semibold">{(days[idx].leg!.fuelL??0).toFixed(0)}</div>
+                      </div>
                     </div>
                   )}
-                  {days[idx].notes && <div className="mt-3 whitespace-pre-wrap">📝 {days[idx].notes}</div>}
+                  {days[idx].notes && (
+                    <div className="mt-3 whitespace-pre-wrap">📝 {days[idx].notes}</div>
+                  )}
                 </div>
                 <div className="mt-4 flex justify-end">
                   <button
                     className="rounded-xl px-4 py-2 bg-black text-white font-medium shadow hover:shadow-lg"
                     onClick={()=>{
-                      if (idx < days.length - 1) { setIdx(idx+1); setPhase("sail"); }
-                      else { setPhase("done"); setZoomOut(true); }
+                      if (idx < days.length - 1) {
+                        // ξεκίνα “πλεύση” για την επόμενη μέρα
+                        setPhase("sail");
+                      } else {
+                        // τελευταία μέρα → summary
+                        setPhase("done");
+                        setZoomOut(true);
+                      }
                     }}
                   >
                     {idx < days.length - 1 ? "Continue" : "Finish"}
@@ -130,19 +170,30 @@ function ScenePlayer({ data }: { data: Payload }) {
               </div>
             )}
 
+            {/* SUMMARY στο τέλος */}
             {phase==="done" && (
               <div className="pointer-events-auto max-w-3xl w-[96vw] rounded-2xl bg-white/92 backdrop-blur border border-white/60 shadow-xl p-6">
                 <div className="text-xs uppercase tracking-wide text-gray-500">Final Itinerary</div>
                 <div className="text-3xl font-semibold mt-1">{title}</div>
                 <div className="mt-4 grid grid-cols-3 gap-4 text-center">
-                  <div className="rounded-lg bg-gray-50 p-3"><div className="text-xs text-gray-500">Total NM</div><div className="font-semibold text-lg">{totals.nm.toFixed(1)}</div></div>
-                  <div className="rounded-lg bg-gray-50 p-3"><div className="text-xs text-gray-500">Total Hours</div><div className="font-semibold text-lg">{totals.hr.toFixed(1)}</div></div>
-                  <div className="rounded-lg bg-gray-50 p-3"><div className="text-xs text-gray-500">Total Fuel (L)</div><div className="font-semibold text-lg">{totals.fuel.toFixed(0)}</div></div>
+                  <div className="rounded-lg bg-gray-50 p-3">
+                    <div className="text-xs text-gray-500">Total NM</div>
+                    <div className="font-semibold text-lg">{totals.nm.toFixed(1)}</div>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-3">
+                    <div className="text-xs text-gray-500">Total Hours</div>
+                    <div className="font-semibold text-lg">{totals.hr.toFixed(1)}</div>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 p-3">
+                    <div className="text-xs text-gray-500">Total Fuel (L)</div>
+                    <div className="font-semibold text-lg">{totals.fuel.toFixed(0)}</div>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
+          {/* μικρό vignette για “ταινία” */}
           <div className="pointer-events-none absolute inset-0 [mask-image:radial-gradient(circle_at_center,black,transparent_85%)]" />
         </div>
       </div>
