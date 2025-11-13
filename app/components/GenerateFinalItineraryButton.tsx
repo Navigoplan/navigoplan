@@ -81,20 +81,20 @@ export default function GenerateFinalItineraryButton({
       const stops = buildStopsFromPlan(plan);
       const title = tripTitle || "Final Itinerary";
 
-      // 1) σώζω όλο το full plan στο sessionStorage (δεύτερο κανάλι)
       if (typeof window !== "undefined") {
+        // 1) Σώζω πλήρες plan στο sessionStorage (fallback κανάλι)
         const payload = { dayCards: plan, yacht, tripTitle: title, createdAt: Date.now() };
         sessionStorage.setItem("navigoplan.finalItinerary", JSON.stringify(payload));
 
-        // 2) φτιάχνω compact data= για τη νέα σελίδα
+        // 2) Φτιάχνω compact data= για το URL της νέας σελίδας
         const data: FinalData = { title, stops };
         const encoded = encodeURIComponent(safeBtoa(data));
         const url = `/itinerary/final?data=${encoded}`;
 
-        // 3) ΑΝΟΙΓΩ ΜΟΝΟ ΝΕΑ ΚΑΡΤΕΛΑ (ΔΕΝ χρησιμοποιώ router.push)
+        // 3) Ανοίγω ΜΟΝΟ νέα καρτέλα
         const win = window.open(url, "_blank", "noopener,noreferrer");
         if (!win) {
-          // αν ο browser μπλοκάρει pop-ups, ανοίγω στο ίδιο tab
+          // Αν ο browser μπλοκάρει pop-ups, τελευταίο fallback: ΜΟΝΟ η τρέχουσα καρτέλα
           window.location.href = url;
         }
       }
