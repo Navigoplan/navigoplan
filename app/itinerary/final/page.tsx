@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Sky, Environment } from "@react-three/drei";
+import { Sky, Environment, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 
 /* ========= Types ========= */
@@ -74,7 +74,7 @@ function buildDayCardsFromStops(stops: Stop[]): DayCard[] {
           fuelL: s.info.leg.fuelL,
           eta: s.info?.eta,
         }
-      : undefined,
+      : undefined
   }));
 }
 
@@ -85,23 +85,69 @@ function easeInOut(t: number) {
 /* ========= 3D components ========= */
 
 function Water() {
+  const [n1, n2] = useTexture([
+    "/textures/water-normal-1.jpg",
+    "/textures/water-normal-2.jpg",
+  ]) as [THREE.Texture, THREE.Texture];
+
   const matRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  useMemo(() => {
+    [n1, n2].forEach((tex) => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(8, 8);
+    });
+  }, [n1, n2]);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
+    const speed = 0.04;
+    n1.offset.x = (t * speed) % 1;
+    n1.offset.y = (t * speed * 0.6) % 1;
+    n2.offset.x = (t * speed * 0.7) % 1;
+    n2.offset.y = (t * speed * 0.4) % 1;
+
     if (matRef.current) {
-      // ήρεμος κυματισμός + ζεστό χρώμα
-      const base = 0.42 + Math.sin(t * 0.4) * 0.02;
-      matRef.current.color.setHSL(0.55, 0.55, base); // μπλε-πράσινο
-      matRef.current.roughness = 0.8;
-      matRef.current.metalness = 0.15;
+      const base = 0.4 + Math.sin(t * 0.35) * 0.03;
+      matRef.current.color.setHSL(0.55, 0.6, base); // μπλε-πράσινο με ζεστή απόχρωση
+      matRef.current.roughness = 0.85;
+      matRef.current.metalness = 0.18;
     }
   });
+
+  const onBeforeCompile = (shader: THREE.Shader) => {
+    shader.uniforms.uNormal2 = { value: n2 };
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <normal_fragment_maps>",
+      `
+      #ifdef USE_NORMALMAP
+        vec3 mapN = texture2D( normalMap, vUv ).xyz * 2.0 - 1.0;
+        mapN.xy *= normalScale;
+      #else
+        vec3 mapN = vec3(0.0,0.0,1.0);
+      #endif
+
+      vec3 mapN2 = texture2D( uNormal2, vUv * 1.3 ).xyz * 2.0 - 1.0;
+      mapN2.xy *= normalScale * 0.7;
+
+      vec3 blended = normalize(mix(mapN, mapN2, 0.55));
+      normal = normalize( tbn * blended );
+      `
+    );
+    shader.uniforms.normalMap.value = n1;
+  };
 
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <planeGeometry args={[500, 500, 64, 64]} />
-      <meshStandardMaterial ref={matRef} color="#145b8a" />
+      <meshStandardMaterial
+        ref={matRef}
+        color="#145b8a"
+        roughness={0.85}
+        metalness={0.18}
+        normalMap={n1}
+        onBeforeCompile={onBeforeCompile}
+      />
     </mesh>
   );
 }
@@ -109,15 +155,13 @@ function Water() {
 function Islands() {
   return (
     <group position={[0, 0, -60]}>
-      {/* αριστερό νησί */}
-      <mesh position={[-20, 0, 10]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[18, 32]} />
-        <meshStandardMaterial color="#1f2937" roughness={1} metalness={0} />
-      </mesh>
-      {/* δεξί νησί */}
-      <mesh position={[22, 0, 0]} rotation={[-Math.PI / 2, 0.3, 0]} receiveShadow>
-        <circleGeometry args={[16, 32]} />
+      <mesh position={[-22, 0, 15]} rotation={[-Math.PI / 2, 0.1, 0]} receiveShadow>
+        <circleGeometry args={[20, 48]} />
         <meshStandardMaterial color="#111827" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[24, 0, 0]} rotation={[-Math.PI / 2, -0.1, 0]} receiveShadow>
+        <circleGeometry args={[18, 48]} />
+        <meshStandardMaterial color="#020617" roughness={1} metalness={0} />
       </mesh>
     </group>
   );
@@ -125,8 +169,8 @@ function Islands() {
 
 function SunSphere() {
   return (
-    <mesh position={[0, 12, -80]}>
-      <sphereGeometry args={[3.2, 32, 32]} />
+    <mesh position={[0, 18, -80]}>
+      <sphereGeometry args={[3.5, 32, 32]} />
       <meshBasicMaterial color="#f97316" />
     </mesh>
   );
@@ -141,18 +185,18 @@ function YachtModel() {
         <meshStandardMaterial color="#fefefe" metalness={0.3} roughness={0.3} />
       </mesh>
       {/* main deck */}
-      <mesh castShadow position={[0, 0.7, -0.1]}>
-        <boxGeometry args={[0.9, 0.28, 1.5]} />
+      <mesh castShadow position={[0, 0.8, -0.05]}>
+        <boxGeometry args={[1.0, 0.32, 1.6]} />
         <meshStandardMaterial color="#e5e7eb" roughness={0.4} />
       </mesh>
       {/* upper deck / bridge */}
-      <mesh castShadow position={[0, 1.05, 0.05]}>
-        <boxGeometry args={[0.5, 0.25, 0.55]} />
+      <mesh castShadow position={[0, 1.2, 0.15]}>
+        <boxGeometry args={[0.6, 0.3, 0.6]} />
         <meshStandardMaterial color="#d1d5db" />
       </mesh>
       {/* mast */}
-      <mesh castShadow position={[0, 1.45, 0.18]}>
-        <cylinderGeometry args={[0.03, 0.03, 0.7, 12]} />
+      <mesh castShadow position={[0, 1.7, 0.18]}>
+        <cylinderGeometry args={[0.035, 0.035, 0.8, 16]} />
         <meshStandardMaterial color="#f9fafb" />
       </mesh>
     </group>
@@ -171,17 +215,17 @@ function FollowCam({
     const obj = target.current;
     if (!obj) return;
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(obj.quaternion);
-    const dist = zoomOut ? 18 : 9;
-    const height = zoomOut ? 7 : 3.5;
+    const dist = zoomOut ? 22 : 10;
+    const height = zoomOut ? 7.5 : 4;
     const desired = obj.position.clone().addScaledVector(dir, -dist);
     desired.y += height;
     camera.position.lerp(desired, 0.08);
-    camera.lookAt(obj.position.x, obj.position.y + 0.4, obj.position.z - 1.5);
+    camera.lookAt(obj.position.x, obj.position.y + 0.6, obj.position.z - 1.5);
   });
   return null;
 }
 
-/* ========= YachtMover (όλα τα useFrame μέσα στο Canvas) ========= */
+/* ========= YachtMover ========= */
 
 type YachtMoverProps = {
   yachtRef: React.MutableRefObject<THREE.Object3D | null>;
@@ -205,12 +249,14 @@ function YachtMover({
   setZoomOut,
 }: YachtMoverProps) {
   const progressRef = useRef(0);
-  const durationRef = useRef(3);
+  const durationRef = useRef(3.5); // δευτερόλεπτα πλεύσης ανά μέρα
 
   useEffect(() => {
     if (phase === "sail") {
       const h = days[idx]?.leg?.hours ?? 1;
-      durationRef.current = Math.min(6, Math.max(1, h * 0.9));
+      const base = 3; // ελάχιστο 3s για να προλάβουν να δουν το ταξίδι
+      const extra = Math.min(5, (h || 1) * 1.2);
+      durationRef.current = base + extra * 0.7;
       progressRef.current = 0;
     }
   }, [phase, idx, days]);
@@ -218,6 +264,9 @@ function YachtMover({
   useFrame(() => {
     const yacht = yachtRef.current;
     if (!yacht) return;
+
+    // πάντα λίγο bobbing
+    yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
 
     if (phase === "sail") {
       const N = pathPoints.length - 1;
@@ -233,10 +282,9 @@ function YachtMover({
       const tt = easeInOut(progressRef.current);
 
       const pos = start.clone().lerp(end, tt);
-      yacht.position.lerp(pos, 0.3);
-      yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
+      yacht.position.lerp(pos, 0.25);
 
-      const dir = end.clone().sub(start).normalize();
+      const dir = new THREE.Vector3().subVectors(end, start).normalize();
       const targetQuat = new THREE.Quaternion().setFromUnitVectors(
         new THREE.Vector3(0, 0, 1),
         dir
@@ -254,8 +302,7 @@ function YachtMover({
       }
     } else {
       const p = pathPoints[Math.min(idx, pathPoints.length - 1)];
-      yacht.position.lerp(p.clone().setY(0.2), 0.12);
-      yacht.position.y = 0.2 + Math.sin(Date.now() * 0.002) * 0.06;
+      yacht.position.lerp(p.clone().setY(yacht.position.y), 0.12);
     }
   });
 
@@ -264,29 +311,17 @@ function YachtMover({
 
 /* ========= Main 3D Scene ========= */
 
-function Scene3D({ data }: { data: Payload }) {
+function ScenePlayer({ data }: { data: Payload }) {
   const [idx, setIdx] = useState(0);
-  const [phase, setPhase] = useState<"sail" | "stop" | "done">("stop");
+  const [phase, setPhase] = useState<"sail" | "stop" | "done">("sail"); // ξεκινάει να πλέει
   const [zoomOut, setZoomOut] = useState(false);
 
   const days: DayCard[] = useMemo(
     () =>
-      data.dayCards?.length
-        ? data.dayCards
-        : [
-            {
-              day: 1,
-              date: "Day 1",
-              leg: { from: "Alimos", to: "Hydra", nm: 37, hours: 2.2, fuelL: 320 },
-              notes: "Demo route Alimos → Hydra",
-            },
-            {
-              day: 2,
-              date: "Day 2",
-              leg: { from: "Hydra", to: "Spetses", nm: 20, hours: 1.2, fuelL: 160 },
-              notes: "Demo route Hydra → Spetses",
-            },
-          ],
+      data.dayCards?.length ? data.dayCards : [
+        { day: 1, date: "Day 1", leg: { from: "Alimos", to: "Hydra", nm: 37, hours: 2.2, fuelL: 320 }, notes: "Demo route Alimos → Hydra" },
+        { day: 2, date: "Day 2", leg: { from: "Hydra", to: "Spetses", nm: 20, hours: 1.2, fuelL: 160 }, notes: "Demo route Hydra → Spetses" },
+      ],
     [data]
   );
 
@@ -305,7 +340,7 @@ function Scene3D({ data }: { data: Payload }) {
     for (let i = 0; i < N; i++) {
       const t = N === 1 ? 0 : i / (N - 1);
       const z = THREE.MathUtils.lerp(18, -22, t);
-      const x = Math.sin(t * Math.PI * 0.7) * 6; // μικρή καμπύλη
+      const x = Math.sin(t * Math.PI * 0.7) * 7; // απαλή καμπυλωτή πορεία
       pts.push(new THREE.Vector3(x, 0, z));
     }
     return pts;
@@ -315,8 +350,9 @@ function Scene3D({ data }: { data: Payload }) {
 
   return (
     <div className="relative w-full">
-      {/* Overlay UI πάνω από την 3D σκηνή */}
+      {/* Overlay UI */}
       <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
+        {/* κάρτα για την τρέχουσα μέρα όταν έχει σταματήσει */}
         {phase === "stop" && days[idx] && (
           <div className="pointer-events-auto max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/95 backdrop-blur border border-white/60 shadow-xl p-5">
             <div className="text-xs uppercase tracking-wide text-gray-500">
@@ -350,9 +386,7 @@ function Scene3D({ data }: { data: Payload }) {
                 </div>
               )}
               {days[idx].notes && (
-                <div className="mt-3 whitespace-pre-wrap">
-                  📝 {days[idx].notes}
-                </div>
+                <div className="mt-3 whitespace-pre-wrap">📝 {days[idx].notes}</div>
               )}
             </div>
             <div className="mt-4 flex justify-end">
@@ -373,6 +407,7 @@ function Scene3D({ data }: { data: Payload }) {
           </div>
         )}
 
+        {/* Summary στο τέλος */}
         {phase === "done" && (
           <div className="pointer-events-auto max-w-3xl w-[96vw] rounded-2xl bg-white/95 backdrop-blur border border-white/60 shadow-xl p-6">
             <div className="text-xs uppercase tracking-wide text-gray-500">
@@ -382,55 +417,47 @@ function Scene3D({ data }: { data: Payload }) {
             <div className="mt-4 grid grid-cols-3 gap-4 text-center">
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="text-xs text-gray-500">Total NM</div>
-                <div className="font-semibold text-lg">
-                  {totals.nm.toFixed(1)}
-                </div>
+                <div className="font-semibold text-lg">{totals.nm.toFixed(1)}</div>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="text-xs text-gray-500">Total Hours</div>
-                <div className="font-semibold text-lg">
-                  {totals.hr.toFixed(1)}
-                </div>
+                <div className="font-semibold text-lg">{totals.hr.toFixed(1)}</div>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="text-xs text-gray-500">Total Fuel (L)</div>
-                <div className="font-semibold text-lg">
-                  {totals.fuel.toFixed(0)}
-                </div>
+                <div className="font-semibold text-lg">{totals.fuel.toFixed(0)}</div>
               </div>
             </div>
           </div>
         )}
       </div>
 
+      {/* 3D καμβάς */}
       <Canvas
         shadows
         camera={{ position: [0, 4, 10], fov: 45 }}
         className="aspect-[16/9] w-full rounded-2xl border border-slate-200 bg-black"
       >
-        {/* φωτισμός sunset */}
+        {/* Sunset lighting */}
+        <color attach="background" args={["#020617"]} />
         <ambientLight intensity={0.4} />
         <directionalLight
           castShadow
-          intensity={1.3}
+          intensity={1.35}
           color={"#f97316"}
-          position={[10, 15, -5]}
+          position={[10, 14, -6]}
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
         />
-        <directionalLight
-          intensity={0.35}
-          color={"#60a5fa"}
-          position={[-8, 5, 10]}
-        />
+        <directionalLight intensity={0.35} color={"#60a5fa"} position={[-8, 6, 10]} />
 
         <Sky
-          sunPosition={[10, 12, -5]}
+          sunPosition={[10, 12, -6]}
           turbidity={8}
           rayleigh={3}
           mieCoefficient={0.02}
           mieDirectionalG={0.95}
-          azimuth={0.35}
+          azimuth={0.3}
         />
         <Environment preset="sunset" />
 
@@ -505,14 +532,12 @@ export default function FinalItineraryPage() {
   return (
     <main className="p-4 sm:p-8">
       <div className="mb-4">
-        <h1 className="text-2xl sm:text-3xl font-semibold">
-          Final Itinerary (3D Yacht)
-        </h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold">Final Itinerary (3D Yacht)</h1>
         <p className="text-sm text-gray-500">
           Cinematic 3D yacht σε ηλιοβασίλεμα • κάρτες ανά ημέρα • zoom-out στο τέλος
         </p>
       </div>
-      <Scene3D data={payload} />
+      <ScenePlayer data={payload} />
     </main>
   );
 }
