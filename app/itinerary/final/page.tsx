@@ -11,8 +11,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Sky, Environment, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
-/* ========= Types ========= */
-type YachtType = "Motor" | "Sailing";
+/* ========= Types από itinerary ========= */
 type Leg = {
   from: string;
   to: string;
@@ -21,7 +20,6 @@ type Leg = {
   fuelL?: number;
   eta?: { dep?: string; arr?: string; window?: string };
 };
-
 type DayCard = {
   day: number;
   date?: string;
@@ -29,7 +27,6 @@ type DayCard = {
   notes?: string;
   title?: string;
 };
-
 type DayInfo = {
   day: number;
   date?: string;
@@ -40,11 +37,8 @@ type DayInfo = {
   eta?: { dep?: string; arr?: string; window?: string };
   leg?: { from: string; to: string; nm?: number; hours?: number; fuelL?: number };
 };
-
 type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
-
 type FinalData = { title?: string; stops: Stop[] };
-
 type Payload = { dayCards: DayCard[]; tripTitle?: string };
 
 /* ========= Helpers ========= */
@@ -58,7 +52,8 @@ function formatHM(h?: number) {
 
 function safeAtobToJSON<T = unknown>(s: string): T | null {
   try {
-    return JSON.parse(decodeURIComponent(escape(atob(s)))) as T;
+    const json = decodeURIComponent(escape(atob(s)));
+    return JSON.parse(json) as T;
   } catch {
     return null;
   }
@@ -79,7 +74,7 @@ function buildDayCardsFromStops(stops: Stop[]): DayCard[] {
             nm: s.info.leg.nm,
             hours: s.info.leg.hours,
             fuelL: s.info.leg.fuelL,
-            eta: s.info.eta,
+            eta: s.info?.eta,
           }
         : undefined,
     }));
@@ -91,48 +86,33 @@ function easeInOut(t: number) {
     : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-/* ========= 3D: SIMPLE WATER ========= */
+/* ========= 3D components ========= */
 
-function Water() {
-  const matRef = useRef<THREE.MeshStandardMaterial>(null);
-
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
-    if (matRef.current) {
-      const base = 0.48 + Math.sin(t * 0.4) * 0.03;   // highlight animation
-      matRef.current.color.setHSL(0.56, 0.55, base); // blue-green sunset tint
-      matRef.current.roughness = 0.9;
-      matRef.current.metalness = 0.12;
-    }
-  });
-
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <planeGeometry args={[400, 400]} />
-      <meshStandardMaterial ref={matRef} color="#1f6aa5" />
-    </mesh>
-  );
-}
-
-/* ========= 3D: GLB YACHT ========= */
-/* Τα GLB αρχεία πρέπει να είναι σε: public/models/super-yacht.glb */
-
-function YachtGLB() {
-  const gltf = useGLTF("/models/super-yacht.glb") as any;
+/** 3D θάλασσα από ocean-water.glb */
+function OceanGLB() {
+  const gltf = useGLTF("/models/ocean-water.glb") as any;
 
   return (
     <primitive
       object={gltf.scene}
-      scale={0.65}
-      castShadow
-      receiveShadow
+      // θα χρειαστεί να πειραματιστείς με αυτά τα 3:
+      scale={10}
       position={[0, 0, 0]}
+      rotation={[-Math.PI / 2, 0, 0]} // συνήθως τα ocean meshes είναι “όρθια”
+      receiveShadow
     />
   );
 }
+useGLTF.preload("/models/ocean-water.glb");
+
+/** GLB yacht από super-yacht.glb */
+function YachtGLB() {
+  const gltf = useGLTF("/models/super-yacht.glb") as any;
+  return <primitive object={gltf.scene} scale={0.7} castShadow receiveShadow />;
+}
 useGLTF.preload("/models/super-yacht.glb");
 
-/* ========= RIG: Kίνηση του yacht ========= */
+/* ========= YachtRig: κίνηση σκάφους ========= */
 
 type YachtRigProps = {
   days: DayCard[];
@@ -142,80 +122,72 @@ type YachtRigProps = {
   onFinish: () => void;
 };
 
-function YachtRig({ days, dayIndex, phase, onArrive, onFinish }: YachtRigProps) {
+function YachtRig({
+  days,
+  dayIndex,
+  phase,
+  onArrive,
+  onFinish,
+}: YachtRigProps) {
   const group = useRef<THREE.Group>(null);
   const { camera } = useThree();
-
   const tRef = useRef(0);
-  const [startZ, setStartZ] = useState(22);
-  const [endZ, setEndZ] = useState(14);
-
+  const [startZ, setStartZ] = useState(20);
+  const [endZ, setEndZ] = useState(12);
   const arrivedRef = useRef(false);
 
   useEffect(() => {
     if (!group.current) return;
-
-    const zStart = group.current.position.z;
+    const zStart = group.current.position.z || 20;
     const zEnd = zStart - 8;
-
     setStartZ(zStart);
     setEndZ(zEnd);
-
     tRef.current = 0;
     arrivedRef.current = false;
-
   }, [dayIndex]);
 
   useFrame(({ clock }, delta) => {
     const g = group.current;
     if (!g) return;
 
-    // subtle bobbing
-    g.position.y = 0.25 + Math.sin(clock.getElapsedTime() * 2) * 0.05;
+    const t = clock.getElapsedTime();
+    g.position.y = 0.25 + Math.sin(t * 1.8) * 0.05; // bobbing
 
     if (phase === "sail") {
-      const hours = days[dayIndex]?.leg?.hours ?? 1;
-      const duration = Math.max(2.5, Math.min(6, hours * 0.8));
-
+      const h = days[dayIndex]?.leg?.hours ?? 1;
+      const duration = Math.max(2.5, Math.min(6, h * 0.8));
       tRef.current = Math.min(1, tRef.current + delta / duration);
 
       const p = easeInOut(tRef.current);
       const z = THREE.MathUtils.lerp(startZ, endZ, p);
-
       g.position.z = z;
 
-      // follow cam
-      camera.position.lerp(new THREE.Vector3(0, 3, z + 7), 0.08);
+      // camera follow από πίσω
+      camera.position.lerp(new THREE.Vector3(0, 4, z + 10), 0.08);
       camera.lookAt(g.position.x, g.position.y + 0.6, g.position.z);
 
       if (tRef.current >= 1 && !arrivedRef.current) {
         arrivedRef.current = true;
-
         if (dayIndex < days.length - 1) onArrive();
         else onFinish();
       }
-
     } else if (phase === "stop") {
-
-      camera.position.lerp(new THREE.Vector3(0, 3, g.position.z + 7), 0.08);
+      camera.position.lerp(new THREE.Vector3(0, 4, g.position.z + 10), 0.08);
       camera.lookAt(g.position.x, g.position.y + 0.6, g.position.z);
-
     } else if (phase === "done") {
-
-      camera.position.lerp(new THREE.Vector3(0, 12, g.position.z + 25), 0.03);
+      camera.position.lerp(new THREE.Vector3(0, 15, g.position.z + 40), 0.04);
       camera.lookAt(g.position.x, g.position.y, g.position.z);
-
     }
   });
 
   return (
-    <group ref={group} position={[0, 0, 22]}>
+    <group ref={group} position={[0, 0, 20]}>
       <YachtGLB />
     </group>
   );
 }
 
-/* ========= UI + 3D ========= */
+/* ========= ScenePlayer (UI + 3D) ========= */
 
 function ScenePlayer({ data }: { data: Payload }) {
   const [dayIndex, setDayIndex] = useState(0);
@@ -223,85 +195,97 @@ function ScenePlayer({ data }: { data: Payload }) {
 
   const days: DayCard[] = useMemo(() => {
     if (data.dayCards?.length) return data.dayCards;
-
     return [
       {
-        day: 1, date: "Day 1",
+        day: 1,
+        date: "Day 1",
         leg: { from: "Alimos", to: "Hydra", nm: 37, hours: 2.2, fuelL: 320 },
-        notes: "Demo day",
+        notes: "Demo: Alimos → Hydra",
       },
       {
-        day: 2, date: "Day 2",
+        day: 2,
+        date: "Day 2",
         leg: { from: "Hydra", to: "Spetses", nm: 20, hours: 1.2, fuelL: 160 },
-        notes: "Demo day",
+        notes: "Demo: Hydra → Spetses",
       },
     ];
-
   }, [data]);
-
-  const current = days[dayIndex];
 
   const totals = useMemo(() => {
     const nm = days.reduce((a, d) => a + (d.leg?.nm ?? 0), 0);
     const hr = days.reduce((a, d) => a + (d.leg?.hours ?? 0), 0);
     const fuel = days.reduce((a, d) => a + (d.leg?.fuelL ?? 0), 0);
-
     return { nm, hr, fuel };
   }, [days]);
 
   const title =
     data.tripTitle ??
     (days[0]?.leg
-      ? `${days[0].leg.from} → ${days[days.length - 1]?.leg?.to}`
+      ? `${days[0].leg.from} → ${
+          days[days.length - 1]?.leg?.to ?? days[0].leg.to
+        }`
       : "VIP Final Itinerary");
+
+  const current = days[dayIndex];
 
   return (
     <div className="relative w-full">
-      
       {/* SUMMARY CARD */}
       <div className="flex justify-center mb-4">
         <div className="max-w-4xl w-full bg-white/95 border rounded-2xl shadow px-6 py-4">
-          <div className="text-xs uppercase text-gray-500">Final Itinerary</div>
+          <div className="text-xs uppercase text-gray-500">
+            Final Itinerary
+          </div>
           <div className="text-lg font-semibold mt-1">{title}</div>
-
           <div className="mt-3 grid grid-cols-3 text-sm text-center">
-            <div><div className="text-xs text-gray-500">Total NM</div><div className="font-semibold">{totals.nm.toFixed(1)}</div></div>
-            <div><div className="text-xs text-gray-500">Total Hours</div><div className="font-semibold">{totals.hr.toFixed(1)}</div></div>
-            <div><div className="text-xs text-gray-500">Total Fuel</div><div className="font-semibold">{totals.fuel.toFixed(0)}</div></div>
+            <div>
+              <div className="text-xs text-gray-500">Total NM</div>
+              <div className="font-semibold">{totals.nm.toFixed(1)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Total Hours</div>
+              <div className="font-semibold">{totals.hr.toFixed(1)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Total Fuel (L)</div>
+              <div className="font-semibold">{totals.fuel.toFixed(0)}</div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 3D AREA */}
+      {/* 3D + overlay */}
       <div className="relative w-full h-[540px] rounded-2xl border overflow-hidden">
-
-        {/* DAY CARD */}
+        {/* Day card πάνω από 3D */}
         {phase !== "done" && current && (
-          <div className="absolute left-1/2 top-4 -translate-x-1/2 z-10 bg-white/95 border rounded-2xl shadow-xl px-5 py-4 w-[92%] max-w-md">
-            <div className="text-xs uppercase text-gray-500">VIP Day {current.day}</div>
-            <div className="text-xl font-semibold mt-1">
-              {current.leg ? `${current.leg.from} → ${current.leg.to}` : current.title}
+          <div className="pointer-events-auto absolute left-1/2 top-4 -translate-x-1/2 z-10 bg-white/95 rounded-2xl shadow-lg border px-5 py-4 w-[92%] max-w-md">
+            <div className="text-xs uppercase text-gray-500">
+              VIP Day {current.day}
             </div>
-
+            <div className="text-xl font-semibold mt-1">
+              {current.leg
+                ? `${current.leg.from} → ${current.leg.to}`
+                : current.title ?? "Cruising"}
+            </div>
             <div className="mt-2 text-sm text-gray-700">
-              📅 {current.date}
+              📅 {current.date ?? "-"}
               {current.leg && (
                 <>
                   <br />
-                  NM: {(current.leg.nm ?? 0).toFixed(1)} • Time: {formatHM(current.leg.hours)} • Fuel: {(current.leg.fuelL ?? 0).toFixed(0)}
+                  NM: {(current.leg.nm ?? 0).toFixed(1)} • Time:{" "}
+                  {formatHM(current.leg.hours)} • Fuel:{" "}
+                  {(current.leg.fuelL ?? 0).toFixed(0)} L
                 </>
               )}
             </div>
-
             {current.notes && (
               <div className="mt-2 text-sm whitespace-pre-wrap">
                 📝 {current.notes}
               </div>
             )}
-
             <div className="mt-4 flex justify-end">
               <button
-                className="px-4 py-2 bg-black text-white rounded-xl"
+                className="px-4 py-2 bg-black text-white rounded-xl text-sm"
                 onClick={() => {
                   if (dayIndex < days.length - 1) {
                     setPhase("sail");
@@ -317,10 +301,9 @@ function ScenePlayer({ data }: { data: Payload }) {
           </div>
         )}
 
-        {/* 3D CANVAS */}
-        <Canvas shadows camera={{ position: [0, 3, 10], fov: 45 }}>
+        {/* Canvas */}
+        <Canvas shadows camera={{ position: [0, 4, 14], fov: 45 }}>
           <color attach="background" args={["#020617"]} />
-
           <ambientLight intensity={0.45} />
           <directionalLight
             castShadow
@@ -328,12 +311,15 @@ function ScenePlayer({ data }: { data: Payload }) {
             color="#f97316"
             position={[10, 12, -6]}
           />
-
-          <Sky sunPosition={[10, 12, -6]} turbidity={8} />
+          <Sky sunPosition={[10, 12, -6]} turbidity={7} />
           <Environment preset="sunset" />
 
-          <Water />
+          {/* 3D θάλασσα από GLB */}
+          <Suspense fallback={null}>
+            <OceanGLB />
+          </Suspense>
 
+          {/* Yacht + rig */}
           <Suspense fallback={null}>
             <YachtRig
               days={days}
@@ -349,7 +335,7 @@ function ScenePlayer({ data }: { data: Payload }) {
   );
 }
 
-/* ========= PAGE LOADER ========= */
+/* ========= PAGE ========= */
 
 export default function FinalItineraryPage() {
   const [payload, setPayload] = useState<Payload | null>(null);
@@ -360,7 +346,6 @@ export default function FinalItineraryPage() {
 
     if (dataParam) {
       const decoded = safeAtobToJSON<FinalData>(dataParam);
-
       if (decoded?.stops?.length) {
         setPayload({
           dayCards: buildDayCardsFromStops(decoded.stops),
@@ -384,7 +369,7 @@ export default function FinalItineraryPage() {
       }
     }
 
-    // fallback
+    // fallback demo
     setPayload({
       dayCards: [],
       tripTitle: "VIP Final Itinerary",
@@ -399,7 +384,7 @@ export default function FinalItineraryPage() {
         Final Itinerary (3D Yacht – GLB)
       </h1>
       <p className="text-sm text-gray-500 mb-4">
-        3D GLB yacht σε ηλιοβασίλεμα • πλεύση ανά ημέρα • κάρτες και συνολικό summary
+        3D GLB yacht πάνω σε ocean GLB • κάρτες ανά ημέρα • συνολικό summary
       </p>
       <ScenePlayer data={payload} />
     </main>
