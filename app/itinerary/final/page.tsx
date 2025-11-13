@@ -115,7 +115,7 @@ function Water() {
     }
   });
 
-  const onBeforeCompile = (shader: THREE.Shader) => {
+  const onBeforeCompile = (shader: any) => {
     shader.uniforms.uNormal2 = { value: n2 };
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <normal_fragment_maps>",
