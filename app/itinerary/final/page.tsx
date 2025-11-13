@@ -87,9 +87,9 @@ function ScenePlayer({ data }: { data: Payload }) {
     <div className="relative w-full">
       <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200">
         <div className="relative aspect-[2/3] sm:aspect-[16/9]">
-          {/* backplate: βάλε τη φωτογραφία σου εδώ */}
+          {/* backplate: η δική σου φωτογραφία, σε PNG */}
           <img
-            src="/images/navigoplan-sunset.jpg"
+            src="/images/navigoplan-sunset.png"
             alt="Navigoplan sunset"
             className="absolute inset-0 h-full w-full object-cover"
             style={{
