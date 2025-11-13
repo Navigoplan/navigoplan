@@ -33,7 +33,13 @@ type DayInfo = {
   leg?: { from: string; to: string; nm?: number; hours?: number; fuelL?: number };
 };
 
-type Stop = { id: string; name: string; pos: [number, number]; day: number; info: DayInfo };
+type Stop = {
+  id: string;
+  name: string;
+  pos: [number, number];
+  day: number;
+  info: DayInfo;
+};
 
 type FinalData = { title?: string; stops: Stop[] };
 
@@ -99,7 +105,7 @@ export default function GenerateFinalItineraryButton({
 
       return {
         id: `${i + 1}-${name}`.toLowerCase().replace(/\s+/g, "-"),
-      name,
+        name,
         pos: [x, y],
         day: info.day,
         info,
@@ -116,7 +122,7 @@ export default function GenerateFinalItineraryButton({
       const title = tripTitle || "Final Itinerary";
 
       if (typeof window !== "undefined") {
-        // 1) Σώζω ΠΛΗΡΕΣ plan στο sessionStorage (fallback)
+        // 1) Σώζω πλήρες plan στο sessionStorage (fallback)
         const payload = {
           dayCards: plan,
           yacht,
@@ -128,18 +134,17 @@ export default function GenerateFinalItineraryButton({
           JSON.stringify(payload)
         );
 
-        // 2) Compact δεδομένα για το URL της νέας σελίδας
+        // 2) Compact data για το URL της νέας σελίδας
         const data: FinalData = { title, stops };
         const encoded = encodeURIComponent(safeBtoa(data));
         const url = `/itinerary/final?data=${encoded}`;
 
-        // 3) Ανοίγω ΜΟΝΟ νέα καρτέλα – δεν πειράζω την τρέχουσα σελίδα
+        // 3) Ανοίγω ΜΟΝΟ νέα καρτέλα (η /ai δεν αλλάζει)
         const win = window.open(url, "_blank", "noopener,noreferrer");
-
-        // Αν ο browser μπλοκάρει pop-ups, ενημερώνω τον χρήστη αλλά ΔΕΝ κάνω redirect
         if (!win) {
           alert(
-            "Ο browser μπλόκαρε το νέο παράθυρο.\nΕπιτρέψτε pop-ups για το navigoplan.com ή αντιγράψτε το link χειροκίνητα από την μπάρα διευθύνσεων."
+            "Ο browser μπλόκαρε το νέο παράθυρο.\n" +
+              "Επιτρέψτε pop-ups για το navigoplan.com ή αντιγράψτε το link χειροκίνητα."
           );
         }
       }
