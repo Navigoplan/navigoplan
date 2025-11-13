@@ -1,7 +1,6 @@
 "use client";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
@@ -92,7 +91,7 @@ function Water() {
     const t = clock.getElapsedTime();
     if (matRef.current) {
       const base = 0.5 + Math.sin(t * 0.3) * 0.02;
-      // ΜΙΚΡΗ ΚΙΝΗΣΗ ΣΤΟ ΧΡΩΜΑ ΓΙΑ ΝΑ ΦΑΙΝΕΤΑΙ ΖΩΝΤΑΝΗ Η ΘΑΛΑΣΣΑ
+      // μπλε-πράσινο νερό με λίγο "ζωντανό" χρώμα
       matRef.current.color.setHSL(0.56, 0.55, base);
       matRef.current.roughness = 0.8;
       matRef.current.metalness = 0.12;
@@ -146,7 +145,7 @@ function FollowCam({
     const obj = target.current;
     if (!obj) return;
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(obj.quaternion);
-    const dist = zoomOut ? 16 : 8;
+    const dist =  zoomOut ? 16 : 8;
     const height = zoomOut ? 6 : 3;
     const desired = obj.position.clone().addScaledVector(dir, -dist);
     desired.y += height;
@@ -177,7 +176,7 @@ function Scene3D({ data }: { data: Payload }) {
             {
               day: 2,
               date: "Day 2",
-              leg: { from: "Hydra", to:"Spetses", nm: 20, hours: 1.2, fuelL: 160 },
+              leg: { from: "Hydra", to: "Spetses", nm: 20, hours: 1.2, fuelL: 160 },
               notes: "Demo route Hydra → Spetses",
             },
           ],
@@ -193,7 +192,6 @@ function Scene3D({ data }: { data: Payload }) {
 
   const title = data.tripTitle || "VIP Final Itinerary";
 
-  // path των legs
   const pathPoints = useMemo(() => {
     const N = Math.max(days.length, 2);
     const pts: THREE.Vector3[] = [];
@@ -229,10 +227,7 @@ function Scene3D({ data }: { data: Payload }) {
       const start = pathPoints[s];
       const end = pathPoints[e];
 
-      progressRef.current = Math.min(
-        1,
-        progressRef.current + delta / durationRef.current
-      );
+      progressRef.current = Math.min(1, progressRef.current + delta / durationRef.current);
       const tt = easeInOut(progressRef.current);
 
       const pos = start.clone().lerp(end, tt);
@@ -248,7 +243,7 @@ function Scene3D({ data }: { data: Payload }) {
 
       if (progressRef.current >= 1) {
         if (idx < days.length - 1) {
-          setIdx((i) => i + 1);
+          setIdx(i => i + 1);
           setPhase("stop");
         } else {
           setPhase("done");
@@ -357,7 +352,6 @@ function Scene3D({ data }: { data: Payload }) {
         camera={{ position: [0, 3, 8], fov: 45 }}
         className="aspect-[16/9] w-full rounded-2xl border border-slate-200 bg-black"
       >
-        {/* φωτισμός sunset */}
         <ambientLight intensity={0.45} />
         <directionalLight
           castShadow
@@ -375,13 +369,10 @@ function Scene3D({ data }: { data: Payload }) {
           azimuth={0.3}
         />
         <Environment preset="sunset" />
-
         <Water />
-
         <group ref={yachtRef} position={[-24, 0, 20]}>
           <YachtModel />
         </group>
-
         <FollowCam target={yachtRef} zoomOut={zoomOut} />
       </Canvas>
     </div>
@@ -422,7 +413,6 @@ export default function FinalItineraryPage() {
       } catch {}
     }
 
-    // demo fallback
     setPayload({
       dayCards: [],
       tripTitle: "VIP Final Itinerary",
@@ -434,7 +424,7 @@ export default function FinalItineraryPage() {
   return (
     <main className="p-4 sm:p-8">
       <div className="mb-4">
-        <h1 className="text-2xl sm:px-0 sm:text-3xl font-semibold">
+        <h1 className="text-2xl sm:text-3xl font-semibold">
           Final Itinerary (3D Yacht)
         </h1>
         <p className="text-sm text-gray-500">
