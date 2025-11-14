@@ -18,26 +18,17 @@ export type DayCard = {
   notes?: string;
 };
 
-type Step =
-  | "idle"          // Start the journey
-  | "video1"        // Μαρίνα → ανοιχτά (μόνο στην αρχή)
-  | "video2"        // Ανοιχτά → νησί
-  | "video3"        // Νησί → ανοιχτά
-  | "video4"        // Ανοιχτά → μαρίνα (μόνο στο τέλος)
-  | "video5"        // Zoom-out μαρίνα
-  | "dayCard"       // κάρτα τρέχουσας ημέρας
-  | "summaryCard";  // τελικό full itinerary
+type VideoId = "v1" | "v2" | "v3" | "v4" | "v5";
 
 type Props = {
   days: DayCard[];      // όλες οι μέρες από VIP Guests (τελευταία = άφιξη μαρίνα)
-  video1Url: string;    // 1) Μαρίνα → ανοιχτά
-  video2Url: string;    // 2) Ανοιχτά → νησί
-  video3Url: string;    // 3) Νησί → ανοιχτά
-  video4Url: string;    // 4) Ανοιχτά → μαρίνα
-  video5Url: string;    // 5) Zoom-out μαρίνα
+  video1Url: string;    // v1: Μαρίνα → ανοιχτά
+  video2Url: string;    // v2: Ανοιχτά → νησί
+  video3Url: string;    // v3: Νησί → ανοιχτά
+  video4Url: string;    // v4: Ανοιχτά → μαρίνα
+  video5Url: string;    // v5: Zoom-out μαρίνα
 };
 
-/* ========= Helpers ========= */
 function formatHM(h?: number) {
   const v = h ?? 0;
   const H = Math.floor(v);
@@ -54,114 +45,122 @@ export function FinalVideoFlow({
   video4Url,
   video5Url,
 }: Props) {
-  const [step, setStep] = useState<Step>("idle");
+  // mode ελέγχει αν παίζει video / κάρτα κλπ
+  const [mode, setMode] = useState<"idle" | "video" | "card" | "summaryCard">(
+    "idle"
+  );
   const [activeDay, setActiveDay] = useState(0); // index 0..N-1
+
+  // ποιο video παίζει τώρα
+  const [currentVideo, setCurrentVideo] = useState<VideoId | null>(null);
+  // ουρά επόμενων videos που θα παίξουν
+  const [queue, setQueue] = useState<VideoId[]>([]);
+  // τι θα γίνει όταν τελειώσουν ΟΛΑ τα videos της ουράς
+  const [nextStep, setNextStep] = useState<"card" | "summaryCard" | null>(null);
+  // ποια ημέρα θα δείξει μετά τα videos (για card)
+  const [nextDayIndex, setNextDayIndex] = useState<number>(0);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const isLastDay = activeDay === days.length - 1;
   const isPenultimateDay = activeDay === days.length - 2;
   const currentDay = days[activeDay];
 
-  /* ========= Επιλογή video src ανά step ========= */
-  let videoSrc: string | undefined;
-  if (step === "video1") videoSrc = video1Url;
-  else if (step === "video2") videoSrc = video2Url;
-  else if (step === "video3") videoSrc = video3Url;
-  else if (step === "video4") videoSrc = video4Url;
-  else if (step === "video5") videoSrc = video5Url;
-  else videoSrc = undefined;
+  /* ========= Map VideoId -> URL ========= */
+  const videoSrc: string | undefined =
+    currentVideo === "v1"
+      ? video1Url
+      : currentVideo === "v2"
+      ? video2Url
+      : currentVideo === "v3"
+      ? video3Url
+      : currentVideo === "v4"
+      ? video4Url
+      : currentVideo === "v5"
+      ? video5Url
+      : undefined;
 
-  const isVideoStep =
-    step === "video1" ||
-    step === "video2" ||
-    step === "video3" ||
-    step === "video4" ||
-    step === "video5";
-
-  /* ========= Auto play on step change ========= */
+  /* ========= Auto-play όταν αλλάζει currentVideo ========= */
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (isVideoStep && videoSrc) {
+    if (mode === "video" && currentVideo && videoSrc) {
       el.currentTime = 0;
       el.play().catch(() => {});
     } else {
-      // στις κάρτες/idle/summary, αφήνουμε το τελευταίο frame
       el?.pause();
     }
-  }, [step, videoSrc, isVideoStep]);
+  }, [currentVideo, mode, videoSrc]);
 
-  /* ========= HANDLERS ========= */
+  /* ========= Helper για να ξεκινήσει ένα sequence videos ========= */
+  function startVideoSequence(
+    vids: VideoId[],
+    after: "card" | "summaryCard",
+    dayIndex: number
+  ) {
+    if (!vids.length) return;
+    setQueue(vids);
+    setCurrentVideo(vids[0]);
+    setNextStep(after);
+    setNextDayIndex(dayIndex);
+    setMode("video");
+  }
 
+  /* ========= Start Journey button ========= */
   function handleStartJourney() {
     if (!days.length) return;
-    setActiveDay(0);
+    // Day 0, στην αρχή:
     // 1) Μαρίνα → ανοιχτά
-    setStep("video1");
+    // 2) Ανοιχτά → νησί
+    // μετά → Card Day1
+    setActiveDay(0);
+    startVideoSequence(["v1", "v2"], "card", 0);
   }
 
+  /* ========= Όταν τελειώνει ένα video ========= */
   function handleVideoEnded() {
-    // περιγραφή flow:
+    setQueue((prevQueue) => {
+      if (prevQueue.length <= 1) {
+        // Μόλις τελείωσε το ΤΕΛΕΥΤΑΙΟ video αυτού του sequence
+        setCurrentVideo(null);
 
-    /*
-     * ΣΤΗΝ ΑΡΧΗ:
-     *  video1 (μαρίνα→ανοιχτά) => video2 (ανοιχτά→νησί) => κάρτα Day 1
-     *
-     * ΓΙΑ ΕΝΔΙΑΜΕΣΕΣ ΜΕΡΕΣ (όχι προτελευταία/τελευταία):
-     *  Κάρτα Day i (Continue) => video3 (νησί→ανοιχτά) => video2 (ανοιχτά→επόμενο νησί) => Κάρτα Day i+1
-     *
-     * ΠΡΟΤΕΛΕΥΤΑΙΑ ΜΕΡΑ:
-     *  Κάρτα Day N-1 (Continue) => video3 (νησί→ανοιχτά) => video4 (ανοιχτά→μαρίνα) => Κάρτα Day N
-     *
-     * ΤΕΛΕΥΤΑΙΑ ΜΕΡΑ:
-     *  Κάρτα Day N (Summary) => video5 (zoom-out μαρίνα) => SummaryCard
-     */
+        if (nextStep === "card") {
+          setActiveDay(nextDayIndex);
+          setMode("card");
+        } else if (nextStep === "summaryCard") {
+          setMode("summaryCard");
+        } else {
+          setMode("idle");
+        }
 
-    if (step === "video1") {
-      // μόλις φύγουμε από τη μαρίνα → ανοίγουμε 2) για Day1
-      setStep("video2");
-    } else if (step === "video2") {
-      // όταν τελειώνει 2) ΠΑΝΤΑ ανοίγουμε κάρτα της τρέχουσας ημέρας
-      setStep("dayCard");
-    } else if (step === "video3") {
-      // 3) τελείωσε:
-      if (isPenultimateDay) {
-        // αν είμαστε προτελευταία μέρα: μετά το 3) παίζει 4) (άφιξη μαρίνα)
-        setStep("video4");
+        return [];
       } else {
-        // αν είμαστε σε ενδιάμεση μέρα: μετά το 3) παίζει 2) για επόμενο νησί
-        // & όταν τελειώσει, θα αυξηθεί activeDay (+1) στην κάρτα
-        // (θα το κάνουμε εδώ)
-        setActiveDay((prev) => Math.min(prev + 1, days.length - 1));
-        setStep("video2");
+        // Υπάρχουν κι άλλα videos στη σειρά → πάμε στο επόμενο
+        const newQueue = prevQueue.slice(1);
+        setCurrentVideo(newQueue[0]);
+        return newQueue;
       }
-    } else if (step === "video4") {
-      // άφιξη μαρίνα → κάρτα τελευταίας μέρας
-      setActiveDay(days.length - 1);
-      setStep("dayCard");
-    } else if (step === "video5") {
-      // zoom out → τελικό summary
-      setStep("summaryCard");
-    }
+    });
   }
 
+  /* ========= Κουμπί Continue / Summary από Day Card ========= */
   function handleDayCardButton() {
     if (isLastDay) {
-      // τελευταία ημέρα → Summary: παίζει 5) (zoom-out) και μετά summaryCard
-      setStep("video5");
+      // Τελευταία μέρα → παίζει ΜΟΝΟ v5 (zoom-out) → summaryCard
+      startVideoSequence(["v5"], "summaryCard", activeDay);
       return;
     }
 
     if (isPenultimateDay) {
-      // προτελευταία ημέρα:
-      // Continue → Video3 (φεύγει από νησί) → Video4 (δέσιμο μαρίνα) → Κάρτα τελευταίας ημέρας
-      setStep("video3");
+      // Προτελευταία μέρα:
+      // 3) Νησί→ανοιχτά, μετά 4) ανοιχτά→μαρίνα → μετά Card τελευταίας μέρας
+      startVideoSequence(["v3", "v4"], "card", activeDay + 1);
       return;
     }
 
-    // ενδιάμεσες ημέρες:
-    // Continue → Video3 (φεύγει από τωρινό νησί) → Video2 (φτάνει στο επόμενο νησί) → Κάρτα Day+1
-    setStep("video3");
+    // Ενδιάμεσες μέρες:
+    // 3) Νησί→ανοιχτά, 2) ανοιχτά→επόμενο νησί → μετά Card Day+1
+    startVideoSequence(["v3", "v2"], "card", activeDay + 1);
   }
 
   /* ========= RENDER HELPERS ========= */
@@ -176,8 +175,8 @@ export function FinalVideoFlow({
           Start your Aegean journey
         </div>
         <p className="mt-2 text-sm text-gray-700">
-          Press <b>Start the journey</b> to watch your yacht departing from the
-          marina and follow your itinerary, day by day.
+          Press <b>Start the journey</b> to watch your yacht leaving the marina
+          and follow each day of your itinerary.
         </p>
         <div className="mt-4 flex justify-center">
           <button
@@ -212,8 +211,8 @@ export function FinalVideoFlow({
           )}
           {leg && (
             <>
-              NM: {(leg.nm ?? 0).toFixed(1)} • Time: {formatHM(leg.hours)} • Fuel:{" "}
-              {(leg.fuelL ?? 0).toFixed(0)} L
+              NM: {(leg.nm ?? 0).toFixed(1)} • Time: {formatHM(leg.hours)} •
+              Fuel: {(leg.fuelL ?? 0).toFixed(0)} L
             </>
           )}
         </div>
@@ -295,13 +294,9 @@ export function FinalVideoFlow({
 
         {/* OVERLAYS */}
         <div className="pointer-events-none absolute inset-0 flex items-start justify-center">
-          {step === "idle" && <div className="mt-6">{renderStartOverlay()}</div>}
-
-          {step === "dayCard" && (
-            <div className="mt-6">{renderDayCard()}</div>
-          )}
-
-          {step === "summaryCard" && (
+          {mode === "idle" && <div className="mt-6">{renderStartOverlay()}</div>}
+          {mode === "card" && <div className="mt-6">{renderDayCard()}</div>}
+          {mode === "summaryCard" && (
             <div className="mt-6 flex justify-center w-full">
               {renderSummaryCard()}
             </div>

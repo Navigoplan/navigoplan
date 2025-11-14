@@ -3,61 +3,93 @@
 import React, { useEffect, useState } from "react";
 import { FinalVideoFlow, DayCard as VideoDayCard } from "./FinalVideoFlow";
 
-type YachtType = "Motor" | "Sailing";
-
-type LegFull = {
-  from: string;
-  to: string;
-  nm?: number;
-  hours?: number;
-  fuelL?: number;
-};
-
-type DayCardFull = {
-  day: number;
-  date?: string;
-  leg?: LegFull;
-  notes?: string;
-};
-
-type StoredPayload = {
-  dayCards: DayCardFull[];
-  yacht?: { type: YachtType; speed: number; lph: number };
-  tripTitle?: string;
-};
+/* ========= SAFE DECODE FROM URL ========= */
+function safeAtobToJSON<T = unknown>(s: string): T | null {
+  try {
+    const json = decodeURIComponent(escape(atob(s)));
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
+}
 
 const STORAGE_KEY = "navigoplan.finalItinerary";
 
 export default function FinalItineraryPage() {
   const [days, setDays] = useState<VideoDayCard[] | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const raw = window.sessionStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as StoredPayload;
 
-      const mapped: VideoDayCard[] = (parsed.dayCards || []).map((d) => ({
-        day: d.day,
-        date: d.date,
-        leg: d.leg
-          ? {
-              from: d.leg.from,
-              to: d.leg.to,
-              nm: d.leg.nm,
-              hours: d.leg.hours,
-              fuelL: d.leg.fuelL,
-            }
-          : undefined,
-        notes: d.notes,
-      }));
+    const sp = new URLSearchParams(window.location.search);
+    const dataParam = sp.get("data");
 
-      setDays(mapped);
-    } catch (e) {
-      console.error("Failed to load itinerary from sessionStorage:", e);
+    // 1) Από URL ?data= (stops compact)
+    if (dataParam) {
+      const decoded = safeAtobToJSON<any>(dataParam);
+      if (decoded?.stops?.length) {
+        const videoDays: VideoDayCard[] = decoded.stops.map((s: any) => ({
+          day: s.day,
+          date: s.info?.date,
+          notes: s.info?.notes,
+          leg: s.info?.leg
+            ? {
+                from: s.info.leg.from,
+                to: s.info.leg.to,
+                nm: s.info.leg.nm,
+                hours: s.info.leg.hours,
+                fuelL: s.info.leg.fuelL,
+              }
+            : undefined,
+        }));
+        setDays(videoDays);
+        setReady(true);
+        return;
+      }
     }
+
+    // 2) Fallback: sessionStorage από GenerateFinalItineraryButton
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as {
+          dayCards: any[];
+          tripTitle?: string;
+        };
+        const videoDays: VideoDayCard[] = (parsed.dayCards || []).map((d) => ({
+          day: d.day,
+          date: d.date,
+          notes: d.notes,
+          leg: d.leg
+            ? {
+                from: d.leg.from,
+                to: d.leg.to,
+                nm: d.leg.nm,
+                hours: d.leg.hours,
+                fuelL: d.leg.fuelL,
+              }
+            : undefined,
+        }));
+        setDays(videoDays);
+      } catch (e) {
+        console.error("Failed to parse stored itinerary", e);
+      }
+    }
+
+    setReady(true);
   }, []);
+
+  if (!ready) {
+    return (
+      <main className="p-6">
+        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
+          Final Journey
+        </h1>
+        <p className="text-sm text-gray-600">Loading your itinerary…</p>
+      </main>
+    );
+  }
 
   if (!days || days.length === 0) {
     return (
@@ -80,7 +112,7 @@ export default function FinalItineraryPage() {
       </h1>
       <p className="text-sm text-gray-600 mb-4">
         Watch your yacht depart the marina, visit each island day by day, and
-        return, then view your full VIP itinerary.
+        return, then view your complete VIP itinerary.
       </p>
 
       <FinalVideoFlow
