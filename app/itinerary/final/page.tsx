@@ -1,5 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   MapContainer,
@@ -40,10 +43,6 @@ type DayInfo = {
   leg?: { from: string; to: string; nm?: number; hours?: number; fuelL?: number };
 };
 
-/** Stop:
- *  - ΙΔΑΝΙΚΑ: lat / lon σε degrees (Ελλάδα)
- *  - pos: [x, y] υπάρχει μόνο για παλιό 2D layout (fallback)
- */
 type Stop = {
   id: string;
   name: string;
@@ -55,7 +54,6 @@ type Stop = {
 };
 
 type FinalData = { title?: string; stops: Stop[] };
-
 type Payload = { dayCards: DayCard[]; tripTitle?: string; stops?: Stop[] };
 
 /* ========= Helpers ========= */
@@ -102,15 +100,11 @@ function buildDayCardsFromStops(stops: Stop[]): DayCard[] {
 type LatLng = [number, number];
 
 function stopToLatLng(stop: Stop): LatLng | null {
-  // Προτιμάμε lat/lon. Αν δεν υπάρχουν, πέφτουμε στο pos ως [x,y] (fallback).
   if (typeof stop.lat === "number" && typeof stop.lon === "number") {
     return [stop.lat, stop.lon];
   }
   if (stop.pos && stop.pos.length === 2) {
-    // Fallback: αντιμετωπίζουμε pos ως [xPercent, yPercent] πάνω από Ελλάδα
-    // για να μη σπάει τίποτα σε παλιά data.
     const [x, y] = stop.pos;
-    // Rough mapping: x => lon (19–29), y => lat (34–42)
     const lon = 19 + (x / 100) * 10;
     const lat = 34 + (y / 100) * 8;
     return [lat, lon];
@@ -131,7 +125,7 @@ function AutoFitBounds({ points }: { points: LatLng[] }) {
   return null;
 }
 
-/* ========= Route Map component ========= */
+/* ========= Route Map ========= */
 
 function FinalRouteMap({
   stops,
@@ -150,9 +144,7 @@ function FinalRouteMap({
     return arr;
   }, [stops]);
 
-  // Default κέντρο: Σαρωνικός
   const defaultCenter: LatLng = [37.9, 23.7];
-
   const shipPoint: LatLng | null = useMemo(() => {
     if (!points.length) return null;
     const idx = Math.min(focusIndex, points.length - 1);
@@ -160,16 +152,14 @@ function FinalRouteMap({
   }, [points, focusIndex]);
 
   if (!points.length) {
-    // Fallback αν δεν υπάρχουν σωστά lat/lon
     return (
-      <div className="w-full h-full bg-gradient-to-b from-sky-900 to-slate-950 flex items-center justify-center text-slate-200 text-sm">
-        No geo data for this itinerary yet. (Add lat/lon to stops in final
-        payload.)
+      <div className="w-full h-full bg-slate-900 flex items-center justify-center text-slate-200 text-sm">
+        No geo data for this itinerary yet.
       </div>
     );
   }
 
-  const completedPoints =
+  const completed =
     focusIndex > 0 ? points.slice(0, Math.min(focusIndex + 1, points.length)) : [];
 
   return (
@@ -179,39 +169,35 @@ function FinalRouteMap({
       scrollWheelZoom={false}
       zoomControl={false}
       style={{ width: "100%", height: "100%" }}
-      className="leaflet-container"
     >
       <TileLayer
         attribution='&copy; OpenStreetMap contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {/* Όλη η διαδρομή */}
       <Polyline positions={points} pathOptions={{ color: "#38bdf8", weight: 3, opacity: 0.4 }} />
 
-      {/* Completed τμήμα μέχρι την τρέχουσα ημέρα */}
-      {completedPoints.length > 1 && (
+      {completed.length > 1 && (
         <Polyline
-          positions={completedPoints}
+          positions={completed}
           pathOptions={{ color: "#f97316", weight: 5, opacity: 0.9 }}
         />
       )}
 
-      {/* Σημεία / Days */}
       {stops?.map((s, i) => {
         const ll = stopToLatLng(s);
         if (!ll) return null;
-        const isFocus = i === Math.min(focusIndex, stops.length - 1);
+        const focus = i === Math.min(focusIndex, stops.length - 1);
         return (
           <CircleMarker
             key={s.id}
             center={ll}
-            radius={isFocus ? 9 : 6}
+            radius={focus ? 9 : 6}
             pathOptions={{
-              color: isFocus ? "#f97316" : "#e5e7eb",
-              fillColor: isFocus ? "#f97316" : "#0f172a",
-              fillOpacity: isFocus ? 0.9 : 0.7,
-              weight: isFocus ? 3 : 2,
+              color: focus ? "#f97316" : "#e5e7eb",
+              fillColor: focus ? "#f97316" : "#0f172a",
+              fillOpacity: focus ? 0.9 : 0.7,
+              weight: focus ? 3 : 2,
             }}
           >
             <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>
@@ -219,46 +205,23 @@ function FinalRouteMap({
                 <div className="font-semibold">
                   Day {s.day}: {s.name}
                 </div>
-                {s.info?.leg && (
-                  <div>
-                    {s.info.leg.from} → {s.info.leg.to} •{" "}
-                    {(s.info.leg.nm ?? 0).toFixed(1)} nm
-                  </div>
-                )}
               </div>
             </Tooltip>
           </CircleMarker>
         );
       })}
 
-      {/* Auto fit σε όλη τη διαδρομή */}
       <AutoFitBounds points={points} />
     </MapContainer>
   );
 }
 
-/* ========= ScenePlayer (UI + Map) ========= */
+/* ========= ScenePlayer ========= */
 
 function ScenePlayer({ data }: { data: Payload }) {
   const [dayIndex, setDayIndex] = useState(0);
 
-  const days: DayCard[] = useMemo(() => {
-    if (data.dayCards?.length) return data.dayCards;
-    return [
-      {
-        day: 1,
-        date: "Day 1",
-        leg: { from: "Alimos", to: "Hydra", nm: 37, hours: 2.2, fuelL: 320 },
-        notes: "Demo: Alimos → Hydra",
-      },
-      {
-        day: 2,
-        date: "Day 2",
-        leg: { from: "Hydra", to: "Spetses", nm: 20, hours: 1.2, fuelL: 160 },
-        notes: "Demo: Hydra → Spetses",
-      },
-    ];
-  }, [data]);
+  const days = data.dayCards;
 
   const totals = useMemo(() => {
     const nm = days.reduce((a, d) => a + (d.leg?.nm ?? 0), 0);
@@ -301,12 +264,11 @@ function ScenePlayer({ data }: { data: Payload }) {
         </div>
       </div>
 
-      {/* MAP + overlay */}
+      {/* MAP */}
       <div className="relative w-full h-[540px] rounded-2xl border overflow-hidden bg-slate-900">
-        {/* Χάρτης Ελλάδας με real διαδρομή */}
         <FinalRouteMap stops={data.stops} focusIndex={dayIndex} />
 
-        {/* Day card πάνω από χάρτη */}
+        {/* Day card */}
         {current && (
           <div className="pointer-events-auto absolute left-4 top-4 z-10 bg-white/95 rounded-2xl shadow-lg border px-5 py-4 w-[92%] max-w-md">
             <div className="text-xs uppercase text-gray-500">
@@ -337,11 +299,8 @@ function ScenePlayer({ data }: { data: Payload }) {
               <button
                 className="px-4 py-2 bg-black text-white rounded-xl text-sm"
                 onClick={() => {
-                  if (dayIndex < days.length - 1) {
-                    setDayIndex((d) => d + 1);
-                  } else {
-                    setDayIndex(0);
-                  }
+                  if (dayIndex < days.length - 1) setDayIndex((d) => d + 1);
+                  else setDayIndex(0);
                 }}
               >
                 {dayIndex < days.length - 1 ? "Next Day" : "Back to Day 1"}
@@ -360,42 +319,45 @@ export default function FinalItineraryPage() {
   const [payload, setPayload] = useState<Payload | null>(null);
 
   useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    const dataParam = sp.get("data");
+    const load = () => {
+      if (typeof window === "undefined") return;
 
-    if (dataParam) {
-      const decoded = safeAtobToJSON<FinalData>(dataParam);
-      if (decoded?.stops?.length) {
-        setPayload({
-          dayCards: buildDayCardsFromStops(decoded.stops),
-          tripTitle: decoded.title ?? "VIP Final Itinerary",
-          stops: decoded.stops,
-        });
-        return;
+      const sp = new URLSearchParams(window.location.search);
+      const dataParam = sp.get("data");
+
+      if (dataParam) {
+        const decoded = safeAtobToJSON<FinalData>(dataParam);
+        if (decoded?.stops?.length) {
+          setPayload({
+            dayCards: buildDayCardsFromStops(decoded.stops),
+            tripTitle: decoded.title ?? "VIP Final Itinerary",
+            stops: decoded.stops,
+          });
+          return;
+        }
       }
-    }
 
-    const raw = sessionStorage.getItem("navigoplan.finalItinerary");
-    if (raw) {
-      try {
-        const j = JSON.parse(raw);
-        setPayload({
-          dayCards: j.dayCards ?? [],
-          tripTitle: j.tripTitle,
-          stops: j.stops ?? [],
-        });
-        return;
-      } catch {
-        // ignore
+      const raw = sessionStorage.getItem("navigoplan.finalItinerary");
+      if (raw) {
+        try {
+          const j = JSON.parse(raw);
+          setPayload({
+            dayCards: j.dayCards ?? [],
+            tripTitle: j.tripTitle,
+            stops: j.stops ?? [],
+          });
+          return;
+        } catch {}
       }
-    }
 
-    // fallback demo
-    setPayload({
-      dayCards: [],
-      tripTitle: "VIP Final Itinerary",
-      stops: [],
-    });
+      setPayload({
+        dayCards: [],
+        tripTitle: "VIP Final Itinerary",
+        stops: [],
+      });
+    };
+
+    load();
   }, []);
 
   if (!payload) return null;
@@ -406,9 +368,9 @@ export default function FinalItineraryPage() {
         Final Itinerary – Greece Route Map
       </h1>
       <p className="text-sm text-gray-500 mb-4">
-        Real διαδρομή πάνω στον χάρτη Ελλάδας • κάρτες ανά ημέρα • συνολικό
-        summary
+        Real διαδρομή πάνω στον χάρτη Ελλάδας • κάρτες ανά ημέρα • συνολικό summary
       </p>
+
       <ScenePlayer data={payload} />
     </main>
   );
