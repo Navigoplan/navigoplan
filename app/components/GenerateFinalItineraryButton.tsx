@@ -3,6 +3,7 @@
 import type React from "react";
 
 type YachtType = "Motor" | "Sailing";
+
 type Leg = {
   from: string;
   to: string;
@@ -43,9 +44,12 @@ type Stop = {
 
 type FinalData = { title?: string; stops: Stop[] };
 
+const STORAGE_KEY = "navigoplan.finalItinerary";
+
 /* ===== Unicode-safe Base64 helpers ===== */
 function safeBtoa(obj: unknown) {
   const json = JSON.stringify(obj);
+  // JSON -> UTF-8 -> base64
   return btoa(unescape(encodeURIComponent(json)));
 }
 
@@ -122,24 +126,21 @@ export default function GenerateFinalItineraryButton({
       const title = tripTitle || "Final Itinerary";
 
       if (typeof window !== "undefined") {
-        // 1) Σώζω πλήρες plan στο sessionStorage (fallback)
+        // 1) Σώζω ΠΛΗΡΕΣ plan στο sessionStorage (για το summary)
         const payload = {
           dayCards: plan,
           yacht,
           tripTitle: title,
           createdAt: Date.now(),
         };
-        sessionStorage.setItem(
-          "navigoplan.finalItinerary",
-          JSON.stringify(payload)
-        );
+        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 
-        // 2) Compact data για το URL της νέας σελίδας
+        // 2) Compact data για το URL της νέας σελίδας (stops)
         const data: FinalData = { title, stops };
         const encoded = encodeURIComponent(safeBtoa(data));
         const url = `/itinerary/final?data=${encoded}`;
 
-        // 3) Ανοίγω ΜΟΝΟ νέα καρτέλα (η /ai δεν αλλάζει)
+        // 3) Ανοίγω ΜΟΝΟ νέα καρτέλα με το cinematic Final Journey
         const win = window.open(url, "_blank", "noopener,noreferrer");
         if (!win) {
           alert(
