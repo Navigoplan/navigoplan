@@ -652,6 +652,7 @@ function buildRouteRegion(
 
   while (remainingLegs > 1 && k < extended.length) {
     const c = extended[k++];
+
     if (!c) continue;
     if (
       c.toLowerCase() ===
@@ -1052,18 +1053,45 @@ function AIPlannerInner() {
   const searchParams = useSearchParams();
   const { ready, error, ports, findPort: findPortRaw } = usePorts();
 
-  const findPort = (input: string): PortCoord | null => {
+  // region-aware findPort
+  const findPort = (input: string, regionHint?: RegionKey): PortCoord | null => {
     if (!input) return null;
-    const p = findPortRaw(input);
-    return p
-      ? ({
-          id: (p as any).id,
-          name: p.name,
-          lat: p.lat,
-          lon: p.lon,
-          aliases: (p as any).aliases,
-        } as PortCoord)
-      : null;
+    const all = (ports as any[]) ?? [];
+    const n = normalize(input);
+
+    let candidates = all;
+
+    if (regionHint) {
+      const byRegion = all.filter((p) => {
+        const r = (p.region ?? p.area ?? "").toString();
+        return r && normalize(r) === normalize(regionHint as string);
+      });
+      if (byRegion.length) {
+        candidates = byRegion;
+      }
+    }
+
+    let match: any =
+      candidates.find((p) => {
+        const names = [p.name, ...(Array.isArray(p.aliases) ? p.aliases : [])].filter(
+          Boolean
+        );
+        return names.some((nm: string) => normalize(nm) === n);
+      }) ?? null;
+
+    if (!match) {
+      const p = findPortRaw(input);
+      if (!p) return null;
+      match = p;
+    }
+
+    return {
+      id: (match as any).id,
+      name: match.name,
+      lat: match.lat,
+      lon: match.lon,
+      aliases: (match as any).aliases,
+    } as PortCoord;
   };
 
   // All port names for dropdowns
@@ -1263,7 +1291,7 @@ function AIPlannerInner() {
 
     let namesSeq: string[] | null = null;
     if (mode === "Region") {
-      if (!findPort(start) || !findPort(end)) {
+      if (!findPort(start, region) || !findPort(end, region)) {
         alert("Επίλεξε έγκυρο Start/End από τη λίστα.");
         return;
       }
@@ -1273,7 +1301,7 @@ function AIPlannerInner() {
         days,
         region,
         effectiveVias,
-        findPort
+        (name) => findPort(name, region)
       );
     } else {
       if (!findPort(customStart)) {
@@ -1283,7 +1311,7 @@ function AIPlannerInner() {
       const seq = buildRouteCustomByDays(
         customStart,
         customDayStops,
-        findPort
+        (name) => findPort(name)
       );
       if (!seq) {
         alert(
@@ -1295,7 +1323,9 @@ function AIPlannerInner() {
     }
 
     const coords = (namesSeq ?? [])
-      .map((n) => findPort(n))
+      .map((n) =>
+        mode === "Region" ? findPort(n, region) : findPort(n)
+      )
       .filter(Boolean) as PortCoord[];
     if (coords.length < 2) {
       setPlan([]);
@@ -1422,7 +1452,10 @@ function AIPlannerInner() {
       );
       const next: Record<string, SpotWeather> = {};
       for (const name of uniqNames) {
-        const p = findPort(name);
+        const p =
+          mode === "Region"
+            ? findPort(name, region)
+            : findPort(name);
         if (!p) continue;
         try {
           const w = await fetchSpotWeather(p.lat, p.lon);
@@ -1538,9 +1571,11 @@ function AIPlannerInner() {
     for (const d of plan)
       if (d.leg?.to) namesSeq.push(d.leg.to);
     return namesSeq
-      .map((n) => findPort(n))
+      .map((n) =>
+        mode === "Region" ? findPort(n, region) : findPort(n)
+      )
       .filter(Boolean) as PortCoord[];
-  }, [plan]);
+  }, [plan, mode, region]);
 
   const markers: { name: string; lat: number; lon: number }[] =
     useMemo(() => {
