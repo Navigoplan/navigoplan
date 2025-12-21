@@ -1,3 +1,4 @@
+// app/ai/page.tsx
 "use client";
 
 import RouteMapClient from "./RouteMapClient";
@@ -86,6 +87,18 @@ function addHoursToTime(startHHmm: string, hoursFloat: number) {
   const h2 = Math.floor((totalMin / 60) % 24);
   const m2 = totalMin % 60;
   return `${pad2(h2)}:${pad2(m2)}`;
+}
+function asArray(v: any): string[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.filter(Boolean).map(String);
+  if (typeof v === "string") {
+    // split bullets / lines
+    return v
+      .split(/\n|•|·|\u2022/g)
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+  return [String(v)];
 }
 
 /* ========= Regions ========= */
@@ -279,7 +292,6 @@ function chooseLabelFromPort(p: any): string {
   }
   return name;
 }
-
 /** Build clean option labels from a list of ports */
 function makeOptionsFromPorts(portsList: any[]): string[] {
   const set = new Set<string>();
@@ -346,8 +358,7 @@ function AutoCompleteInput({
       setOpen(true);
       return;
     }
-    if (e.key === "ArrowDown")
-      setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+    if (e.key === "ArrowDown") setHighlight((h) => Math.min(h + 1, filtered.length - 1));
     else if (e.key === "ArrowUp") setHighlight((h) => Math.max(h - 1, 0));
     else if (e.key === "Enter") {
       e.preventDefault();
@@ -427,7 +438,9 @@ function AutoCompleteInput({
               type="button"
               key={`${o}-${i}`}
               onClick={() => pick(o)}
-              className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${i === highlight ? "bg-slate-100" : ""}`}
+              className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${
+                i === highlight ? "bg-slate-100" : ""
+              }`}
             >
               {o}
             </button>
@@ -440,11 +453,11 @@ function AutoCompleteInput({
 
 /* ========= Query helpers ========= */
 const safeEncode = (obj: unknown) =>
-  encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(obj))))); // eslint-disable-line
+  encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(obj)))));
 const safeDecode = <T,>(s: string | null): T | null => {
   if (!s) return null;
   try {
-    return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(s))))) as T; // eslint-disable-line
+    return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(s))))) as T;
   } catch {
     return null;
   }
@@ -454,7 +467,10 @@ function encodeArr(arr: string[]) {
 }
 function decodeArr(s: string | null): string[] {
   if (!s) return [];
-  return s.split(",").map((x) => decodeURIComponent(x)).filter(Boolean);
+  return s
+    .split(",")
+    .map((x) => decodeURIComponent(x))
+    .filter(Boolean);
 }
 
 function buildQueryFromState(state: {
@@ -654,6 +670,77 @@ function buildRouteCustomByDays(
   return seq;
 }
 
+/* ========= Wikipedia helper ========= */
+type WikiCard = {
+  title: string;
+  summary: string;
+  imageUrl?: string;
+  gallery?: string[];
+  coords?: { lat: number; lon: number };
+  sourceUrl?: string;
+  related?: { title: string; thumb?: string }[];
+};
+async function fetchWikiJSON(url: string) {
+  const r = await fetch(url, { headers: { accept: "application/json" } });
+  if (!r.ok) throw new Error("wiki fetch");
+  return r.json();
+}
+function encTitle(s: string) {
+  return encodeURIComponent(s.replace(/\s+/g, "_"));
+}
+
+export async function fetchWikiCard(placeName: string): Promise<WikiCard> {
+  const langs = ["el", "en"];
+  const base = (lang: string) => `https://${lang}.wikipedia.org/api/rest_v1`;
+  let summaryData: any = null;
+  for (const lang of langs) {
+    try {
+      summaryData = await fetchWikiJSON(`${base(lang)}/page/summary/${encTitle(placeName)}`);
+      if (summaryData?.title) break;
+    } catch {}
+  }
+
+  const card: WikiCard = {
+    title: summaryData?.title ?? placeName,
+    summary: summaryData?.extract ?? "",
+    imageUrl: summaryData?.thumbnail?.source,
+    coords: summaryData?.coordinates
+      ? { lat: summaryData.coordinates.lat, lon: summaryData.coordinates.lon }
+      : undefined,
+    sourceUrl: summaryData?.content_urls?.desktop?.page,
+    gallery: [],
+    related: [],
+  };
+
+  try {
+    const lang = summaryData?.lang ?? "en";
+    const media = await fetchWikiJSON(`${base(lang)}/page/media/${encTitle(card.title)}`);
+    const pics: string[] = [];
+    for (const item of media?.items ?? []) {
+      if (item?.type === "image") {
+        const src =
+          item?.srcset?.[item.srcset.length - 1]?.src ||
+          item?.src ||
+          item?.thumbnail?.source;
+        if (src) pics.push(src);
+      }
+    }
+    card.gallery = Array.from(new Set([...(card.imageUrl ? [card.imageUrl] : []), ...pics])).slice(0, 8);
+    if (!card.imageUrl && card.gallery?.length) card.imageUrl = card.gallery[0];
+  } catch {}
+
+  try {
+    const lang = summaryData?.lang ?? "en";
+    const rel = await fetchWikiJSON(`${base(lang)}/page/related/${encTitle(card.title)}`);
+    card.related = (rel?.pages ?? [])
+      .map((p: any) => ({ title: p?.titles?.display ?? p?.title, thumb: p?.thumbnail?.source }))
+      .filter((x: any) => !!x.title)
+      .slice(0, 8);
+  } catch {}
+
+  return card;
+}
+
 /* ========= LIVE Weather ========= */
 type SpotWeather = {
   tempC?: number;
@@ -727,10 +814,44 @@ async function fetchSpotWeather(lat: number, lon: number): Promise<SpotWeather |
 
 /* ========= Best-time & ETA ========= */
 function suggestWindow(region: RegionKey, hours: number, weatherAware: boolean) {
-  if (region === "Cyclades") return weatherAware ? "07:30–11:00" : hours <= 2.5 ? "08:00–11:00" : "08:00–12:30";
+  if (region === "Cyclades")
+    return weatherAware ? "07:30–11:00" : hours <= 2.5 ? "08:00–11:00" : "08:00–12:30";
   if (region === "Saronic" || region === "Ionian")
     return weatherAware ? "08:00–10:30" : hours <= 1.8 ? "09:00–10:45" : "09:00–12:00";
   return weatherAware ? "08:00–12:00" : hours <= 2 ? "09:00–11:00" : "09:00–12:30";
+}
+
+/* ========= Sea Guide master (NEW) ========= */
+type SeaGuideEntry = Record<string, any>;
+const SEA_GUIDE_URL = "/data/sea_guide_vol3_master.json";
+
+function pickFirst(...vals: any[]) {
+  for (const v of vals) {
+    if (v == null) continue;
+    if (typeof v === "string" && v.trim() === "") continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    return v;
+  }
+  return null;
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+      {children}
+    </span>
+  );
+}
+
+function KV({ k, v }: { k: string; v: any }) {
+  if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) return null;
+  const text = Array.isArray(v) ? v.join(" • ") : typeof v === "object" ? JSON.stringify(v) : String(v);
+  return (
+    <div className="text-sm">
+      <div className="text-xs text-slate-500">{k}</div>
+      <div className="mt-0.5 text-slate-800">{text}</div>
+    </div>
+  );
 }
 
 /* ========= Main ========= */
@@ -799,9 +920,6 @@ function AIPlannerInner() {
   const [thumbs, setThumbs] = useState<Record<string, string | undefined>>({});
   const [destWeather, setDestWeather] = useState<Record<string, SpotWeather>>({});
 
-  // ✅ NEW: Sea Guide details (keyed by stop name)
-  const [seaGuideDetails, setSeaGuideDetails] = useState<Record<string, any>>({});
-
   // NEW: routing weather toggle & leg metrics from map
   const [routeWeatherAware, setRouteWeatherAware] = useState<boolean>(false);
   const [legMeteo, setLegMeteo] = useState<
@@ -818,7 +936,9 @@ function AIPlannerInner() {
 
   const [vias, setVias] = useState<string[]>([]);
   const effectiveVias = useMemo(() => {
-    return [...vias].filter(Boolean).filter((v) => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
+    return [...vias]
+      .filter(Boolean)
+      .filter((v) => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
   }, [vias, start, end]);
 
   // Custom mode
@@ -859,6 +979,245 @@ function AIPlannerInner() {
   // Via input options
   const VIA_OPTIONS = mode === "Region" ? REGION_PORT_OPTIONS : PORT_OPTIONS;
 
+  /* ========= NEW: SeaGuide master load + index ========= */
+  const [seaGuideRaw, setSeaGuideRaw] = useState<any>(null);
+  const [seaGuideErr, setSeaGuideErr] = useState<string | null>(null);
+
+  // load once (only when plan exists to avoid useless heavy fetch)
+  useEffect(() => {
+    if (!plan?.length) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setSeaGuideErr(null);
+        if (seaGuideRaw) return; // already loaded
+        const r = await fetch(SEA_GUIDE_URL, { cache: "no-store" });
+        if (!r.ok) throw new Error("sea_guide fetch failed");
+        const j = await r.json();
+        if (!cancelled) setSeaGuideRaw(j);
+      } catch {
+        if (!cancelled) setSeaGuideErr("sea_guide_vol3_master.json not loaded");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan]);
+
+  const seaGuideIndex = useMemo(() => {
+    const idx = new Map<string, SeaGuideEntry>();
+
+    const add = (e: SeaGuideEntry) => {
+      if (!e) return;
+      const names: string[] = [];
+
+      // try common keys
+      const name = pickFirst(e.name, e.title, e.portName, e.place, e.locationName);
+      const id = pickFirst(e.id, e.key, e.slug);
+      const aliases = pickFirst(e.aliases, e.alias, e.names, e.altNames, e.searchAliases);
+
+      if (id) names.push(String(id));
+      if (name) names.push(String(name));
+      asArray(aliases).forEach((a) => names.push(a));
+
+      for (const n of names) {
+        const k = normalize(String(n));
+        if (!k) continue;
+        if (!idx.has(k)) idx.set(k, e);
+      }
+    };
+
+    const raw = seaGuideRaw;
+    if (!raw) return idx;
+
+    // could be array OR object wrapper
+    if (Array.isArray(raw)) {
+      raw.forEach(add);
+      return idx;
+    }
+    const wrapper: any = raw;
+    const list =
+      (Array.isArray(wrapper.items) && wrapper.items) ||
+      (Array.isArray(wrapper.data) && wrapper.data) ||
+      (Array.isArray(wrapper.ports) && wrapper.ports) ||
+      null;
+
+    if (list) {
+      list.forEach(add);
+      return idx;
+    }
+
+    // map form: { "Patmos": {...} }
+    if (typeof raw === "object") {
+      for (const k of Object.keys(raw)) {
+        const e = raw[k];
+        if (e && typeof e === "object") add({ ...e, key: k });
+      }
+    }
+
+    return idx;
+  }, [seaGuideRaw]);
+
+  function getSeaGuideForName(portName: string, regionHint?: RegionKey): SeaGuideEntry | null {
+    if (!portName) return null;
+
+    const tries: string[] = [];
+    tries.push(portName);
+    tries.push(sanitizeName(portName));
+
+    const p = regionHint ? findPort(portName, regionHint) : findPort(portName);
+    if (p?.name) tries.push(p.name);
+    if (p?.id) tries.push(p.id);
+    if (Array.isArray(p?.aliases)) tries.push(...(p.aliases as string[]));
+
+    for (const t of tries) {
+      const hit = seaGuideIndex.get(normalize(t));
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function SeaGuideBriefPanel() {
+    if (!plan?.length) return null;
+
+    // unique stops (to)
+    const stops = Array.from(new Set(plan.map((d) => d.leg?.to).filter(Boolean) as string[]));
+
+    return (
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-semibold text-brand-navy">Captain’s Operational Brief (Sea Guide)</div>
+            <div className="mt-1 text-xs text-slate-500">
+              VHF • Contacts • Seasonal Weather Patterns • Approach • Anchorage • Protection • Mooring • Hazards • Captain Tips • Facilities
+            </div>
+          </div>
+          <div className="text-xs text-slate-500">
+            Source: <span className="font-medium">{SEA_GUIDE_URL}</span>
+            {seaGuideErr ? <span className="ml-2 text-red-600">({seaGuideErr})</span> : null}
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {stops.map((stop) => {
+            const sg = getSeaGuideForName(stop, mode === "Region" ? region : undefined);
+            const wx = destWeather?.[stop];
+
+            // best-effort field mapping (tolerant)
+            const vhf = pickFirst(sg?.vhf, sg?.vhfChannel, sg?.vhfChannels, sg?.radio);
+            const contacts = pickFirst(sg?.contacts, sg?.contact, sg?.harbourMaster, sg?.portAuthority, sg?.tel);
+            const facilities = pickFirst(sg?.facilities, sg?.facility, sg?.services, sg?.amenities);
+            const hazards = pickFirst(sg?.hazards, sg?.danger, sg?.dangers, sg?.cautions, sg?.warning);
+            const approach = pickFirst(sg?.approach, sg?.approachNotes, sg?.entry, sg?.entrance);
+            const anchorage = pickFirst(sg?.anchorage, sg?.anchorages, sg?.anchoring, sg?.anchor);
+            const protection = pickFirst(sg?.protection, sg?.shelter, sg?.shelteredFrom);
+            const mooring = pickFirst(sg?.mooring, sg?.berthing, sg?.harbour, sg?.marina);
+            const seasonalWx = pickFirst(sg?.seasonalWeather, sg?.weather, sg?.weatherPatterns, sg?.winds, sg?.meltemi);
+            const captainTips = pickFirst(sg?.captainTips, sg?.captainNotes, sg?.tips, sg?.notes);
+
+            const facilitiesArr = asArray(facilities);
+            const hazardsArr = asArray(hazards);
+            const tipsArr = asArray(captainTips);
+
+            return (
+              <details key={stop} className="rounded-xl border border-slate-200">
+                <summary className="cursor-pointer list-none px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium text-slate-900">{stop}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {wx?.label ? <Chip>{wx.label}</Chip> : null}
+                      {wx?.tempC != null ? <Chip>{wx.tempC}°C</Chip> : null}
+                      {wx?.windKts != null ? <Chip>Wind {wx.windKts} kt</Chip> : null}
+                      {wx?.gustKts != null ? <Chip>Gust {wx.gustKts} kt</Chip> : null}
+                      {vhf ? <Chip>VHF {Array.isArray(vhf) ? String(vhf[0]) : String(vhf)}</Chip> : null}
+                    </div>
+                  </div>
+                </summary>
+
+                <div className="px-3 pb-3 pt-2">
+                  {!sg ? (
+                    <div className="text-sm text-slate-500">
+                      No Sea Guide data yet for this stop. (Check matching name/aliases in sea_guide_vol3_master.json)
+                    </div>
+                  ) : (
+                    <>
+                      {/* Facilities chips */}
+                      {facilitiesArr.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs font-semibold text-slate-700">Facilities</div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {facilitiesArr.slice(0, 18).map((f, i) => (
+                              <Chip key={`${stop}-fac-${i}`}>{f}</Chip>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quick blocks */}
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="rounded-xl border border-slate-200 p-3">
+                          <div className="text-xs font-semibold text-slate-700">Contacts / VHF</div>
+                          <KV k="VHF" v={vhf} />
+                          <KV k="Contacts" v={contacts} />
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 p-3">
+                          <div className="text-xs font-semibold text-slate-700">Seasonal Weather</div>
+                          <KV k="Patterns" v={seasonalWx} />
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 p-3">
+                          <div className="text-xs font-semibold text-slate-700">Approach</div>
+                          <KV k="Notes" v={approach} />
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 p-3">
+                          <div className="text-xs font-semibold text-slate-700">Anchorage / Mooring</div>
+                          <KV k="Anchorage" v={anchorage} />
+                          <KV k="Mooring" v={mooring} />
+                          <KV k="Protection" v={protection} />
+                        </div>
+                      </div>
+
+                      {/* Hazards */}
+                      {hazardsArr.length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-xs font-semibold text-red-700">Hazards / Cautions</div>
+                          <ul className="mt-1 list-disc pl-5 text-sm text-slate-800">
+                            {hazardsArr.slice(0, 14).map((h, i) => (
+                              <li key={`${stop}-hz-${i}`}>{h}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Captain Tips */}
+                      {tipsArr.length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-xs font-semibold text-slate-700">Captain Tips</div>
+                          <ul className="mt-1 list-disc pl-5 text-sm text-slate-800">
+                            {tipsArr.slice(0, 16).map((h, i) => (
+                              <li key={`${stop}-tip-${i}`}>{h}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </details>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 text-[11px] text-slate-500">
+          * Τα στοιχεία είναι για επιχειρησιακή καθοδήγηση (Sea Guide + live meteo) και δεν αντικαθιστούν επίσημα NtM / forecast bulletins.
+        </div>
+      </div>
+    );
+  }
+
   // Load from URL
   useEffect(() => {
     if (!searchParams || !ready) return;
@@ -884,13 +1243,19 @@ function AIPlannerInner() {
     const hasParams = Array.from(searchParams.keys()).length > 0;
     if (hasParams && loaded.autogen) {
       try {
-        document.getElementById("generate-btn")?.dispatchEvent(new Event("click", { bubbles: true }));
+        document
+          .getElementById("generate-btn")
+          ?.dispatchEvent(new Event("click", { bubbles: true }));
       } catch {}
     }
   }, [ready, searchParams]);
 
   function onTogglePref(value: string) {
-    setPrefs((prev) => (prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]));
+    setPrefs((prev) =>
+      prev.includes(value)
+        ? prev.filter((p) => p !== value)
+        : [...prev, value]
+    );
   }
   function addVia() {
     setVias((v) => [...v, ""]);
@@ -902,7 +1267,9 @@ function AIPlannerInner() {
     setVias((v) => v.filter((_, idx) => idx !== i));
   }
   function setCustomStopAt(i: number, val: string) {
-    setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x)));
+    setCustomDayStops((arr) =>
+      arr.map((x, idx) => (idx === i ? val : x))
+    );
   }
 
   /* ======= Generate ======= */
@@ -919,37 +1286,30 @@ function AIPlannerInner() {
         alert("Επίλεξε έγκυρο Start/End από τη λίστα.");
         return;
       }
-      namesSeq = buildRouteRegion(start, end, days, region, effectiveVias, (name) => findPort(name, region));
+      namesSeq = buildRouteRegion(
+        start,
+        end,
+        days,
+        region,
+        effectiveVias,
+        (name) => findPort(name, region)
+      );
     } else {
       if (!findPort(customStart)) {
         alert("Επίλεξε έγκυρο Start (custom).");
         return;
       }
-      const seq = buildRouteCustomByDays(customStart, customDayStops, (name) => findPort(name));
+      const seq = buildRouteCustomByDays(
+        customStart,
+        customDayStops,
+        (name) => findPort(name)
+      );
       if (!seq) {
         alert("Συμπλήρωσε έγκυρους προορισμούς για κάθε ημέρα.");
         return;
       }
       namesSeq = seq;
     }
-
-    // ✅ NEW: Sea Guide enrichment call
-    (async () => {
-      try {
-        const uniqStops = Array.from(new Set((namesSeq ?? []).filter(Boolean)));
-        const res = await fetch("/ai/api/ports/details", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            names: uniqStops,
-            region: mode === "Region" ? region : undefined,
-          }),
-        });
-        if (!res.ok) return;
-        const j = await res.json();
-        setSeaGuideDetails(j?.items ?? {});
-      } catch {}
-    })();
 
     const coords = (namesSeq ?? [])
       .map((n) => (mode === "Region" ? findPort(n, region) : findPort(n)))
@@ -961,7 +1321,10 @@ function AIPlannerInner() {
 
     const legs: Leg[] = [];
     for (let i = 0; i < coords.length - 1; i++) {
-      const nm = Math.max(1, Math.round(haversineNM(coords[i], coords[i + 1])));
+      const nm = Math.max(
+        1,
+        Math.round(haversineNM(coords[i], coords[i + 1]))
+      );
       const { hours, fuelL } = legStats(nm, yacht);
       const window = suggestWindow(region, hours, weatherAwareWin);
       const dep = depTime || "09:00";
@@ -984,13 +1347,27 @@ function AIPlannerInner() {
       const date = startDate ? addDaysISO(startDate, d) : "";
       const leg = legs[d];
       const notes = [
-        mode === "Region" && region === "Cyclades" ? "Meltemi possible· προτίμησε πρωινές μετακινήσεις." : "",
-        mode === "Region" && region === "Saronic" ? "Προστατευμένα νερά· ιδανικό για οικογένειες." : "",
-        mode === "Region" && region === "Ionian" ? "Ήρεμα κανάλια & πράσινες ακτές· εξαιρετικά αγκυροβόλια." : "",
-        mode === "Region" && region === "Dodecanese" ? "Ιστορικά λιμάνια· πιο μεγάλα ανοικτά σκέλη." : "",
-        mode === "Region" && region === "Sporades" ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά." : "",
-        mode === "Region" && region === "NorthAegean" ? "Αυθεντικά λιμάνια (incl. Χαλκιδική)." : "",
-        mode === "Region" && region === "Crete" ? "Μεγαλύτερα σκέλη· οργάνωσε καύσιμα & θέσεις." : "",
+        mode === "Region" && region === "Cyclades"
+          ? "Meltemi possible· προτίμησε πρωινές μετακινήσεις."
+          : "",
+        mode === "Region" && region === "Saronic"
+          ? "Προστατευμένα νερά· ιδανικό για οικογένειες."
+          : "",
+        mode === "Region" && region === "Ionian"
+          ? "Ήρεμα κανάλια & πράσινες ακτές· εξαιρετικά αγκυροβόλια."
+          : "",
+        mode === "Region" && region === "Dodecanese"
+          ? "Ιστορικά λιμάνια· πιο μεγάλα ανοικτά σκέλη."
+          : "",
+        mode === "Region" && region === "Sporades"
+          ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά."
+          : "",
+        mode === "Region" && region === "NorthAegean"
+          ? "Αυθεντικά λιμάνια (incl. Χαλκιδική)."
+          : "",
+        mode === "Region" && region === "Crete"
+          ? "Μεγαλύτερα σκέλη· οργάνωσε καύσιμα & θέσεις."
+          : "",
         prefs.includes("nightlife") ? "Άφιξη αργά για βραδινό/μπαρ." : "",
         prefs.includes("family") ? "Αμμουδιές & μικρότερα σκέλη." : "",
         prefs.includes("gastronomy") ? "Κράτηση σε παραθαλάσσια ταβέρνα." : "",
@@ -1074,7 +1451,8 @@ function AIPlannerInner() {
     if (!plan?.length) return null;
     const obj: Record<string, any> = {};
     plan.forEach((c) => {
-      if (c.userNotes && (c.userNotes.marina || c.userNotes.food || c.userNotes.beach)) obj[String(c.day)] = c.userNotes;
+      if (c.userNotes && (c.userNotes.marina || c.userNotes.food || c.userNotes.beach))
+        obj[String(c.day)] = c.userNotes;
     });
     return Object.keys(obj).length ? obj : null;
   }
@@ -1131,7 +1509,9 @@ function AIPlannerInner() {
     const first = plan[0]?.leg?.from;
     if (first) namesSeq.push(first);
     for (const d of plan) if (d.leg?.to) namesSeq.push(d.leg.to);
-    return namesSeq.map((n) => (mode === "Region" ? findPort(n, region) : findPort(n))).filter(Boolean) as PortCoord[];
+    return namesSeq
+      .map((n) => (mode === "Region" ? findPort(n, region) : findPort(n)))
+      .filter(Boolean) as PortCoord[];
   }, [plan, mode, region]);
 
   const markers: { name: string; lat: number; lon: number }[] = useMemo(() => {
@@ -1163,14 +1543,8 @@ function AIPlannerInner() {
   function handleMarkerClick(portName: string) {
     const pClean = sanitizeName(portName);
     if (mode === "Region") {
-      if (mapPickMode === "Start") {
-        setStart(pClean);
-        return;
-      }
-      if (mapPickMode === "End") {
-        setEnd(pClean);
-        return;
-      }
+      if (mapPickMode === "Start") return void setStart(pClean);
+      if (mapPickMode === "End") return void setEnd(pClean);
       const idx = vias.findIndex((v) => !v);
       if (mapPickMode === "Via") {
         if (idx >= 0) setViaAt(idx, pClean);
@@ -1178,10 +1552,7 @@ function AIPlannerInner() {
         return;
       }
     } else {
-      if (mapPickMode === "Start") {
-        setCustomStart(pClean);
-        return;
-      }
+      if (mapPickMode === "Start") return void setCustomStart(pClean);
       if (mapPickMode === "Custom") {
         const i = Math.max(1, Math.min(customDays, customPickIndex));
         setCustomStopAt(i - 1, pClean);
@@ -1204,7 +1575,9 @@ function AIPlannerInner() {
   return (
     <div className="bg-white text-slate-900">
       <section className="mx-auto max-w-7xl px-6 py-12">
-        <h1 className="text-3xl font-bold tracking-tight text-brand-navy no-print">AI Itinerary Draft</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-brand-navy no-print">
+          AI Itinerary Draft
+        </h1>
         <p className="mt-2 max-w-2xl text-slate-600 no-print">
           <b>Auto AI Planner</b> ή πλήρως Custom. Βάλε ημερομηνία & στοιχεία σκάφους, πρόσθεσε στάσεις και κάνε generate.
         </p>
@@ -1268,7 +1641,6 @@ function AIPlannerInner() {
                 placeholder="π.χ. 20"
               />
             </div>
-
             {yachtType === "Motor" && (
               <>
                 <div className="flex flex-col">
@@ -1302,7 +1674,6 @@ function AIPlannerInner() {
                 </div>
               </>
             )}
-
             <div className="flex flex-col">
               <label htmlFor="dep" className="mb-1 text-xs font-medium text-gray-600">
                 Ώρα αναχώρησης
@@ -1315,7 +1686,6 @@ function AIPlannerInner() {
                 className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
               />
             </div>
-
             <label className="mt-7 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={weatherAwareWin} onChange={(e) => setWeatherAwareWin(e.target.checked)} />
               Weather-aware window
@@ -1335,7 +1705,9 @@ function AIPlannerInner() {
                   <AutoCompleteInput value={end} onChange={setEnd} placeholder="default: ίδιο με start" options={PORT_OPTIONS} />
                 </div>
                 <div className="flex flex-col">
-                  <label htmlFor="region" className="mb-1 text-xs font-medium text-gray-600">Περιοχή</label>
+                  <label htmlFor="region" className="mb-1 text-xs font-medium text-gray-600">
+                    Περιοχή
+                  </label>
                   <select
                     id="region"
                     value={regionMode}
@@ -1353,7 +1725,9 @@ function AIPlannerInner() {
                   </select>
                 </div>
                 <div className="flex flex-col">
-                  <label htmlFor="days" className="mb-1 text-xs font-medium text-gray-600">Ημέρες ταξιδιού</label>
+                  <label htmlFor="days" className="mb-1 text-xs font-medium text-gray-600">
+                    Ημέρες ταξιδιού
+                  </label>
                   <input
                     id="days"
                     type="number"
@@ -1406,7 +1780,9 @@ function AIPlannerInner() {
                   <AutoCompleteInput value={customStart} onChange={setCustomStart} placeholder="Start" options={PORT_OPTIONS} />
                 </div>
                 <div className="flex flex-col">
-                  <label htmlFor="cdays" className="mb-1 text-xs font-medium text-gray-600">Ημέρες</label>
+                  <label htmlFor="cdays" className="mb-1 text-xs font-medium text-gray-600">
+                    Ημέρες
+                  </label>
                   <input
                     id="cdays"
                     type="number"
@@ -1428,7 +1804,12 @@ function AIPlannerInner() {
                   {customDayStops.map((stop, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <div className="w-20 text-xs text-slate-500">Day {i + 1}</div>
-                      <AutoCompleteInput value={stop} onChange={(val) => setCustomStopAt(i, val)} placeholder={`Destination for Day ${i + 1}`} options={PORT_OPTIONS} />
+                      <AutoCompleteInput
+                        value={stop}
+                        onChange={(val) => setCustomStopAt(i, val)}
+                        placeholder={`Destination for Day ${i + 1}`}
+                        options={PORT_OPTIONS}
+                      />
                     </div>
                   ))}
                 </div>
@@ -1444,7 +1825,9 @@ function AIPlannerInner() {
                 type="button"
                 onClick={() => onTogglePref(p)}
                 className={`rounded-full border px-3 py-1 text-sm ${
-                  prefs.includes(p) ? "border-brand-navy bg-brand-navy text-white" : "border-slate-300 hover:bg-slate-50"
+                  prefs.includes(p)
+                    ? "border-brand-navy bg-brand-navy text-white"
+                    : "border-slate-300 hover:bg-slate-50"
                 }`}
               >
                 {p}
@@ -1468,7 +1851,10 @@ function AIPlannerInner() {
           <div className="mt-8" id="print-root">
             <div className="mb-4 flex items-center justify-between no-print">
               <div className="text-sm text-slate-500">
-                Mode: <span className="font-medium text-brand-navy">{mode === "Region" ? "Auto AI Planner" : "Custom"}</span>
+                Mode:{" "}
+                <span className="font-medium text-brand-navy">
+                  {mode === "Region" ? "Auto AI Planner" : "Custom"}
+                </span>
                 {mode === "Region" && (
                   <>
                     {" "}
@@ -1486,10 +1872,18 @@ function AIPlannerInner() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={handleCopyLink} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+                >
                   Copy link
                 </button>
-                <button type="button" onClick={handlePrint} className="rounded-xl border border-brand-navy bg-white px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-gold hover:text-brand-navy">
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="rounded-xl border border-brand-navy bg-white px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-gold hover:text-brand-navy"
+                >
                   Export PDF
                 </button>
               </div>
@@ -1550,41 +1944,8 @@ function AIPlannerInner() {
                     onLegMeteo={(rows) => setLegMeteo(rows)}
                   />
                 </div>
-                <div className="mt-2 text-xs text-slate-500">* Map preview για σχεδιασμό. Η διακεκομμένη γραμμή είναι εκτίμηση, όχι ναυτικός διάδρομος.</div>
-              </div>
-            )}
-
-            {/* SUMMARY */}
-            {totals && (
-              <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-sm font-medium text-brand-navy">Trip summary</div>
-                <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-5">
-                  <div>
-                    <div className="text-xs print-subtle">Route</div>
-                    <div className="font-medium">{mode === "Region" ? `${start} → ${end}` : `${customStart}`}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs print-subtle">Region</div>
-                    <div className="font-medium">
-                      {mode === "Region" ? (regionMode === "Auto" ? `${autoPickRegion(start, end)} (auto)` : region) : "Custom"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs print-subtle">Distance</div>
-                    <div className="font-medium">{totals.nm} nm</div>
-                  </div>
-                  <div>
-                    <div className="text-xs print-subtle">Underway</div>
-                    <div className="font-medium">{totals.hrs}</div>
-                  </div>
-                  {yachtType === "Motor" && (
-                    <div>
-                      <div className="text-xs print-subtle">Fuel / Cost</div>
-                      <div className="font-medium">
-                        ~{totals.fuel} L • ~€{totals.cost}
-                      </div>
-                    </div>
-                  )}
+                <div className="mt-2 text-xs text-slate-500">
+                  * Map preview για σχεδιασμό. Η διακεκομμένη γραμμή είναι εκτίμηση, όχι ναυτικός διάδρομος.
                 </div>
               </div>
             )}
@@ -1595,7 +1956,9 @@ function AIPlannerInner() {
                 <button
                   onClick={() => setActiveTab("crew")}
                   className={`px-4 py-2 rounded-2xl text-sm font-medium border ${
-                    activeTab === "crew" ? "bg-black text-white border-black" : "bg-white hover:bg-neutral-100"
+                    activeTab === "crew"
+                      ? "bg-black text-white border-black"
+                      : "bg-white hover:bg-neutral-100"
                   }`}
                 >
                   For Captain & Crew
@@ -1603,7 +1966,9 @@ function AIPlannerInner() {
                 <button
                   onClick={() => setActiveTab("vip")}
                   className={`px-4 py-2 rounded-2xl text-sm font-medium border ${
-                    activeTab === "vip" ? "bg-black text-white border-black" : "bg-white hover:bg-neutral-100"
+                    activeTab === "vip"
+                      ? "bg-black text-white border-black"
+                      : "bg-white hover:bg-neutral-100"
                   }`}
                 >
                   For VIP Guests
@@ -1613,17 +1978,21 @@ function AIPlannerInner() {
 
             {/* CREW */}
             {activeTab === "crew" && plan && (
-              <CaptainCrewToolkit
-                plan={plan}
-                startDate={startDate}
-                yachtType={yachtType}
-                speed={speed}
-                lph={lph}
-                thumbs={thumbs}
-                destWeather={destWeather}
-                legMeteo={legMeteo}
-                seaGuideDetails={seaGuideDetails}
-              />
+              <>
+                {/* ✅ SeaGuide brief filled from sea_guide_vol3_master.json + live meteo */}
+                <SeaGuideBriefPanel />
+
+                <CaptainCrewToolkit
+                  plan={plan}
+                  startDate={startDate}
+                  yachtType={yachtType}
+                  speed={speed}
+                  lph={lph}
+                  thumbs={thumbs}
+                  destWeather={destWeather}
+                  legMeteo={legMeteo}
+                />
+              </>
             )}
 
             {/* VIP */}
@@ -1643,7 +2012,9 @@ function AIPlannerInner() {
                     dayCards={plan}
                     yacht={{ type: yachtType, speed, lph }}
                     tripTitle={
-                      mode === "Region" ? `${start} → ${end ?? start} • ${startDate}` : `Custom Cruise • ${startDate}`
+                      mode === "Region"
+                        ? `${start} → ${end ?? start} • ${startDate}`
+                        : `Custom Cruise • ${startDate}`
                     }
                   />
                 </div>
