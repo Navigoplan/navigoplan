@@ -75,8 +75,28 @@ function bftLabel(b: number) {
   ];
   return arr[b] ?? "";
 }
+function pickText(obj: any, lang: "el" | "en" = "el") {
+  if (!obj) return "";
+  if (typeof obj === "string") return obj;
+  if (typeof obj === "object") return obj[lang] || obj.el || obj.en || "";
+  return "";
+}
+function renderVhf(vhf: any) {
+  if (!vhf) return null;
+  if (typeof vhf === "string") return vhf;
+  if (typeof vhf === "object") {
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(vhf)) {
+      if (!v) continue;
+      parts.push(`${k.replace(/_/g, " ")}: ${String(v)}`);
+    }
+    return parts.join(" • ");
+  }
+  return null;
+}
 
 /* ========= VHF + Hazards (seed) ========= */
+/** κρατάμε τα υπάρχοντα ως fallback (δεν σπάμε τίποτα) */
 const VHF_MAP: Record<string, string> = {
   Alimos: "71",
   Aegina: "12",
@@ -185,6 +205,8 @@ export default function CaptainCrewToolkit({
   thumbs = {},
   destWeather = {},
   legMeteo = [],
+  /** ΝΕΟ: Sea Guide details (θα το γεμίσουμε στο επόμενο βήμα από API) */
+  seaGuideDetails = {},
 }: {
   plan: DayCard[];
   startDate: string;
@@ -195,6 +217,8 @@ export default function CaptainCrewToolkit({
   destWeather?: Record<string, SpotWeather>;
   /** ΝΕΟ: per-leg μετρικά καιρού (map → parent → εδώ) */
   legMeteo?: LegMeteo[];
+  /** ΝΕΟ: Sea Guide enrichment per stop name */
+  seaGuideDetails?: Record<string, any>;
 }) {
   // Συνοπτική μπάρα προειδοποιήσεων
   const summary: { day: number; port?: string; sev: Sev; text: string }[] = [];
@@ -207,6 +231,16 @@ export default function CaptainCrewToolkit({
       summary.push({ day: d.day, port: l?.to, sev: top.sev, text: top.text });
     }
   }
+
+  // Order of unique stops in plan (from + all to's)
+  const stopOrder: string[] = Array.from(
+    new Set(
+      [
+        plan?.[0]?.leg?.from,
+        ...plan.map((d) => d.leg?.to),
+      ].filter(Boolean) as string[]
+    )
+  );
 
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -227,7 +261,7 @@ export default function CaptainCrewToolkit({
         </div>
       </div>
 
-      {/* ΝΕΟ: In-transit weather per leg (μόνο εδώ) */}
+      {/* In-transit weather per leg */}
       <div className="px-6 pt-5">
         <div className="mb-2 text-sm font-semibold text-neutral-800">
           In-transit weather per leg
@@ -247,7 +281,9 @@ export default function CaptainCrewToolkit({
               {legMeteo.length ? (
                 legMeteo.map((r, i) => (
                   <tr key={i} className="border-b">
-                    <td className="px-3 py-2">{r.from} → {r.to}</td>
+                    <td className="px-3 py-2">
+                      {r.from} → {r.to}
+                    </td>
                     <td className="px-3 py-2">{Number.isFinite(r.avgWind) ? r.avgWind : "—"}</td>
                     <td className="px-3 py-2">{Number.isFinite(r.avgWave) ? r.avgWave : "—"}</td>
                     <td className="px-3 py-2">{Number.isFinite(r.maxWind) ? r.maxWind : "—"}</td>
@@ -269,7 +305,9 @@ export default function CaptainCrewToolkit({
       {/* SUMMARY */}
       {summary.length > 0 && (
         <div className="px-6 pt-4">
-          <div className="mb-2 text-sm font-semibold text-neutral-800">Βασικές προειδοποιήσεις (auto)</div>
+          <div className="mb-2 text-sm font-semibold text-neutral-800">
+            Βασικές προειδοποιήσεις (auto)
+          </div>
           <div className="flex flex-wrap gap-2">
             {summary.map((w) => (
               <div
@@ -285,7 +323,7 @@ export default function CaptainCrewToolkit({
         </div>
       )}
 
-      {/* TABLE (ημερήσια εικόνα + live WX + hazards) */}
+      {/* TABLE (daily view + LIVE WX + hazards fallback) */}
       <div className="p-6 overflow-x-auto">
         <table className="min-w-full border-collapse text-sm">
           <thead>
@@ -297,8 +335,8 @@ export default function CaptainCrewToolkit({
               <th className="px-3 py-2 text-left">Hours</th>
               <th className="px-3 py-2 text-left">Depart</th>
               <th className="px-3 py-2 text-left">Arrive</th>
-              <th className="px-3 py-2 text-left">Weather</th>
-              <th className="px-3 py-2 text-left">Wind / Bft</th>
+              <th className="px-3 py-2 text-left">Live Weather 🟢</th>
+              <th className="px-3 py-2 text-left">Live Wind & Waves 🟢</th>
               <th className="px-3 py-2 text-left">VHF</th>
               <th className="px-3 py-2 text-left">Hazards</th>
             </tr>
@@ -322,6 +360,7 @@ export default function CaptainCrewToolkit({
                   <td className="px-3 py-2">{l ? formatHoursHM(l.hours) : "—"}</td>
                   <td className="px-3 py-2">{l?.eta?.dep ?? "—"}</td>
                   <td className="px-3 py-2">{l?.eta?.arr ?? "—"}</td>
+
                   <td className="px-3 py-2 text-xs">
                     {wx ? (
                       <>
@@ -333,17 +372,23 @@ export default function CaptainCrewToolkit({
                       "—"
                     )}
                   </td>
+
                   <td className="px-3 py-2 text-xs">
                     {wx?.windKts != null ? (
                       <>
                         {Math.round(wx.windKts)} kt • Bft {bft} ({bftLabel(bft)})
                         {wx.gustKts != null && <> • ριπές {Math.round(wx.gustKts)} kt</>}
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          Waves: (coming soon)
+                        </div>
                       </>
                     ) : (
                       "—"
                     )}
                   </td>
+
                   <td className="px-3 py-2">{l?.to ? VHF_MAP[l.to] ?? "—" : "—"}</td>
+
                   <td className="px-3 py-2">
                     {localHaz.length > 0 || warns.length > 0 ? (
                       <div className="flex flex-col gap-1">
@@ -380,6 +425,199 @@ export default function CaptainCrewToolkit({
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* NEW: Captain’s Operational Brief (Sea Guide) */}
+      <div className="px-6 pb-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="text-sm font-semibold text-neutral-800">
+            Captain’s Operational Brief (Sea Guide)
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            VHF • Contacts • Seasonal Weather Patterns 🔵 • Approach • Anchorage • Protection • Mooring • Hazards • Captain Tips • Facilities
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {stopOrder.map((stop) => {
+              const entry = (seaGuideDetails as any)?.[stop] ?? null;
+
+              return (
+                <details key={stop} className="rounded-xl border border-slate-200">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-900">
+                    {stop}
+                    {entry?.category ? (
+                      <span className="ml-2 text-xs text-slate-500">
+                        {String(entry.category)}
+                      </span>
+                    ) : null}
+                  </summary>
+
+                  <div className="border-t border-slate-200 px-3 py-3 text-sm text-slate-800">
+                    {!entry ? (
+                      <div className="text-xs text-slate-500">
+                        No Sea Guide data yet for this stop. (Next step: connect API lookup)
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {/* LEFT */}
+                        <div className="space-y-3">
+                          {renderVhf(entry.vhf) && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">
+                                VHF & Communications
+                              </div>
+                              <div className="text-sm">{renderVhf(entry.vhf)}</div>
+                            </div>
+                          )}
+
+                          {entry.contacts && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">Contacts</div>
+                              <div className="text-sm space-y-1">
+                                {Object.entries(entry.contacts).map(([k, v]) => (
+                                  <div key={k}>
+                                    <span className="text-xs text-slate-500">
+                                      {String(k).replace(/_/g, " ")}:
+                                    </span>{" "}
+                                    <span>{String(v)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {(entry.weather?.summer || entry.weather?.winter || entry.weather?.notes) && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">
+                                Seasonal Weather Patterns 🔵
+                              </div>
+                              {entry.weather?.summer && (
+                                <div className="mt-1">
+                                  <div className="text-[11px] font-semibold text-slate-500">
+                                    Summer
+                                  </div>
+                                  <div className="text-sm">{pickText(entry.weather.summer, "el")}</div>
+                                </div>
+                              )}
+                              {entry.weather?.winter && (
+                                <div className="mt-2">
+                                  <div className="text-[11px] font-semibold text-slate-500">
+                                    Winter
+                                  </div>
+                                  <div className="text-sm">{pickText(entry.weather.winter, "el")}</div>
+                                </div>
+                              )}
+                              {entry.weather?.notes && (
+                                <div className="mt-2 text-xs text-slate-600">
+                                  <b>Notes:</b> {pickText(entry.weather.notes, "el")}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {entry.approach && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">Approach & Entry</div>
+                              <div className="text-sm">{pickText(entry.approach, "el")}</div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* RIGHT */}
+                        <div className="space-y-3">
+                          {entry.anchorage && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">Anchorage Details</div>
+
+                              {(entry.anchorage.depth_m?.min != null || entry.anchorage.depth_m?.max != null) && (
+                                <div className="text-sm">
+                                  <span className="text-xs text-slate-500">Depth:</span>{" "}
+                                  {entry.anchorage.depth_m?.min ?? "—"}–{entry.anchorage.depth_m?.max ?? "—"} m
+                                </div>
+                              )}
+
+                              {Array.isArray(entry.anchorage.bottom) && entry.anchorage.bottom.length > 0 && (
+                                <div className="text-sm">
+                                  <span className="text-xs text-slate-500">Bottom:</span>{" "}
+                                  {entry.anchorage.bottom.join(", ")}
+                                </div>
+                              )}
+
+                              {entry.anchorage.holding && (
+                                <div className="mt-1 text-sm">
+                                  <span className="text-xs text-slate-500">Holding:</span>{" "}
+                                  {pickText(entry.anchorage.holding, "el")}
+                                </div>
+                              )}
+
+                              {entry.anchorage.protection && (
+                                <div className="mt-2 text-sm">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    Protection from Wind
+                                  </div>
+                                  <div className="text-sm">
+                                    <span className="text-xs text-slate-500">Wind good:</span>{" "}
+                                    {(entry.anchorage.protection.wind_good || []).join(", ") || "—"}
+                                  </div>
+                                  <div className="text-sm">
+                                    <span className="text-xs text-slate-500">Wind poor:</span>{" "}
+                                    {(entry.anchorage.protection.wind_poor || []).join(", ") || "—"}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {entry.mooring && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">Mooring & Berthing</div>
+                              <div className="text-sm">{pickText(entry.mooring, "el")}</div>
+                            </div>
+                          )}
+
+                          {entry.hazards && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">Hazards & Local Risks</div>
+                              <ul className="mt-1 list-disc pl-5 text-sm">
+                                {(entry.hazards.el || entry.hazards.en || []).map((h: string, idx: number) => (
+                                  <li key={idx}>{h}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {entry.captain_tips && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">Captain’s Tips</div>
+                              <ul className="mt-1 list-disc pl-5 text-sm">
+                                {(entry.captain_tips.el || entry.captain_tips.en || []).map((t: string, idx: number) => (
+                                  <li key={idx}>{t}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {entry.facilities && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">Facilities & Services</div>
+                              <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                                {Object.entries(entry.facilities).map(([k, v]) => (
+                                  <span key={k} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+                                    {String(k).replace(/_/g, " ")}: {String(v)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* FOOTER */}
