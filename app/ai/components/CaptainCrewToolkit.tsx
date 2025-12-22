@@ -1,5 +1,6 @@
+// app/ai/components/CaptainCrewToolkit.tsx
 "use client";
-import React from "react";
+import React, { useMemo } from "react";
 
 /* ========= Local type definitions ========= */
 type YachtType = "Motor" | "Sailing";
@@ -32,6 +33,17 @@ export type LegMeteo = {
   maxWind: number;
   maxWave: number;
 };
+
+/* ========= Optional globals from page.tsx ========= */
+type SeaGuideEntry = Record<string, any>;
+
+declare global {
+  interface Window {
+    __NAVIGOPLAN_SEAGUIDE__?: { loadedAt: string; count: number };
+    __NAVIGOPLAN_SEAGUIDE_LOOKUP__?: (stopName: string, port?: any) => SeaGuideEntry | null;
+    __NAVIGOPLAN_SEAGUIDE_EXTRACT__?: (entry: SeaGuideEntry, lang?: "el" | "en") => any;
+  }
+}
 
 /* ========= Utility helpers ========= */
 function formatHoursHM(hours: number) {
@@ -81,6 +93,17 @@ function pickText(obj: any, lang: "el" | "en" = "el") {
   if (typeof obj === "object") return obj[lang] || obj.el || obj.en || "";
   return "";
 }
+function pickArr(obj: any, lang: "el" | "en" = "el"): string[] {
+  if (!obj) return [];
+  if (Array.isArray(obj)) return obj.filter(Boolean).map(String);
+  if (typeof obj === "string") return [obj];
+  if (typeof obj === "object") {
+    const a = obj?.[lang] ?? obj?.el ?? obj?.en;
+    if (Array.isArray(a)) return a.filter(Boolean).map(String);
+    if (typeof a === "string") return [a];
+  }
+  return [];
+}
 function renderVhf(vhf: any) {
   if (!vhf) return null;
   if (typeof vhf === "string") return vhf;
@@ -95,8 +118,36 @@ function renderVhf(vhf: any) {
   return null;
 }
 
-/* ========= VHF + Hazards (seed) ========= */
-/** κρατάμε τα υπάρχοντα ως fallback (δεν σπάμε τίποτα) */
+function cleanStopName(stop: string) {
+  // Normalize common UI names to improve matching (toolkit side)
+  // e.g. "Island of Patmos" -> "Patmos", "Symi Harbour (Gialos)" -> "Symi"
+  let s = (stop || "").trim();
+
+  s = s.replace(/^Island of\s+/i, "").trim();
+  s = s.replace(/\bHarbour\b/gi, "").trim();
+  s = s.replace(/\bPort\b/gi, "").trim();
+  s = s.replace(/\s*\([^)]+\)\s*/g, " ").trim();
+  s = s.replace(/\s+/g, " ").trim();
+
+  return s;
+}
+
+function stopVariants(stop: string) {
+  const base = (stop || "").trim();
+  const cleaned = cleanStopName(base);
+
+  const vars = new Set<string>();
+  if (base) vars.add(base);
+  if (cleaned && cleaned !== base) vars.add(cleaned);
+
+  // If it’s single word, try "Island of X" (sometimes ports dataset uses that)
+  if (cleaned && cleaned.split(/\s+/).length <= 2) {
+    vars.add(`Island of ${cleaned}`);
+  }
+  return Array.from(vars);
+}
+
+/* ========= VHF + Hazards (seed fallback) ========= */
 const VHF_MAP: Record<string, string> = {
   Alimos: "71",
   Aegina: "12",
@@ -110,10 +161,7 @@ const VHF_MAP: Record<string, string> = {
   Milos: "—",
 };
 
-const HAZARDS_MAP: Record<
-  string,
-  { label: string; sev: number; note?: string }[]
-> = {
+const HAZARDS_MAP: Record<string, { label: string; sev: number; note?: string }[]> = {
   Hydra: [
     { label: "Στενός λιμένας", sev: 2, note: "Περιορισμένοι ελιγμοί." },
     { label: "Surge από διερχόμενα", sev: 2, note: "Ferries/traffic." },
@@ -150,7 +198,6 @@ function computeWarnings(l?: Leg, wx?: SpotWeather): Warn[] {
   const out: Warn[] = [];
   if (!l) return out;
 
-  // Άνεμος / Beaufort (ελληνικά)
   const bft = ktToBeaufort(wx?.windKts);
   if (bft >= 7) {
     out.push({
@@ -164,7 +211,6 @@ function computeWarnings(l?: Leg, wx?: SpotWeather): Warn[] {
     });
   }
 
-  // Βροχή / νέφωση
   if ((wx?.precipMM ?? 0) >= 0.5 || (wx?.label ?? "").toLowerCase().includes("rain")) {
     out.push({ sev: "alert", text: "Βροχή — ολισθηρά καταστρώματα & μειωμένη ορατότητα." });
   }
@@ -175,7 +221,6 @@ function computeWarnings(l?: Leg, wx?: SpotWeather): Warn[] {
     });
   }
 
-  // Μεγάλο σκέλος
   if (l.hours >= 3.5) {
     out.push({
       sev: "warn",
@@ -183,7 +228,6 @@ function computeWarnings(l?: Leg, wx?: SpotWeather): Warn[] {
     });
   }
 
-  // Άφιξη κοντά στη δύση
   const [h, m] = l.eta?.arr?.split(":").map(Number) ?? [];
   if (h > 18 || (h === 18 && (m ?? 0) >= 30)) {
     out.push({
@@ -205,7 +249,7 @@ export default function CaptainCrewToolkit({
   thumbs = {},
   destWeather = {},
   legMeteo = [],
-  /** ΝΕΟ: Sea Guide details (θα το γεμίσουμε στο επόμενο βήμα από API) */
+  /** Sea Guide enrichment per stop name (optional override) */
   seaGuideDetails = {},
 }: {
   plan: DayCard[];
@@ -215,12 +259,10 @@ export default function CaptainCrewToolkit({
   lph: number;
   thumbs?: Record<string, string | undefined>;
   destWeather?: Record<string, SpotWeather>;
-  /** ΝΕΟ: per-leg μετρικά καιρού (map → parent → εδώ) */
   legMeteo?: LegMeteo[];
-  /** ΝΕΟ: Sea Guide enrichment per stop name */
   seaGuideDetails?: Record<string, any>;
 }) {
-  // Συνοπτική μπάρα προειδοποιήσεων
+  // Summary warnings
   const summary: { day: number; port?: string; sev: Sev; text: string }[] = [];
   for (const d of plan) {
     const l = d.leg;
@@ -234,13 +276,42 @@ export default function CaptainCrewToolkit({
 
   // Order of unique stops in plan (from + all to's)
   const stopOrder: string[] = Array.from(
-    new Set(
-      [
-        plan?.[0]?.leg?.from,
-        ...plan.map((d) => d.leg?.to),
-      ].filter(Boolean) as string[]
-    )
+    new Set([plan?.[0]?.leg?.from, ...plan.map((d) => d.leg?.to)].filter(Boolean) as string[])
   );
+
+  // Build SeaGuide map for stops:
+  // - prefer prop seaGuideDetails[stop]
+  // - else use window.__NAVIGOPLAN_SEAGUIDE_LOOKUP__ with variants
+  const seaGuideByStop = useMemo(() => {
+    const out: Record<string, SeaGuideEntry | null> = {};
+    for (const stop of stopOrder) {
+      const direct = (seaGuideDetails as any)?.[stop];
+      if (direct) {
+        out[stop] = direct;
+        continue;
+      }
+
+      const lookup = window.__NAVIGOPLAN_SEAGUIDE_LOOKUP__;
+      if (!lookup) {
+        out[stop] = null;
+        continue;
+      }
+
+      const vars = stopVariants(stop);
+      let found: SeaGuideEntry | null = null;
+      for (const v of vars) {
+        const hit = lookup(v, null);
+        if (hit) {
+          found = hit;
+          break;
+        }
+      }
+      out[stop] = found;
+    }
+    return out;
+  }, [stopOrder, seaGuideDetails]);
+
+  const seaGuideLoaded = window.__NAVIGOPLAN_SEAGUIDE__?.count ?? 0;
 
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -249,9 +320,7 @@ export default function CaptainCrewToolkit({
         <div className="absolute inset-0 opacity-20 [background:radial-gradient(80%_60%_at_70%_30%,white,transparent)]" />
         <div className="relative h-full flex items-center px-6">
           <div>
-            <div className="text-xs uppercase text-neutral-300">
-              Navigoplan • Captain & Crew Toolkit
-            </div>
+            <div className="text-xs uppercase text-neutral-300">Navigoplan • Captain & Crew Toolkit</div>
             <h2 className="text-2xl font-semibold text-white">Operational Plan</h2>
             <div className="text-neutral-300 text-sm">
               Από {formatDate(startDate)} • {plan.length} days • {speed} kn{" "}
@@ -263,9 +332,7 @@ export default function CaptainCrewToolkit({
 
       {/* In-transit weather per leg */}
       <div className="px-6 pt-5">
-        <div className="mb-2 text-sm font-semibold text-neutral-800">
-          In-transit weather per leg
-        </div>
+        <div className="mb-2 text-sm font-semibold text-neutral-800">In-transit weather per leg</div>
         <div className="overflow-x-auto border rounded-xl">
           <table className="w-full text-sm">
             <thead>
@@ -305,9 +372,7 @@ export default function CaptainCrewToolkit({
       {/* SUMMARY */}
       {summary.length > 0 && (
         <div className="px-6 pt-4">
-          <div className="mb-2 text-sm font-semibold text-neutral-800">
-            Βασικές προειδοποιήσεις (auto)
-          </div>
+          <div className="mb-2 text-sm font-semibold text-neutral-800">Βασικές προειδοποιήσεις (auto)</div>
           <div className="flex flex-wrap gap-2">
             {summary.map((w) => (
               <div
@@ -378,9 +443,7 @@ export default function CaptainCrewToolkit({
                       <>
                         {Math.round(wx.windKts)} kt • Bft {bft} ({bftLabel(bft)})
                         {wx.gustKts != null && <> • ριπές {Math.round(wx.gustKts)} kt</>}
-                        <div className="mt-1 text-[11px] text-slate-500">
-                          Waves: (coming soon)
-                        </div>
+                        <div className="mt-1 text-[11px] text-slate-500">Waves: (coming soon)</div>
                       </>
                     ) : (
                       "—"
@@ -396,9 +459,7 @@ export default function CaptainCrewToolkit({
                           <span
                             key={`h-${i}`}
                             className={`inline-block border rounded-full px-2 py-0.5 text-xs ${
-                              h.sev >= 2
-                                ? "bg-amber-100 border-amber-200"
-                                : "bg-neutral-100 border-neutral-200"
+                              h.sev >= 2 ? "bg-amber-100 border-amber-200" : "bg-neutral-100 border-neutral-200"
                             }`}
                             title={h.note}
                           >
@@ -406,12 +467,7 @@ export default function CaptainCrewToolkit({
                           </span>
                         ))}
                         {warns.map((w, i) => (
-                          <span
-                            key={`w-${i}`}
-                            className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(
-                              w.sev
-                            )}`}
-                          >
+                          <span key={`w-${i}`} className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(w.sev)}`}>
                             {w.text}
                           </span>
                         ))}
@@ -427,182 +483,242 @@ export default function CaptainCrewToolkit({
         </table>
       </div>
 
-      {/* NEW: Captain’s Operational Brief (Sea Guide) */}
+      {/* Captain’s Operational Brief (Sea Guide) — SINGLE SOURCE OF TRUTH */}
       <div className="px-6 pb-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="text-sm font-semibold text-neutral-800">
-            Captain’s Operational Brief (Sea Guide)
-          </div>
-          <div className="mt-1 text-xs text-slate-500">
-            VHF • Contacts • Seasonal Weather Patterns 🔵 • Approach • Anchorage • Protection • Mooring • Hazards • Captain Tips • Facilities
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-neutral-800">Captain’s Operational Brief (Sea Guide)</div>
+              <div className="mt-1 text-xs text-slate-500">
+                VHF • Contacts • Seasonal Weather Patterns 🔵 • Approach • Anchorage • Protection • Mooring • Hazards • Captain Tips • VIP • Facilities
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              SeaGuide loaded: <b>{seaGuideLoaded}</b>
+            </div>
           </div>
 
           <div className="mt-3 space-y-2">
             {stopOrder.map((stop) => {
-              const entry = (seaGuideDetails as any)?.[stop] ?? null;
+              const entry = seaGuideByStop[stop] ?? null;
+
+              // Extract in a stable way (prefer the extractor if present)
+              const extracted = entry && window.__NAVIGOPLAN_SEAGUIDE_EXTRACT__
+                ? window.__NAVIGOPLAN_SEAGUIDE_EXTRACT__(entry, "el")
+                : null;
+
+              // Use extracted where possible (because it aligns with your schema)
+              const vhf =
+                extracted?.vhf_port_authority ||
+                renderVhf(entry?.vhf) ||
+                null;
+
+              const contacts =
+                extracted?.contacts_port_authority ||
+                entry?.contacts ||
+                null;
+
+              const weatherSummer =
+                extracted?.weather_summer || pickText(entry?.weather?.summer, "el");
+              const weatherWinter =
+                extracted?.weather_winter || pickText(entry?.weather?.winter, "el");
+
+              const approach =
+                extracted?.approach || pickText(entry?.approach, "el");
+
+              const anchMin =
+                extracted?.anch_depth_min ?? entry?.anchorage?.depth_m?.min;
+              const anchMax =
+                extracted?.anch_depth_max ?? entry?.anchorage?.depth_m?.max;
+              const anchBottom =
+                extracted?.anch_bottom ?? entry?.anchorage?.bottom ?? [];
+              const anchHolding =
+                extracted?.anch_holding || pickText(entry?.anchorage?.holding, "el");
+              const windGood =
+                extracted?.anch_protection_good ?? entry?.anchorage?.protection?.wind_good ?? [];
+              const windPoor =
+                extracted?.anch_protection_poor ?? entry?.anchorage?.protection?.wind_poor ?? [];
+
+              const mooring =
+                extracted?.mooring || pickText(entry?.mooring, "el");
+
+              const hazards =
+                (extracted?.hazards as string[])?.length
+                  ? extracted.hazards
+                  : pickArr(entry?.hazards, "el");
+
+              const tips =
+                (extracted?.captain_tips as string[])?.length
+                  ? extracted.captain_tips
+                  : pickArr(entry?.captain_tips, "el");
+
+              const vip =
+                extracted?.vip_info || pickText(entry?.vip_info, "el");
 
               return (
                 <details key={stop} className="rounded-xl border border-slate-200">
                   <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-900">
                     {stop}
                     {entry?.category ? (
-                      <span className="ml-2 text-xs text-slate-500">
-                        {String(entry.category)}
-                      </span>
+                      <span className="ml-2 text-xs text-slate-500">{String(entry.category)}</span>
+                    ) : null}
+                    {entry?.region ? (
+                      <span className="ml-2 text-xs text-slate-400">• {String(entry.region)}</span>
                     ) : null}
                   </summary>
 
                   <div className="border-t border-slate-200 px-3 py-3 text-sm text-slate-800">
                     {!entry ? (
                       <div className="text-xs text-slate-500">
-                        No Sea Guide data yet for this stop. (Next step: connect API lookup)
+                        No Sea Guide match for this stop yet.
+                        <div className="mt-1 text-[11px] text-slate-400">
+                          Tip: ensure the stop name/aliases exist in SeaGuide. This toolkit tries variants like “Island of X” and removes “Harbour (…)”.
+                        </div>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         {/* LEFT */}
                         <div className="space-y-3">
-                          {renderVhf(entry.vhf) && (
+                          {vhf && (
                             <div>
-                              <div className="text-xs font-semibold text-slate-600">
-                                VHF & Communications
-                              </div>
-                              <div className="text-sm">{renderVhf(entry.vhf)}</div>
+                              <div className="text-xs font-semibold text-slate-600">VHF & Communications</div>
+                              <div className="text-sm">{vhf}</div>
                             </div>
                           )}
 
-                          {entry.contacts && (
+                          {contacts && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Contacts</div>
-                              <div className="text-sm space-y-1">
-                                {Object.entries(entry.contacts).map(([k, v]) => (
-                                  <div key={k}>
-                                    <span className="text-xs text-slate-500">
-                                      {String(k).replace(/_/g, " ")}:
-                                    </span>{" "}
-                                    <span>{String(v)}</span>
-                                  </div>
-                                ))}
-                              </div>
+                              {typeof contacts === "string" ? (
+                                <div className="text-sm">{contacts}</div>
+                              ) : (
+                                <div className="text-sm space-y-1">
+                                  {Object.entries(contacts).map(([k, v]) => (
+                                    <div key={k}>
+                                      <span className="text-xs text-slate-500">{String(k).replace(/_/g, " ")}:</span>{" "}
+                                      <span>{String(v)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
 
-                          {(entry.weather?.summer || entry.weather?.winter || entry.weather?.notes) && (
+                          {(weatherSummer || weatherWinter) && (
                             <div>
-                              <div className="text-xs font-semibold text-slate-600">
-                                Seasonal Weather Patterns 🔵
-                              </div>
-                              {entry.weather?.summer && (
+                              <div className="text-xs font-semibold text-slate-600">Seasonal Weather Patterns 🔵</div>
+                              {weatherSummer && (
                                 <div className="mt-1">
-                                  <div className="text-[11px] font-semibold text-slate-500">
-                                    Summer
-                                  </div>
-                                  <div className="text-sm">{pickText(entry.weather.summer, "el")}</div>
+                                  <div className="text-[11px] font-semibold text-slate-500">Summer</div>
+                                  <div className="text-sm">{weatherSummer}</div>
                                 </div>
                               )}
-                              {entry.weather?.winter && (
+                              {weatherWinter && (
                                 <div className="mt-2">
-                                  <div className="text-[11px] font-semibold text-slate-500">
-                                    Winter
-                                  </div>
-                                  <div className="text-sm">{pickText(entry.weather.winter, "el")}</div>
-                                </div>
-                              )}
-                              {entry.weather?.notes && (
-                                <div className="mt-2 text-xs text-slate-600">
-                                  <b>Notes:</b> {pickText(entry.weather.notes, "el")}
+                                  <div className="text-[11px] font-semibold text-slate-500">Winter</div>
+                                  <div className="text-sm">{weatherWinter}</div>
                                 </div>
                               )}
                             </div>
                           )}
 
-                          {entry.approach && (
+                          {approach && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Approach & Entry</div>
-                              <div className="text-sm">{pickText(entry.approach, "el")}</div>
+                              <div className="text-sm">{approach}</div>
+                            </div>
+                          )}
+
+                          {vip && (
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600">VIP Info</div>
+                              <div className="text-sm">{vip}</div>
                             </div>
                           )}
                         </div>
 
                         {/* RIGHT */}
                         <div className="space-y-3">
-                          {entry.anchorage && (
+                          {(anchMin != null || anchMax != null || anchHolding || (anchBottom?.length ?? 0) > 0) && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Anchorage Details</div>
 
-                              {(entry.anchorage.depth_m?.min != null || entry.anchorage.depth_m?.max != null) && (
+                              {(anchMin != null || anchMax != null) && (
                                 <div className="text-sm">
                                   <span className="text-xs text-slate-500">Depth:</span>{" "}
-                                  {entry.anchorage.depth_m?.min ?? "—"}–{entry.anchorage.depth_m?.max ?? "—"} m
+                                  {anchMin ?? "—"}–{anchMax ?? "—"} m
                                 </div>
                               )}
 
-                              {Array.isArray(entry.anchorage.bottom) && entry.anchorage.bottom.length > 0 && (
+                              {Array.isArray(anchBottom) && anchBottom.length > 0 && (
                                 <div className="text-sm">
                                   <span className="text-xs text-slate-500">Bottom:</span>{" "}
-                                  {entry.anchorage.bottom.join(", ")}
+                                  {anchBottom.join(", ")}
                                 </div>
                               )}
 
-                              {entry.anchorage.holding && (
+                              {anchHolding && (
                                 <div className="mt-1 text-sm">
                                   <span className="text-xs text-slate-500">Holding:</span>{" "}
-                                  {pickText(entry.anchorage.holding, "el")}
+                                  {anchHolding}
                                 </div>
                               )}
 
-                              {entry.anchorage.protection && (
+                              {(Array.isArray(windGood) || Array.isArray(windPoor)) && (
                                 <div className="mt-2 text-sm">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    Protection from Wind
-                                  </div>
+                                  <div className="text-xs font-semibold text-slate-500">Protection from Wind</div>
                                   <div className="text-sm">
                                     <span className="text-xs text-slate-500">Wind good:</span>{" "}
-                                    {(entry.anchorage.protection.wind_good || []).join(", ") || "—"}
+                                    {(Array.isArray(windGood) ? windGood : []).join(", ") || "—"}
                                   </div>
                                   <div className="text-sm">
                                     <span className="text-xs text-slate-500">Wind poor:</span>{" "}
-                                    {(entry.anchorage.protection.wind_poor || []).join(", ") || "—"}
+                                    {(Array.isArray(windPoor) ? windPoor : []).join(", ") || "—"}
                                   </div>
                                 </div>
                               )}
                             </div>
                           )}
 
-                          {entry.mooring && (
+                          {mooring && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Mooring & Berthing</div>
-                              <div className="text-sm">{pickText(entry.mooring, "el")}</div>
+                              <div className="text-sm">{mooring}</div>
                             </div>
                           )}
 
-                          {entry.hazards && (
+                          {hazards.length > 0 && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Hazards & Local Risks</div>
                               <ul className="mt-1 list-disc pl-5 text-sm">
-                                {(entry.hazards.el || entry.hazards.en || []).map((h: string, idx: number) => (
+                                {hazards.map((h: string, idx: number) => (
                                   <li key={idx}>{h}</li>
                                 ))}
                               </ul>
                             </div>
                           )}
 
-                          {entry.captain_tips && (
+                          {tips.length > 0 && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Captain’s Tips</div>
                               <ul className="mt-1 list-disc pl-5 text-sm">
-                                {(entry.captain_tips.el || entry.captain_tips.en || []).map((t: string, idx: number) => (
+                                {tips.map((t: string, idx: number) => (
                                   <li key={idx}>{t}</li>
                                 ))}
                               </ul>
                             </div>
                           )}
 
-                          {entry.facilities && (
+                          {/* Optional facilities block if exists */}
+                          {entry?.facilities && typeof entry.facilities === "object" && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Facilities & Services</div>
                               <div className="mt-1 flex flex-wrap gap-2 text-xs">
                                 {Object.entries(entry.facilities).map(([k, v]) => (
-                                  <span key={k} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+                                  <span
+                                    key={k}
+                                    className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1"
+                                  >
                                     {String(k).replace(/_/g, " ")}: {String(v)}
                                   </span>
                                 ))}
@@ -622,8 +738,7 @@ export default function CaptainCrewToolkit({
 
       {/* FOOTER */}
       <div className="border-t bg-neutral-50 px-6 py-4 text-sm text-neutral-600">
-        ⚓ Οι πληροφορίες προορίζονται για επιχειρησιακή καθοδήγηση και δεν αντικαθιστούν
-        επίσημες Notice to Mariners ή forecast bulletins.
+        ⚓ Οι πληροφορίες προορίζονται για επιχειρησιακή καθοδήγηση και δεν αντικαθιστούν επίσημες Notice to Mariners ή forecast bulletins.
       </div>
     </div>
   );
