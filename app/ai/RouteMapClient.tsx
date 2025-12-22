@@ -1,3 +1,4 @@
+// app/ai/RouteMapClient.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -5,14 +6,14 @@ import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 
 /* ---- react-leaflet dynamic (no SSR) ---- */
-const MapContainer = dynamic(() => import("react-leaflet").then((m) => m.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import("react-leaflet").then((m) => m.TileLayer), { ssr: false });
-const Polyline = dynamic(() => import("react-leaflet").then((m) => m.Polyline), { ssr: false });
-const CircleMarker = dynamic(() => import("react-leaflet").then((m) => m.CircleMarker), { ssr: false });
-const Tooltip = dynamic(() => import("react-leaflet").then((m) => m.Tooltip), { ssr: false });
-const GeoJSON = dynamic(() => import("react-leaflet").then((m) => m.GeoJSON), { ssr: false });
-const Pane = dynamic(() => import("react-leaflet").then((m) => m.Pane), { ssr: false });
-const Rectangle = dynamic(() => import("react-leaflet").then((m) => m.Rectangle), { ssr: false });
+const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
+const TileLayer    = dynamic(() => import("react-leaflet").then(m => m.TileLayer),    { ssr: false });
+const Polyline     = dynamic(() => import("react-leaflet").then(m => m.Polyline),     { ssr: false });
+const CircleMarker = dynamic(() => import("react-leaflet").then(m => m.CircleMarker), { ssr: false });
+const Tooltip      = dynamic(() => import("react-leaflet").then(m => m.Tooltip),      { ssr: false });
+const GeoJSON      = dynamic(() => import("react-leaflet").then(m => m.GeoJSON),      { ssr: false });
+const Pane         = dynamic(() => import("react-leaflet").then(m => m.Pane),         { ssr: false });
+const Rectangle    = dynamic(() => import("react-leaflet").then(m => m.Rectangle),    { ssr: false });
 
 /* Map instance helper */
 const CaptureMap = dynamic(async () => {
@@ -20,9 +21,7 @@ const CaptureMap = dynamic(async () => {
   const { useEffect } = await import("react");
   function Cmp({ onReady }: { onReady: (map: import("leaflet").Map) => void }) {
     const map = RL.useMap();
-    useEffect(() => {
-      onReady(map);
-    }, [map, onReady]);
+    useEffect(() => { onReady(map); }, [map, onReady]);
     return null;
   }
   return Cmp;
@@ -46,13 +45,14 @@ const FitBounds = dynamic(async () => {
 }, { ssr: false });
 
 /* ---- types ---- */
-export type Point = { name: string; lat: number; lon: number };
+export type Point  = { name: string; lat: number; lon: number };
 export type Marker = { name: string; lat: number; lon: number };
 
 type Ring = [number, number][]; // [lon,lat]
 type PolyRings = { outer: Ring; holes: Ring[] };
 
-type WeatherSample = { wind: number; wave: number };
+type WeatherCell = { lat: number; lon: number; wind: number; wave: number };
+type WeatherField = { get(lat:number, lon:number): { wind:number; wave:number } | null };
 
 /* ---- consts ---- */
 const WORLD_BOUNDS: LatLngBoundsExpression = [[-85, -180], [85, 180]];
@@ -67,11 +67,7 @@ const SIMPLIFY_EPS = 0.003;
 /* Weather impact (penalty) */
 const WEATHER_WIND_REF = 12;
 const WEATHER_WAVE_REF = 2.0;
-const WEATHER_PENALTY = 0.45;
-
-/* In-transit meteo sampling */
-const LEG_SAMPLE_TARGET_M = 25000; // ~25km between samples
-const LEG_SAMPLE_MAX = 12;
+const WEATHER_PENALTY  = 0.45;
 
 /* Animation */
 const DRAW_POINTS_PER_SEC = 3;
@@ -82,14 +78,12 @@ const MARKER_FADE_MS = 280;
 
 /* ---- geo helpers ---- */
 const toRad = (x: number) => (x * Math.PI) / 180;
-function sin2(x: number) {
-  return Math.sin(x) * Math.sin(x);
-}
+function sin2(x: number) { return Math.sin(x) * Math.sin(x); }
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371000;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  const a = sin2(dLat / 2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sin2(dLon / 2);
+  const a = sin2(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sin2(dLon/2);
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
@@ -98,10 +92,8 @@ function pointInRing(pt: [number, number], ring: Ring): boolean {
   const [x, y] = pt;
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i],
-      [xj, yj] = ring[j];
-    const intersect =
-      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + 0.0) + xi;
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    const intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi + 0.0) + xi);
     if (intersect) inside = !inside;
   }
   return inside;
@@ -126,7 +118,7 @@ function collectPolys(geo: any): PolyRings[] {
     else if (g.type === "MultiPolygon") for (const p of g.coordinates as Ring[][]) pushPolygon(p);
   };
   if (geo.type === "FeatureCollection") {
-    for (const f of geo.features ?? []) pushFromGeom(f?.geometry);
+    for (const f of (geo.features ?? [])) pushFromGeom(f?.geometry);
   } else {
     pushFromGeom(geo);
   }
@@ -141,81 +133,125 @@ function pickCellDegForLeg(a: Point, b: Point) {
   let cell = Math.min(BASE_CELL_DEG, Math.max(0.006, span / 180));
   if (span < 2.5) cell = 0.016;
   if (span < 1.5) cell = 0.012;
-  if (span < 0.9) cell = 0.009;
-  if (span < 0.5) cell = 0.007;
+  if (span < 0.90) cell = 0.009;
+  if (span < 0.50) cell = 0.007;
   if (span < 0.25) cell = 0.006;
   return cell;
 }
 
 /* ---- Grid + A* ---- */
 type GridNode = {
-  r: number;
-  c: number;
-  lat: number;
-  lon: number;
-  walkable: boolean;
-  nearLand: boolean;
+  r: number; c: number; lat: number; lon: number;
+  walkable: boolean; nearLand: boolean;
 };
 
-function buildGridForBounds(
-  minLat: number,
-  maxLat: number,
-  minLon: number,
-  maxLon: number,
-  coastPolys: PolyRings[],
-  cellDeg: number
-) {
+function buildGridForBounds(minLat:number,maxLat:number,minLon:number,maxLon:number,coastPolys: PolyRings[],cellDeg:number) {
   const rows = Math.max(12, Math.ceil((maxLat - minLat) / cellDeg));
   const cols = Math.max(12, Math.ceil((maxLon - minLon) / cellDeg));
   const grid: GridNode[][] = new Array(rows);
 
   for (let r = 0; r < rows; r++) {
     grid[r] = new Array(cols);
-    const lat = minLat + ((r + 0.5) * (maxLat - minLat)) / rows;
+    const lat = minLat + (r + 0.5) * (maxLat - minLat) / rows;
     for (let c = 0; c < cols; c++) {
-      const lon = minLon + ((c + 0.5) * (maxLon - minLon)) / cols;
+      const lon = minLon + (c + 0.5) * (maxLon - minLon) / cols;
       const pt: [number, number] = [lon, lat];
       let onLand = false;
-      for (const poly of coastPolys) {
-        if (pointInPoly(pt, poly)) {
-          onLand = true;
-          break;
-        }
-      }
-      grid[r][c] = { r, c, lat, lon, walkable: !onLand, nearLand: false };
+      for (const poly of coastPolys) { if (pointInPoly(pt, poly)) { onLand = true; break; } }
+      grid[r][c] = { r, c, lat, lon, walkable:!onLand, nearLand:false };
     }
   }
-  const dirs = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-    [1, 1],
-    [-1, -1],
-    [1, -1],
-    [-1, 1],
-  ];
-  for (let r = 0; r < rows; r++)
-    for (let c = 0; c < cols; c++) {
-      const cell = grid[r][c];
-      if (!cell.walkable) continue;
-      for (const [dr, dc] of dirs) {
-        const rr = r + dr,
-          cc = c + dc;
-        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-        if (!grid[rr][cc].walkable) {
-          cell.nearLand = true;
-          break;
-        }
-      }
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
+    const cell = grid[r][c]; if (!cell.walkable) continue;
+    for (const [dr,dc] of dirs) {
+      const rr=r+dr, cc=c+dc;
+      if (rr<0||cc<0||rr>=rows||cc>=cols) continue;
+      if (!grid[rr][cc].walkable) { cell.nearLand = true; break; }
     }
-
-  function nodeFor(lat: number, lon: number) {
-    const r = Math.min(rows - 1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
-    const c = Math.min(cols - 1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
+  }
+  function nodeFor(lat:number,lon:number){
+    const r = Math.min(rows-1, Math.max(0, Math.floor((lat - minLat) / ((maxLat - minLat) / rows))));
+    const c = Math.min(cols-1, Math.max(0, Math.floor((lon - minLon) / ((maxLon - minLon) / cols))));
     return grid[r][c];
   }
   return { grid, nodeFor };
+}
+
+/* ---- Weather (Open-Meteo Marine) ---- */
+const _weatherCache = new Map<string, WeatherField>();
+
+function closestTimeIndex(times: any[], nowMs: number) {
+  if (!Array.isArray(times) || !times.length) return 0;
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i];
+    const ms = Date.parse(String(t));
+    if (!Number.isFinite(ms)) continue;
+    const d = Math.abs(ms - nowMs);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLon:number): Promise<WeatherField|null> {
+  const step = 0.3;
+  const lats:number[] = []; const lons:number[] = [];
+  for (let lat = Math.floor(minLat/step)*step; lat <= maxLat; lat += step) lats.push(parseFloat(lat.toFixed(2)));
+  for (let lon = Math.floor(minLon/step)*step; lon <= maxLon; lon += step) lons.push(parseFloat(lon.toFixed(2)));
+
+  const latParam = lats.join(","); const lonParam = lons.join(",");
+
+  // ✅ timezone=UTC so time strings parse consistently
+  const url =
+    `https://marine-api.open-meteo.com/v1/marine?latitude=${latParam}&longitude=${lonParam}` +
+    `&hourly=wave_height,wind_speed_10m&length_unit=metric&windspeed_unit=ms&timezone=UTC`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    const entries: WeatherCell[] = [];
+    const results = Array.isArray(data?.results) ? data.results : [data];
+    const nowMs = Date.now();
+
+    for (let i=0;i<results.length;i++){
+      const r = results[i];
+
+      // latitude/longitude may be arrays or scalars
+      const lat = Array.isArray(data.latitude) ? data.latitude[i] : (r?.latitude ?? data.latitude);
+      const lon = Array.isArray(data.longitude)? data.longitude[i] : (r?.longitude ?? data.longitude);
+
+      const times: any[] = r?.hourly?.time ?? data?.hourly?.time ?? [];
+      const idx = closestTimeIndex(times, nowMs);
+
+      const windArr = r?.hourly?.wind_speed_10m ?? data?.hourly?.wind_speed_10m ?? [];
+      const waveArr = r?.hourly?.wave_height ?? data?.hourly?.wave_height ?? [];
+
+      // multi-location may be [loc][time] or [time]
+      const wind = Array.isArray(windArr?.[0]) ? windArr?.[i]?.[idx] : windArr?.[idx];
+      const wave = Array.isArray(waveArr?.[0]) ? waveArr?.[i]?.[idx] : waveArr?.[idx];
+
+      if (wind!=null && wave!=null && Number.isFinite(Number(wind)) && Number.isFinite(Number(wave))) {
+        entries.push({ lat:Number(lat), lon:Number(lon), wind:Number(wind), wave:Number(wave) });
+      }
+    }
+    if (!entries.length) return null;
+
+    const get = (lat:number, lon:number) => {
+      let best = entries[0], bestD = Infinity;
+      for (const e of entries) {
+        const d = Math.hypot(lat - e.lat, lon - e.lon);
+        if (d < bestD) { bestD = d; best = e; }
+      }
+      return { wind: best.wind, wave: best.wave };
+    };
+    return { get };
+  } catch {
+    return null;
+  }
 }
 
 /* ---- A* water routing ---- */
@@ -223,26 +259,14 @@ function nearestWaterNode(grid: GridNode[][], start: GridNode) {
   if (start.walkable) return start;
   const q: GridNode[] = [start];
   const seen = new Set<string>([`${start.r},${start.c}`]);
-  const dirs = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-    [1, 1],
-    [-1, -1],
-    [1, -1],
-    [-1, 1],
-  ];
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
   while (q.length) {
     const cur = q.shift()!;
-    for (const [dr, dc] of dirs) {
-      const rr = cur.r + dr,
-        cc = cur.c + dc;
-      if (rr < 0 || cc < 0 || rr >= grid.length || cc >= grid[0].length) continue;
+    for (const [dr,dc] of dirs){
+      const rr = cur.r+dr, cc = cur.c+dc;
+      if (rr<0||cc<0||rr>=grid.length||cc>=grid[0].length) continue;
       const nb = grid[rr][cc];
-      const key = `${rr},${cc}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const key = `${rr},${cc}`; if (seen.has(key)) continue; seen.add(key);
       if (nb.walkable) return nb;
       q.push(nb);
     }
@@ -250,171 +274,44 @@ function nearestWaterNode(grid: GridNode[][], start: GridNode) {
   return start;
 }
 
-/* ---- Weather (Open-Meteo Marine) robust multi-location ---- */
-async function fetchMarineNowForPoints(points: { lat: number; lon: number }[]): Promise<WeatherSample[] | null> {
-  if (!points.length) return null;
-
-  // keep it light
-  const pts = points.slice(0, LEG_SAMPLE_MAX);
-
-  const latParam = pts.map((p) => p.lat.toFixed(4)).join(",");
-  const lonParam = pts.map((p) => p.lon.toFixed(4)).join(",");
-
-  const url =
-    `https://marine-api.open-meteo.com/v1/marine?latitude=${latParam}&longitude=${lonParam}` +
-    `&hourly=wave_height,wind_speed_10m&windspeed_unit=ms&length_unit=metric&timezone=auto`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-
-    // pick current hour index
-    const now = new Date();
-    const hourKey = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours())
-      .toISOString()
-      .slice(0, 13);
-
-    const results = Array.isArray(data?.results) ? data.results : null;
-
-    // Helper: read (times, wind, wave) for location i
-    function readForLoc(i: number): { wind: number | null; wave: number | null } {
-      // Case A: results[] exists (per-location blocks)
-      if (results && results[i]) {
-        const r = results[i];
-        const times: string[] = r?.hourly?.time ?? [];
-        const idx = Math.max(0, times.findIndex((t) => String(t).startsWith(hourKey)));
-        const windArr = r?.hourly?.wind_speed_10m ?? [];
-        const waveArr = r?.hourly?.wave_height ?? [];
-        const wind = windArr?.[idx];
-        const wave = waveArr?.[idx];
-        return {
-          wind: wind == null ? null : Number(wind),
-          wave: wave == null ? null : Number(wave),
-        };
-      }
-
-      // Case B: single response with multi-location arrays
-      const times: string[] = data?.hourly?.time ?? [];
-      const idx = Math.max(0, times.findIndex((t: any) => String(t).startsWith(hourKey)));
-
-      const W = data?.hourly?.wind_speed_10m;
-      const H = data?.hourly?.wave_height;
-
-      const wind =
-        Array.isArray(W?.[0]) ? W?.[i]?.[idx] : Array.isArray(W) ? W?.[idx] : null;
-      const wave =
-        Array.isArray(H?.[0]) ? H?.[i]?.[idx] : Array.isArray(H) ? H?.[idx] : null;
-
-      return {
-        wind: wind == null ? null : Number(wind),
-        wave: wave == null ? null : Number(wave),
-      };
-    }
-
-    const out: WeatherSample[] = [];
-    for (let i = 0; i < pts.length; i++) {
-      const { wind, wave } = readForLoc(i);
-      if (wind == null || wave == null || !Number.isFinite(wind) || !Number.isFinite(wave)) {
-        out.push({ wind: NaN, wave: NaN });
-      } else {
-        out.push({ wind, wave });
-      }
-    }
-
-    return out;
-  } catch {
-    return null;
-  }
-}
-
-/* ---- A* routing with optional weather penalty (uses marine samples later, not here) ---- */
-type WeatherField = { get(lat: number, lon: number): { wind: number; wave: number } | null };
-
-// Minimal field used only for routing cost if you enabled it: reuse nearest sample
-function makeWeatherFieldFromSamples(
-  samples: { lat: number; lon: number; wind: number; wave: number }[]
-): WeatherField | null {
-  const ok = samples.filter((s) => Number.isFinite(s.wind) && Number.isFinite(s.wave));
-  if (!ok.length) return null;
-  return {
-    get(lat: number, lon: number) {
-      let best = ok[0];
-      let bestD = Infinity;
-      for (const s of ok) {
-        const d = Math.hypot(lat - s.lat, lon - s.lon);
-        if (d < bestD) {
-          bestD = d;
-          best = s;
-        }
-      }
-      return { wind: best.wind, wave: best.wave };
-    },
-  };
-}
-
-function aStarWater(
-  grid: GridNode[][],
-  start: GridNode,
-  goal: GridNode,
-  weather: WeatherField | null,
-  weatherAware: boolean
-) {
+function aStarWater(grid:GridNode[][], start:GridNode, goal:GridNode, weather:WeatherField|null, weatherAware:boolean){
   start = nearestWaterNode(grid, start);
-  goal = nearestWaterNode(grid, goal);
+  goal  = nearestWaterNode(grid, goal);
 
-  const key = (n: GridNode) => `${n.r},${n.c}`;
+  const key = (n:GridNode)=>`${n.r},${n.c}`;
   const open: GridNode[] = [start];
   const came = new Map<string, GridNode>();
   const gScore = new Map<string, number>([[key(start), 0]]);
-  const fScore = new Map<string, number>([
-    [key(start), haversineMeters(start.lat, start.lon, goal.lat, goal.lon)],
-  ]);
+  const fScore = new Map<string, number>([[key(start), haversineMeters(start.lat, start.lon, goal.lat, goal.lon)]]);
   const inOpen = new Set<string>([key(start)]);
-  const dirs = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-    [1, 1],
-    [-1, -1],
-    [1, -1],
-    [-1, 1],
-  ];
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
 
-  while (open.length) {
-    open.sort((a, b) => (fScore.get(key(a))! - fScore.get(key(b))!));
-    const current = open.shift()!;
-    inOpen.delete(key(current));
+  while (open.length){
+    open.sort((a,b)=> (fScore.get(key(a))! - fScore.get(key(b))!));
+    const current = open.shift()!; inOpen.delete(key(current));
 
-    if (current.r === goal.r && current.c === goal.c) {
+    if (current.r===goal.r && current.c===goal.c){
       const path: GridNode[] = [current];
       let curKey = key(current);
-      while (came.has(curKey)) {
-        const prev = came.get(curKey)!;
-        path.push(prev);
-        curKey = key(prev);
-      }
+      while (came.has(curKey)){ const prev = came.get(curKey)!; path.push(prev); curKey = key(prev); }
       return path.reverse();
     }
 
-    for (const [dr, dc] of dirs) {
-      const rr = current.r + dr,
-        cc = current.c + dc;
-      if (rr < 0 || cc < 0 || rr >= grid.length || cc >= grid[0].length) continue;
-      const nb = grid[rr][cc];
-      if (!nb.walkable) continue;
+    for (const [dr,dc] of dirs){
+      const rr=current.r+dr, cc=current.c+dc;
+      if (rr<0||cc<0||rr>=grid.length||cc>=grid[0].length) continue;
+      const nb = grid[rr][cc]; if (!nb.walkable) continue;
 
       const step = haversineMeters(current.lat, current.lon, nb.lat, nb.lon);
       let costFactor = 1 + (nb.nearLand ? NEAR_LAND_PENALTY : 0);
 
-      if (weatherAware && weather) {
+      if (weatherAware && weather){
         const w = weather.get(nb.lat, nb.lon);
-        if (w) {
+        if (w){
           const windN = Math.max(0, (w.wind - WEATHER_WIND_REF) / WEATHER_WIND_REF);
           const waveN = Math.max(0, (w.wave - WEATHER_WAVE_REF) / WEATHER_WAVE_REF);
           const meteo = Math.min(2.5, windN + waveN);
-          costFactor *= 1 + WEATHER_PENALTY * meteo;
+          costFactor *= (1 + WEATHER_PENALTY * meteo);
         }
       }
 
@@ -424,10 +321,7 @@ function aStarWater(
         came.set(nbKey, current);
         gScore.set(nbKey, tentative);
         fScore.set(nbKey, tentative + haversineMeters(nb.lat, nb.lon, goal.lat, goal.lon));
-        if (!inOpen.has(nbKey)) {
-          open.push(nb);
-          inOpen.add(nbKey);
-        }
+        if (!inOpen.has(nbKey)) { open.push(nb); inOpen.add(nbKey); }
       }
     }
   }
@@ -435,70 +329,35 @@ function aStarWater(
 }
 
 /* ---- Simplify ---- */
-function perpendicularDistance(p: [number, number], a: [number, number], b: [number, number]) {
-  const x0 = p[1],
-    y0 = p[0],
-    x1 = a[1],
-    y1 = a[0],
-    x2 = b[1],
-    y2 = b[0];
-  const num = Math.abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1);
-  const den = Math.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2) + 1e-9;
-  return num / den;
+function perpendicularDistance(p:[number,number], a:[number,number], b:[number,number]){
+  const x0=p[1], y0=p[0], x1=a[1], y1=a[0], x2=b[1], y2=b[0];
+  const num = Math.abs((y2 - y1)*x0 - (x2 - x1)*y0 + x2*y1 - y2*x1);
+  const den = Math.sqrt((y2 - y1)**2 + (x2 - x1)**2) + 1e-9;
+  return num/den;
 }
-function simplifyRDP(path: [number, number][], epsilonDeg = SIMPLIFY_EPS): [number, number][] {
-  if (path.length <= 2) return path;
-  let dmax = 0,
-    index = 0;
-  const end = path.length - 1;
-  for (let i = 1; i < end; i++) {
-    const d = perpendicularDistance(path[i], path[0], path[end]);
-    if (d > dmax) {
-      index = i;
-      dmax = d;
-    }
+function simplifyRDP(path:[number,number][], epsilonDeg=SIMPLIFY_EPS): [number,number][]{
+  if (path.length<=2) return path;
+  let dmax=0, index=0; const end=path.length-1;
+  for (let i=1;i<end;i++){ const d=perpendicularDistance(path[i], path[0], path[end]); if (d>dmax){ index=i; dmax=d; } }
+  if (dmax>epsilonDeg){
+    const rec1 = simplifyRDP(path.slice(0, index+1), epsilonDeg);
+    const rec2 = simplifyRDP(path.slice(index, path.length), epsilonDeg);
+    return rec1.slice(0,-1).concat(rec2);
+  } else {
+    return [path[0], path[end]];
   }
-  if (dmax > epsilonDeg) {
-    const rec1 = simplifyRDP(path.slice(0, index + 1), epsilonDeg);
-    const rec2 = simplifyRDP(path.slice(index), epsilonDeg);
-    return rec1.slice(0, -1).concat(rec2);
-  }
-  return [path[0], path[end]];
 }
 
 /* ---- Animated Dot ---- */
-function useNow() {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      setTick((t) => t + 1);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-}
-function AnimatedDot({
-  center,
-  label,
-  active,
-  onClick,
-  appearAtMs,
-  baseRadius = 5,
-}: {
-  center: LatLngExpression;
-  label?: string;
-  active?: boolean;
-  onClick?: () => void;
-  appearAtMs: number;
-  baseRadius?: number;
-}) {
+function useNow(){ const [,setTick]=useState(0); useEffect(()=>{ let raf=0; const loop=()=>{ setTick(t=>t+1); raf=requestAnimationFrame(loop); }; raf=requestAnimationFrame(loop); return ()=>cancelAnimationFrame(raf); },[]); }
+function AnimatedDot({ center,label,active,onClick,appearAtMs,baseRadius=5 }:{
+  center:LatLngExpression; label?:string; active?:boolean; onClick?:()=>void; appearAtMs:number; baseRadius?:number;
+}){
   useNow();
-  const [start] = useState<number>(() => performance.now());
+  const [start] = useState<number>(()=>performance.now());
   const now = performance.now();
   const t = Math.max(0, Math.min(1, (now - appearAtMs - start) / MARKER_FADE_MS));
-  const radius = t <= 0 ? 0 : baseRadius * (0.66 + 0.34 * t);
+  const radius = (t <= 0 ? 0 : baseRadius * (0.66 + 0.34 * t));
   const opacity = t <= 0 ? 0 : 0.25 + 0.75 * t;
 
   return (
@@ -506,86 +365,40 @@ function AnimatedDot({
       center={center}
       radius={radius}
       eventHandlers={onClick ? { click: onClick } : undefined}
-      pathOptions={{
-        color: active ? "#c4a962" : "#0b1220",
-        fillColor: active ? "#c4a962" : "#0b1220",
-        fillOpacity: opacity,
-        opacity,
-        weight: active ? 2 : 1.5,
-      }}
+      pathOptions={{ color: active ? "#c4a962" : "#0b1220", fillColor: active ? "#c4a962" : "#0b1220", fillOpacity: opacity, opacity, weight: active ? 2 : 1.5 }}
     >
-      {!!label && (
-        <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-          {label}
-        </Tooltip>
-      )}
+      {!!label && (<Tooltip direction="top" offset={[0,-6]} opacity={0.95}>{label}</Tooltip>)}
     </CircleMarker>
   );
 }
 
-/* ---- sampling along leg polyline ---- */
-function sampleAlongLeg(seg: [number, number][]) {
-  if (!seg?.length) return [];
-  const out: { lat: number; lon: number }[] = [];
-  out.push({ lat: seg[0][0], lon: seg[0][1] });
-
-  let acc = 0;
-  for (let i = 1; i < seg.length; i++) {
-    const a = seg[i - 1];
-    const b = seg[i];
-    const d = haversineMeters(a[0], a[1], b[0], b[1]);
-    acc += d;
-    if (acc >= LEG_SAMPLE_TARGET_M) {
-      out.push({ lat: b[0], lon: b[1] });
-      acc = 0;
-      if (out.length >= LEG_SAMPLE_MAX - 1) break;
-    }
-  }
-  const last = seg[seg.length - 1];
-  out.push({ lat: last[0], lon: last[1] });
-
-  // unique-ish (avoid duplicates)
-  const uniq: { lat: number; lon: number }[] = [];
-  const seen = new Set<string>();
-  for (const p of out) {
-    const k = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    uniq.push(p);
-  }
-  return uniq.slice(0, LEG_SAMPLE_MAX);
-}
-
 /* ===================================================== */
 export default function RouteMapClient({
-  points,
-  markers,
-  activeNames,
-  onMarkerClick,
+  points, markers, activeNames, onMarkerClick,
   weatherAwareProp,
   followShipProp,
-  onLegMeteo,
-}: {
+  onLegMeteo
+}:{
   points: Point[];
   markers?: Marker[];
   activeNames?: string[];
   onMarkerClick?: (portName: string) => void;
   weatherAwareProp?: boolean;
   followShipProp?: boolean;
-  onLegMeteo?: (legs: Array<{ index: number; from: string; to: string; avgWind: number; avgWave: number; maxWind: number; maxWave: number }>) => void;
+  onLegMeteo?: (legs: Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }>) => void;
 }) {
   const [map, setMap] = useState<import("leaflet").Map | null>(null);
 
   const effPoints = (points?.length ?? 0) >= 2 ? points : [];
 
   const [weatherAwareInternal, setWeatherAwareInternal] = useState(false);
-  const weatherAware = typeof weatherAwareProp === "boolean" ? weatherAwareProp : weatherAwareInternal;
+  const weatherAware = (typeof weatherAwareProp === "boolean") ? weatherAwareProp : weatherAwareInternal;
   useEffect(() => {
     if (typeof weatherAwareProp === "boolean") setWeatherAwareInternal(weatherAwareProp);
   }, [weatherAwareProp]);
 
   const [followShipInternal, setFollowShipInternal] = useState(false);
-  const followShip = typeof followShipProp === "boolean" ? followShipProp : followShipInternal;
+  const followShip = (typeof followShipProp === "boolean") ? followShipProp : followShipInternal;
   useEffect(() => {
     if (typeof followShipProp === "boolean") setFollowShipInternal(followShipProp);
   }, [followShipProp]);
@@ -595,33 +408,50 @@ export default function RouteMapClient({
   useEffect(() => {
     let cancelled = false;
     fetch("/data/coastlines-gr.geojson")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("GeoJSON fetch failed"))))
-      .then((j) => {
-        if (!cancelled) setCoast(j);
-      })
-      .catch(() => {
-        if (!cancelled) setCoast(null);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error("GeoJSON fetch failed"))))
+      .then(j => { if (!cancelled) setCoast(j); })
+      .catch(() => { if (!cancelled) setCoast(null); });
+    return () => { cancelled = true; };
   }, []);
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
+  /* weather prefetch per leg (for routing penalty only) */
+  const [weatherFieldsForLeg, setWeatherFieldsForLeg] = useState<(WeatherField|null)[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!weatherAware || effPoints.length < 2) { setWeatherFieldsForLeg([]); return; }
+      const fields: (WeatherField|null)[] = [];
+      for (let i = 0; i < effPoints.length - 1; i++) {
+        const a = effPoints[i], b = effPoints[i+1];
+        const minLat = Math.min(a.lat, b.lat) - GRID_MARGIN_DEG;
+        const maxLat = Math.max(a.lat, b.lat) + GRID_MARGIN_DEG;
+        const minLon = Math.min(a.lon, b.lon) - GRID_MARGIN_DEG;
+        const maxLon = Math.max(a.lon, b.lon) + GRID_MARGIN_DEG;
+        const cacheKey = `${minLat.toFixed(2)}|${maxLat.toFixed(2)}|${minLon.toFixed(2)}|${maxLon.toFixed(2)}`;
+        if (_weatherCache.has(cacheKey)) {
+          fields.push(_weatherCache.get(cacheKey)!);
+        } else {
+          const field = await fetchWeatherField(minLat, maxLat, minLon, maxLon);
+          if (cancelled) return;
+          if (field) _weatherCache.set(cacheKey, field);
+          fields.push(field);
+        }
+      }
+      if (!cancelled) setWeatherFieldsForLeg(fields);
+    })();
+    return () => { cancelled = true; };
+  }, [weatherAware, effPoints]);
+
   /* === Route compute === */
   const { waterLatLngs, legEndIdx, legSegments } = useMemo(() => {
-    const result: {
-      waterLatLngs: LatLngExpression[];
-      legEndIdx: number[];
-      legSegments: [number, number][][];
-    } = { waterLatLngs: [], legEndIdx: [], legSegments: [] };
+    const result: { waterLatLngs: LatLngExpression[]; legEndIdx: number[]; legSegments: [number,number][][] } = { waterLatLngs: [], legEndIdx: [], legSegments: [] };
     const pts = effPoints;
     if (pts.length < 2) return result;
 
     const perLeg: [number, number][][] = [];
     for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i],
-        b = pts[i + 1];
+      const a = pts[i], b = pts[i + 1];
       let seg: [number, number][] | null = null;
 
       if (coastPolys.length) {
@@ -632,19 +462,12 @@ export default function RouteMapClient({
         const maxLon = Math.max(a.lon, b.lon) + GRID_MARGIN_DEG;
         const { grid, nodeFor } = buildGridForBounds(minLat, maxLat, minLon, maxLon, coastPolys, cellDeg);
         const start = nodeFor(a.lat, a.lon);
-        const goal = nodeFor(b.lat, b.lon);
+        const goal  = nodeFor(b.lat, b.lon);
+        const field = weatherAware ? (weatherFieldsForLeg[i] ?? null) : null;
 
-        // Optional: light meteo field for routing cost (only when toggle on)
-        // Use a few samples from straight line (cheap) to avoid heavy prefetch.
-        let field: WeatherField | null = null;
-        if (weatherAware) {
-          // we'll build it later in the meteo effect; here keep routing as-is (nearLand only).
-          field = null;
-        }
-
-        const path = aStarWater(grid, start, goal, field, false);
+        const path = aStarWater(grid, start, goal, field, weatherAware);
         if (path) {
-          const mid = path.map((n) => [n.lat, n.lon] as [number, number]);
+          const mid = path.map(n => [n.lat, n.lon] as [number, number]);
           const midS = simplifyRDP(mid, SIMPLIFY_EPS);
           seg = [[a.lat, a.lon], ...midS, [b.lat, b.lon]];
         }
@@ -656,7 +479,7 @@ export default function RouteMapClient({
         if (!cleaned.length) cleaned.push(pt);
         else {
           const last = cleaned[cleaned.length - 1];
-          if (Math.abs(last[0] - pt[0]) > 1e-9 || Math.abs(last[1] - pt[1]) > 1e-9) cleaned.push(pt);
+          if (Math.abs(last[0]-pt[0]) > 1e-9 || Math.abs(last[1]-pt[1]) > 1e-9) cleaned.push(pt);
         }
       }
       perLeg.push(cleaned);
@@ -674,100 +497,70 @@ export default function RouteMapClient({
     result.legEndIdx = endIdx;
     result.legSegments = perLeg;
     return result;
-  }, [effPoints, coastPolys, weatherAware]);
+  }, [effPoints, coastPolys, weatherAware, weatherFieldsForLeg]);
 
-  /* === In-transit meteo compute (fills the Toolkit table) === */
+  /* === Meteo metrics emit === */
   useEffect(() => {
     if (!onLegMeteo) return;
-    if (!effPoints.length || !legSegments.length) {
-      onLegMeteo([]);
-      return;
-    }
+    if (!effPoints.length || !legSegments.length) { onLegMeteo([]); return; }
 
     let cancelled = false;
-
     (async () => {
-      // Only compute when toggle is ON (keeps it fast by default)
       if (!weatherAware) {
-        onLegMeteo(
-          legSegments.map((_, i) => ({
-            index: i,
-            from: effPoints[i].name,
-            to: effPoints[i + 1].name,
-            avgWind: NaN,
-            avgWave: NaN,
-            maxWind: NaN,
-            maxWave: NaN,
-          }))
-        );
+        onLegMeteo(legSegments.map((_, i) => ({
+          index:i, from: effPoints[i].name, to: effPoints[i+1].name,
+          avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN
+        })));
         return;
       }
 
-      const out: Array<{ index: number; from: string; to: string; avgWind: number; avgWave: number; maxWind: number; maxWave: number }> = [];
+      const out: Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }> = [];
 
       for (let i = 0; i < legSegments.length; i++) {
         const seg = legSegments[i];
-        const samples = sampleAlongLeg(seg);
-
-        const meteo = await fetchMarineNowForPoints(samples);
-        if (cancelled) return;
-
-        if (!meteo || !meteo.length) {
-          out.push({
-            index: i,
-            from: effPoints[i].name,
-            to: effPoints[i + 1].name,
-            avgWind: NaN,
-            avgWave: NaN,
-            maxWind: NaN,
-            maxWave: NaN,
-          });
+        const field = weatherFieldsForLeg[i] ?? null;
+        if (!seg?.length || !field) {
+          out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
           continue;
         }
 
-        const ok = meteo.filter((m) => Number.isFinite(m.wind) && Number.isFinite(m.wave));
-        if (!ok.length) {
-          out.push({
-            index: i,
-            from: effPoints[i].name,
-            to: effPoints[i + 1].name,
-            avgWind: NaN,
-            avgWave: NaN,
-            maxWind: NaN,
-            maxWave: NaN,
-          });
-          continue;
+        let windSum = 0, waveSum = 0, n = 0, maxW = -Infinity, maxH = -Infinity;
+        // sample a bit denser than before (every 3 points) to avoid missing grid cells
+        for (let k = 0; k < seg.length; k += 3) {
+          const [lat, lon] = seg[k];
+          const w = field.get(lat, lon);
+          if (!w) continue;
+          windSum += w.wind;
+          waveSum += w.wave;
+          n++;
+          if (w.wind > maxW) maxW = w.wind;
+          if (w.wave > maxH) maxH = w.wave;
         }
 
-        const avgWind = ok.reduce((s, m) => s + m.wind, 0) / ok.length;
-        const avgWave = ok.reduce((s, m) => s + m.wave, 0) / ok.length;
-        const maxWind = Math.max(...ok.map((m) => m.wind));
-        const maxWave = Math.max(...ok.map((m) => m.wave));
-
-        out.push({
-          index: i,
-          from: effPoints[i].name,
-          to: effPoints[i + 1].name,
-          avgWind: +avgWind.toFixed(2),
-          avgWave: +avgWave.toFixed(2),
-          maxWind: +maxWind.toFixed(2),
-          maxWave: +maxWave.toFixed(2),
-        });
+        if (n === 0 || !Number.isFinite(windSum) || !Number.isFinite(waveSum)) {
+          out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
+        } else {
+          out.push({
+            index:i,
+            from: effPoints[i].name,
+            to: effPoints[i+1].name,
+            avgWind: +(windSum / n).toFixed(2),
+            avgWave: +(waveSum / n).toFixed(2),
+            maxWind: +maxW.toFixed(2),
+            maxWave: +maxH.toFixed(2),
+          });
+        }
       }
 
-      onLegMeteo(out);
+      if (!cancelled) onLegMeteo(out);
     })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [onLegMeteo, legSegments, effPoints, weatherAware]);
+    return () => { cancelled = true; };
+  }, [onLegMeteo, legSegments, weatherFieldsForLeg, effPoints, weatherAware]);
 
   /* progressive draw */
   const [drawCount, setDrawCount] = useState(0);
-  useEffect(() => {
-    setDrawCount(waterLatLngs.length ? 1 : 0);
-  }, [waterLatLngs]);
+  useEffect(() => { setDrawCount((waterLatLngs.length ? 1 : 0)); }, [waterLatLngs]);
   useEffect(() => {
     if (drawCount <= 0 || drawCount >= waterLatLngs.length) return;
     const id = window.setInterval(() => {
@@ -781,6 +574,7 @@ export default function RouteMapClient({
     return (waterLatLngs as [number, number][]).slice(0, Math.max(2, drawCount)) as LatLngExpression[];
   }, [waterLatLngs, drawCount]);
 
+  /* current leg */
   const currentLegIndex = useMemo(() => {
     if (!legEndIdx.length) return -1;
     for (let i = 0; i < legEndIdx.length; i++) {
@@ -823,12 +617,10 @@ export default function RouteMapClient({
     map.flyTo(tip as any, targetZoom, { duration: 0.5 });
   }, [animatedLatLngs, followShip, map]);
 
-  /* markers */
   const markerStart = effPoints[0] ?? null;
-  const markerMids = effPoints.slice(1, -1);
-  const markerEnd = effPoints.at(-1) ?? null;
+  const markerMids  = effPoints.slice(1, -1);
+  const markerEnd   = effPoints.at(-1) ?? null;
 
-  /* bounds/center */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if ((waterLatLngs?.length ?? 0) < 2) return null;
     const L = require("leaflet") as typeof import("leaflet");
@@ -836,39 +628,21 @@ export default function RouteMapClient({
   }, [waterLatLngs]);
   const center: LatLngExpression = (effPoints[0] ? [effPoints[0].lat, effPoints[0].lon] : [37.97, 23.72]) as LatLngExpression;
 
-  const isActive = (name: string) => (activeNames ?? []).some((n) => n.toLowerCase() === name.toLowerCase());
+  const isActive = (name: string) => (activeNames ?? []).some(n => n.toLowerCase() === name.toLowerCase());
   function flyTo(name: string, lat: number, lon: number) {
-    if (map) {
-      const targetZoom = Math.max(map.getZoom(), 9);
-      map.flyTo([lat, lon], targetZoom, { duration: 0.8 });
-    }
+    if (map) { const targetZoom = Math.max(map.getZoom(), 9); map.flyTo([lat, lon], targetZoom, { duration: 0.8 }); }
     onMarkerClick?.(name);
   }
 
   return (
     <div className="w-full h-[520px] overflow-hidden rounded-2xl border border-slate-200 relative">
       <style jsx global>{`
-        .leaflet-tile[src*="tiles.gebco.net"] {
-          filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06);
-        }
-        .leaflet-pane.pane-labels img.leaflet-tile {
-          image-rendering: -webkit-optimize-contrast;
-          image-rendering: crisp-edges;
-          filter: brightness(0.9) contrast(1.35);
-        }
-        .leaflet-pane.pane-labels img[src*="voyager_labels_over"] {
-          filter: brightness(0.88) contrast(1.45);
-        }
+        .leaflet-tile[src*="tiles.gebco.net"] { filter: sepia(1) hue-rotate(190deg) saturate(4) brightness(1.04) contrast(1.06); }
+        .leaflet-pane.pane-labels img.leaflet-tile { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; filter: brightness(0.9) contrast(1.35); }
+        .leaflet-pane.pane-labels img[src*="voyager_labels_over"]{ filter: brightness(0.88) contrast(1.45); }
       `}</style>
 
-      <MapContainer
-        center={center}
-        zoom={7}
-        minZoom={3}
-        maxZoom={14}
-        scrollWheelZoom
-        style={{ height: "100%", width: "100%" }}
-      >
+      <MapContainer center={center} zoom={7} minZoom={3} maxZoom={14} scrollWheelZoom style={{ height:"100%", width:"100%" }}>
         <CaptureMap onReady={setMap} />
 
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
@@ -876,46 +650,17 @@ export default function RouteMapClient({
         </Pane>
 
         <Pane name="pane-water" style={{ zIndex: 305 }}>
-          <Rectangle
-            bounds={WORLD_BOUNDS}
-            pathOptions={{ color: "transparent", weight: 0, fillColor: "#7fa8d8", fillOpacity: 0.35 }}
-            interactive={false}
-          />
+          <Rectangle bounds={WORLD_BOUNDS} pathOptions={{ color:"transparent", weight:0, fillColor:"#7fa8d8", fillOpacity:0.35 }} interactive={false} />
         </Pane>
 
         <Pane name="pane-land" style={{ zIndex: 310 }}>
-          {coast && <GeoJSON data={coast} style={() => ({ color: "#0b1220", weight: 2, opacity: 1, fillColor: "#ffffff", fillOpacity: 1 })} />}
+          {coast && (<GeoJSON data={coast} style={() => ({ color:"#0b1220", weight:2, opacity:1, fillColor:"#ffffff", fillOpacity:1 })} />)}
         </Pane>
 
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
-          <TileLayer
-            attribution="&copy; OpenStreetMap contributors, &copy; CARTO"
-            url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"
-            tileSize={512}
-            zoomOffset={-1}
-            detectRetina={false}
-            opacity={0.75}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"
-            tileSize={512}
-            zoomOffset={-1}
-            detectRetina={false}
-            opacity={0.25}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png"
-            tileSize={256}
-            zoomOffset={0}
-            detectRetina
-            opacity={0.55}
-            errorTileUrl={TRANSPARENT_1PX}
-            pane="pane-labels"
-          />
+          <TileLayer attribution="&copy; OpenStreetMap contributors, &copy; CARTO" url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.75} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.25} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png" tileSize={256} zoomOffset={0} detectRetina opacity={0.55} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
         </Pane>
 
         <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
@@ -924,31 +669,17 @@ export default function RouteMapClient({
 
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
-            <Polyline
-              pane="pane-route-shadow"
-              positions={waterLatLngs}
-              pathOptions={{ color: "#9aa3b2", weight: 2, opacity: 0.6, lineJoin: "round", lineCap: "round" }}
-            />
+            <Polyline pane="pane-route-shadow" positions={waterLatLngs} pathOptions={{ color:"#9aa3b2", weight:2, opacity:0.6, lineJoin:"round", lineCap:"round" }} />
           )}
         </Pane>
 
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {animatedLatLngs.length >= 2 && (
-            <Polyline
-              pane="pane-route"
-              positions={animatedLatLngs}
-              pathOptions={{ color: "#0b1220", weight: 3, opacity: 0.95, dashArray: "6 8", lineJoin: "round", lineCap: "round" }}
-            />
+            <Polyline pane="pane-route" positions={animatedLatLngs} pathOptions={{ color:"#0b1220", weight:3, opacity:0.95, dashArray:"6 8", lineJoin:"round", lineCap:"round" }} />
           )}
 
           {markerStart && (
-            <AnimatedDot
-              center={[markerStart.lat, markerStart.lon] as LatLngExpression}
-              label={`Start: ${effPoints[0]?.name}`}
-              active
-              appearAtMs={0}
-              baseRadius={8}
-            />
+            <AnimatedDot center={[markerStart.lat, markerStart.lon] as LatLngExpression} label={`Start: ${effPoints[0]?.name}`} active appearAtMs={0} baseRadius={8} />
           )}
 
           {markerMids.map((p, i) => {
@@ -957,27 +688,12 @@ export default function RouteMapClient({
             const appearAt = (appearWhenIdx + 1) * DRAW_INTERVAL_MS;
             const active = isActive(p.name);
             return (
-              <AnimatedDot
-                key={`${p.name}-${i}`}
-                center={[p.lat, p.lon] as LatLngExpression}
-                label={p.name}
-                active={active}
-                appearAtMs={appearAt}
-                onClick={() => flyTo(p.name, p.lat, p.lon)}
-                baseRadius={5}
-              />
+              <AnimatedDot key={`${p.name}-${i}`} center={[p.lat, p.lon] as LatLngExpression} label={p.name} active={active} appearAtMs={appearAt} onClick={() => flyTo(p.name, p.lat, p.lon)} baseRadius={5} />
             );
           })}
 
           {markerEnd && (
-            <AnimatedDot
-              center={[markerEnd.lat, markerEnd.lon] as LatLngExpression}
-              label={`End: ${effPoints.at(-1)?.name}`}
-              active
-              appearAtMs={(legEndIdx[legEndIdx.length - 1] ?? 0) * DRAW_INTERVAL_MS}
-              onClick={() => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon)}
-              baseRadius={8}
-            />
+            <AnimatedDot center={[markerEnd.lat, markerEnd.lon] as LatLngExpression} label={`End: ${effPoints.at(-1)?.name}`} active appearAtMs={(legEndIdx[legEndIdx.length - 1] ?? 0) * DRAW_INTERVAL_MS} onClick={() => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon)} baseRadius={8} />
           )}
         </Pane>
 
@@ -990,18 +706,9 @@ export default function RouteMapClient({
                 center={[m.lat, m.lon] as LatLngExpression}
                 radius={3.5}
                 eventHandlers={{ click: () => flyTo(m.name, m.lat, m.lon) }}
-                pathOptions={{
-                  color: isActive(m.name) ? "#c4a962" : "#0b122033",
-                  fillColor: isActive(m.name) ? "#c4a962" : "#0b122033",
-                  fillOpacity: isActive(m.name) ? 0.95 : 0.5,
-                  weight: isActive(m.name) ? 2 : 1,
-                }}
+                pathOptions={{ color: isActive(m.name) ? "#c4a962" : "#0b122033", fillColor: isActive(m.name) ? "#c4a962" : "#0b122033", fillOpacity: isActive(m.name) ? 0.95 : 0.5, weight: isActive(m.name) ? 2 : 1 }}
               >
-                {isActive(m.name) && (
-                  <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-                    {m.name}
-                  </Tooltip>
-                )}
+                {isActive(m.name) && (<Tooltip direction="top" offset={[0,-6]} opacity={0.95}>{m.name}</Tooltip>)}
               </CircleMarker>
             ))}
           </Pane>
