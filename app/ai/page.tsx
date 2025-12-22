@@ -668,76 +668,6 @@ function buildRouteCustomByDays(
   return seq;
 }
 
-/* ========= Wikipedia helper ========= */
-type WikiCard = {
-  title: string;
-  summary: string;
-  imageUrl?: string;
-  gallery?: string[];
-  coords?: { lat: number; lon: number };
-  sourceUrl?: string;
-  related?: { title: string; thumb?: string }[];
-};
-async function fetchWikiJSON(url: string) {
-  const r = await fetch(url, { headers: { accept: "application/json" } });
-  if (!r.ok) throw new Error("wiki fetch");
-  return r.json();
-}
-function encTitle(s: string) {
-  return encodeURIComponent(s.replace(/\s+/g, "_"));
-}
-export async function fetchWikiCard(placeName: string): Promise<WikiCard> {
-  const langs = ["el", "en"];
-  const base = (lang: string) => `https://${lang}.wikipedia.org/api/rest_v1`;
-  let summaryData: any = null;
-  for (const lang of langs) {
-    try {
-      summaryData = await fetchWikiJSON(`${base(lang)}/page/summary/${encTitle(placeName)}`);
-      if (summaryData?.title) break;
-    } catch {}
-  }
-
-  const card: WikiCard = {
-    title: summaryData?.title ?? placeName,
-    summary: summaryData?.extract ?? "",
-    imageUrl: summaryData?.thumbnail?.source,
-    coords: summaryData?.coordinates
-      ? { lat: summaryData.coordinates.lat, lon: summaryData.coordinates.lon }
-      : undefined,
-    sourceUrl: summaryData?.content_urls?.desktop?.page,
-    gallery: [],
-    related: [],
-  };
-
-  try {
-    const lang = summaryData?.lang ?? "en";
-    const media = await fetchWikiJSON(`${base(lang)}/page/media/${encTitle(card.title)}`);
-    const pics: string[] = [];
-    for (const item of media?.items ?? []) {
-      if (item?.type === "image") {
-        const src =
-          item?.srcset?.[item.srcset.length - 1]?.src ||
-          item?.src ||
-          item?.thumbnail?.source;
-        if (src) pics.push(src);
-      }
-    }
-    card.gallery = Array.from(new Set([...(card.imageUrl ? [card.imageUrl] : []), ...pics])).slice(0, 8);
-    if (!card.imageUrl && card.gallery?.length) card.imageUrl = card.gallery[0];
-  } catch {}
-
-  try {
-    const lang = summaryData?.lang ?? "en";
-    const rel = await fetchWikiJSON(`${base(lang)}/page/related/${encTitle(card.title)}`);
-    card.related = (rel?.pages ?? [])
-      .map((p: any) => ({ title: p?.titles?.display ?? p?.title, thumb: p?.thumbnail?.source }))
-      .filter((x: any) => !!x.title)
-      .slice(0, 8);
-  } catch {}
-
-  return card;
-}
-
 /* ========= LIVE Weather ========= */
 type SpotWeather = {
   tempC?: number;
@@ -818,53 +748,9 @@ function suggestWindow(region: RegionKey, hours: number, weatherAware: boolean) 
   return weatherAware ? "08:00–12:00" : hours <= 2 ? "09:00–11:00" : "09:00–12:30";
 }
 
-/* ========= SeaGuide (schema-aware) ========= */
-type SeaGuideEntry = {
-  id?: string;
-  region?: string;
-  category?: string;
-  name?: { el?: string; en?: string } | string;
-  position?: { lat?: number; lon?: number };
-  vhf?: any;
-  weather?: any;
-  approach?: any;
-  anchorage?: any;
-  hazards?: any;
-  mooring?: any;
-  captain_tips?: any;
-  vip_info?: any;
-  contacts?: any;
-  [k: string]: any;
-};
-
+/* ========= SeaGuide globals (schema-aware) ========= */
+type SeaGuideEntry = Record<string, any>;
 const SEA_GUIDE_URL = "/data/sea_guide_vol3_master.json";
-
-function pickTextByLang(v: any, lang: "el" | "en" = "el"): string | null {
-  if (!v) return null;
-  if (typeof v === "string") return v;
-  if (typeof v === "object") {
-    const a = v?.[lang];
-    if (typeof a === "string" && a.trim()) return a;
-    const b = v?.[lang === "el" ? "en" : "el"];
-    if (typeof b === "string" && b.trim()) return b;
-  }
-  return null;
-}
-
-function pickArrByLang(v: any, lang: "el" | "en" = "el"): string[] {
-  if (!v) return [];
-  if (Array.isArray(v)) return v.filter(Boolean).map(String);
-  if (typeof v === "string") return asArray(v);
-  if (typeof v === "object") {
-    const a = v?.[lang];
-    if (Array.isArray(a)) return a.filter(Boolean).map(String);
-    if (typeof a === "string") return asArray(a);
-    const b = v?.[lang === "el" ? "en" : "el"];
-    if (Array.isArray(b)) return b.filter(Boolean).map(String);
-    if (typeof b === "string") return asArray(b);
-  }
-  return [];
-}
 
 function normalizeWords(s: string) {
   return normalize(s)
@@ -875,21 +761,19 @@ function normalizeWords(s: string) {
 
 function buildSeaGuideIndex(items: SeaGuideEntry[]) {
   const exact = new Map<string, SeaGuideEntry>();
-  const tokens = new Map<string, SeaGuideEntry[]>(); // token -> entries
+  const tokens = new Map<string, SeaGuideEntry[]>();
 
   for (const e of items) {
     const names: string[] = [];
+    if (e?.id) names.push(String(e.id));
 
-    if (e.id) names.push(e.id);
-
-    const n = e.name;
-    if (typeof n === "string") names.push(n);
+    const nameObj = e?.name;
+    if (typeof nameObj === "string") names.push(nameObj);
     else {
-      if (n?.el) names.push(n.el);
-      if (n?.en) names.push(n.en);
+      if (nameObj?.el) names.push(String(nameObj.el));
+      if (nameObj?.en) names.push(String(nameObj.en));
     }
 
-    // also add simplified “core” names (useful when stop is "Patmos" and name is "Island of Patmos")
     for (const nm of names) {
       const k = normalize(nm);
       if (k && !exact.has(k)) exact.set(k, e);
@@ -906,27 +790,19 @@ function buildSeaGuideIndex(items: SeaGuideEntry[]) {
   return { exact, tokens };
 }
 
-function lookupSeaGuide(
-  stopName: string,
-  port?: PortCoord | null,
-  index?: { exact: Map<string, SeaGuideEntry>; tokens: Map<string, SeaGuideEntry[]> } | null
-): SeaGuideEntry | null {
-  if (!stopName || !index) return null;
-
+function lookupSeaGuide(stopName: string, port: PortCoord | null, index: { exact: Map<string, SeaGuideEntry>; tokens: Map<string, SeaGuideEntry[]> }) {
   const tries: string[] = [];
   tries.push(stopName);
   tries.push(sanitizeName(stopName));
   if (port?.name) tries.push(port.name);
   if (port?.id) tries.push(port.id);
-  if (Array.isArray(port?.aliases)) tries.push(...(port!.aliases as string[]));
+  if (Array.isArray(port?.aliases)) tries.push(...port.aliases);
 
-  // 1) exact match
   for (const t of tries) {
     const hit = index.exact.get(normalize(t));
     if (hit) return hit;
   }
 
-  // 2) token overlap (best-effort): pick entry with most shared tokens
   const queryTokens = new Set<string>();
   for (const t of tries) normalizeWords(t).forEach((w) => queryTokens.add(w));
   if (!queryTokens.size) return null;
@@ -945,55 +821,74 @@ function lookupSeaGuide(
       best = e;
     }
   }
-  // require at least 2 token hits to avoid random matches
   if (best && bestScore >= 2) return best;
-
   return null;
+}
+
+function pickTextByLang(v: any, lang: "el" | "en" = "el"): string | null {
+  if (!v) return null;
+  if (typeof v === "string") return v;
+  if (typeof v === "object") {
+    const a = v?.[lang];
+    if (typeof a === "string" && a.trim()) return a;
+    const b = v?.[lang === "el" ? "en" : "el"];
+    if (typeof b === "string" && b.trim()) return b;
+  }
+  return null;
+}
+function pickArrByLang(v: any, lang: "el" | "en" = "el"): string[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.filter(Boolean).map(String);
+  if (typeof v === "string") return asArray(v);
+  if (typeof v === "object") {
+    const a = v?.[lang];
+    if (Array.isArray(a)) return a.filter(Boolean).map(String);
+    if (typeof a === "string") return asArray(a);
+    const b = v?.[lang === "el" ? "en" : "el"];
+    if (Array.isArray(b)) return b.filter(Boolean).map(String);
+    if (typeof b === "string") return asArray(b);
+  }
+  return [];
+}
+
+function extractSeaGuide(entry: SeaGuideEntry, lang: "el" | "en" = "el") {
+  return {
+    id: entry.id,
+    region: entry.region,
+    category: entry.category,
+    name_el: entry?.name?.el ?? null,
+    name_en: entry?.name?.en ?? null,
+    lat: entry?.position?.lat,
+    lon: entry?.position?.lon,
+
+    vhf_port_authority: entry?.vhf?.port_authority ?? entry?.vhf,
+    contacts_port_authority: entry?.contacts?.port_authority ?? entry?.contacts,
+
+    weather_summer: pickTextByLang(entry?.weather?.summer, lang),
+    weather_winter: pickTextByLang(entry?.weather?.winter, lang),
+
+    approach: pickTextByLang(entry?.approach, lang),
+
+    anch_depth_min: entry?.anchorage?.depth_m?.min,
+    anch_depth_max: entry?.anchorage?.depth_m?.max,
+    anch_bottom: asArray(entry?.anchorage?.bottom),
+    anch_holding: pickTextByLang(entry?.anchorage?.holding, lang),
+    anch_protection_good: asArray(entry?.anchorage?.protection?.wind_good),
+    anch_protection_poor: asArray(entry?.anchorage?.protection?.wind_poor),
+
+    hazards: pickArrByLang(entry?.hazards, lang),
+    mooring: pickTextByLang(entry?.mooring, lang),
+    captain_tips: pickArrByLang(entry?.captain_tips, lang),
+    vip_info: pickTextByLang(entry?.vip_info, lang),
+  };
 }
 
 declare global {
   interface Window {
-    __NAVIGOPLAN_SEAGUIDE__?: {
-      loadedAt: string;
-      count: number;
-    };
-    __NAVIGOPLAN_SEAGUIDE_LOOKUP__?: (stopName: string, port?: PortCoord | null) => SeaGuideEntry | null;
-    __NAVIGOPLAN_SEAGUIDE_EXTRACT__?: (entry: SeaGuideEntry, lang?: "el" | "en") => any;
+    __NAVIGOPLAN_SEAGUIDE__?: { loadedAt: string; count: number };
+    __NAVIGOPLAN_SEAGUIDE_LOOKUP__?: (stopName: string, port?: any) => any;
+    __NAVIGOPLAN_SEAGUIDE_EXTRACT__?: (entry: any, lang?: "el" | "en") => any;
   }
-}
-
-function extractSeaGuide(entry: SeaGuideEntry, lang: "el" | "en" = "el") {
-  const out = {
-    id: entry.id,
-    region: entry.region,
-    category: entry.category,
-    name_el: typeof entry.name === "object" ? entry.name?.el : null,
-    name_en: typeof entry.name === "object" ? entry.name?.en : typeof entry.name === "string" ? entry.name : null,
-    lat: entry.position?.lat,
-    lon: entry.position?.lon,
-
-    vhf_port_authority: entry.vhf?.port_authority ?? entry.vhf?.portAuthority ?? entry.vhf,
-    contacts_port_authority: entry.contacts?.port_authority ?? entry.contacts?.portAuthority ?? entry.contacts,
-
-    weather_summer: pickTextByLang(entry.weather?.summer, lang),
-    weather_winter: pickTextByLang(entry.weather?.winter, lang),
-
-    approach: pickTextByLang(entry.approach, lang),
-
-    anch_depth_min: entry.anchorage?.depth_m?.min ?? entry.anchorage?.depth?.min,
-    anch_depth_max: entry.anchorage?.depth_m?.max ?? entry.anchorage?.depth?.max,
-    anch_bottom: asArray(entry.anchorage?.bottom),
-    anch_holding: pickTextByLang(entry.anchorage?.holding, lang),
-    anch_protection_good: asArray(entry.anchorage?.protection?.wind_good ?? entry.anchorage?.protection?.good),
-    anch_protection_poor: asArray(entry.anchorage?.protection?.wind_poor ?? entry.anchorage?.protection?.poor),
-
-    hazards: pickArrByLang(entry.hazards, lang),
-    mooring: pickTextByLang(entry.mooring, lang),
-    captain_tips: pickArrByLang(entry.captain_tips, lang),
-    vip_info: pickTextByLang(entry.vip_info, lang),
-  };
-
-  return out;
 }
 
 /* ========= Main ========= */
@@ -1015,9 +910,7 @@ function AIPlannerInner() {
         const r = (p.region ?? p.area ?? "").toString();
         return r && normalize(r) === normalize(regionHint as string);
       });
-      if (byRegion.length) {
-        candidates = byRegion;
-      }
+      if (byRegion.length) candidates = byRegion;
     }
 
     let match: any =
@@ -1041,13 +934,10 @@ function AIPlannerInner() {
     } as PortCoord;
   };
 
-  // All port names for dropdowns
-  const PORT_OPTIONS = useMemo(
-    () => makeOptionsFromPorts((ports as any[]) ?? []),
-    [ports]
-  );
+  const PORT_OPTIONS = useMemo(() => makeOptionsFromPorts((ports as any[]) ?? []), [ports]);
 
   const [mode, setMode] = useState<PlannerMode>("Region");
+
   // Common
   const [startDate, setStartDate] = useState<string>("");
   useEffect(() => {
@@ -1067,18 +957,9 @@ function AIPlannerInner() {
   const [thumbs, setThumbs] = useState<Record<string, string | undefined>>({});
   const [destWeather, setDestWeather] = useState<Record<string, SpotWeather>>({});
 
-  // routing weather toggle & leg metrics from map
   const [routeWeatherAware, setRouteWeatherAware] = useState<boolean>(false);
   const [legMeteo, setLegMeteo] = useState<
-    Array<{
-      index: number;
-      from: string;
-      to: string;
-      avgWind: number;
-      avgWave: number;
-      maxWind: number;
-      maxWave: number;
-    }>
+    Array<{ index: number; from: string; to: string; avgWind: number; avgWave: number; maxWind: number; maxWave: number }>
   >([]);
 
   // Region mode
@@ -1093,11 +974,7 @@ function AIPlannerInner() {
   const effectiveVias = useMemo(() => {
     return [...vias]
       .filter(Boolean)
-      .filter(
-        (v) =>
-          normalize(v) !== normalize(start) &&
-          normalize(v) !== normalize(end)
-      );
+      .filter((v) => normalize(v) !== normalize(start) && normalize(v) !== normalize(end));
   }, [vias, start, end]);
 
   // Custom mode
@@ -1109,8 +986,7 @@ function AIPlannerInner() {
   useEffect(() => {
     setCustomDayStops((old) => {
       const next = [...old];
-      if (next.length < customDays)
-        while (next.length < customDays) next.push("");
+      if (next.length < customDays) while (next.length < customDays) next.push("");
       else if (next.length > customDays) next.length = customDays;
       return next;
     });
@@ -1123,7 +999,6 @@ function AIPlannerInner() {
   const pendingNotesRef = useRef<any | null>(null);
   const [activeTab, setActiveTab] = useState<"crew" | "vip">("crew");
 
-  // Region-specific options (strict)
   const REGION_PORT_OPTIONS = useMemo(() => {
     if (!ports || mode !== "Region" || regionMode === "Auto") return PORT_OPTIONS;
     const wanted = regionMode;
@@ -1135,10 +1010,9 @@ function AIPlannerInner() {
     return opts.length ? opts : PORT_OPTIONS;
   }, [ports, mode, regionMode, PORT_OPTIONS]);
 
-  // Via input options
   const VIA_OPTIONS = mode === "Region" ? REGION_PORT_OPTIONS : PORT_OPTIONS;
 
-  /* ========= SeaGuide load + global lookup (IMPORTANT) ========= */
+  /* ========= SeaGuide load + register globals ========= */
   const [seaGuideItems, setSeaGuideItems] = useState<SeaGuideEntry[] | null>(null);
   const seaGuideIndex = useMemo(() => {
     if (!seaGuideItems?.length) return null;
@@ -1146,7 +1020,6 @@ function AIPlannerInner() {
   }, [seaGuideItems]);
 
   useEffect(() => {
-    // Load only once (when first time you have plan or when page is visited)
     let cancelled = false;
     (async () => {
       try {
@@ -1154,40 +1027,31 @@ function AIPlannerInner() {
         const r = await fetch(SEA_GUIDE_URL, { cache: "no-store" });
         if (!r.ok) throw new Error("sea guide fetch failed");
         const j = await r.json();
-
-        // support: array OR {items:[]}/{data:[]}
         const list: any[] =
           Array.isArray(j) ? j :
           Array.isArray(j?.items) ? j.items :
           Array.isArray(j?.data) ? j.data :
           Array.isArray(j?.ports) ? j.ports : [];
-
         if (!cancelled) setSeaGuideItems(list as SeaGuideEntry[]);
       } catch {
-        // do nothing here; toolkit can show "no data"
+        if (!cancelled) setSeaGuideItems([]);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    // Expose lookup to window so CaptainCrewToolkit can use without prop typing issues
     if (!seaGuideIndex) return;
-
     window.__NAVIGOPLAN_SEAGUIDE__ = {
       loadedAt: new Date().toISOString(),
       count: seaGuideItems?.length ?? 0,
     };
-
-    window.__NAVIGOPLAN_SEAGUIDE_LOOKUP__ = (stopName: string, port?: PortCoord | null) => {
-      return lookupSeaGuide(stopName, port ?? null, seaGuideIndex);
+    window.__NAVIGOPLAN_SEAGUIDE_LOOKUP__ = (stopName: string, port?: any) => {
+      const p: PortCoord | null = port ?? null;
+      return lookupSeaGuide(stopName, p, seaGuideIndex);
     };
-
-    window.__NAVIGOPLAN_SEAGUIDE_EXTRACT__ = (entry: SeaGuideEntry, lang: "el" | "en" = "el") => {
+    window.__NAVIGOPLAN_SEAGUIDE_EXTRACT__ = (entry: any, lang: "el" | "en" = "el") => {
       return extractSeaGuide(entry, lang);
     };
   }, [seaGuideIndex, seaGuideItems]);
@@ -1223,11 +1087,7 @@ function AIPlannerInner() {
   }, [ready, searchParams]);
 
   function onTogglePref(value: string) {
-    setPrefs((prev) =>
-      prev.includes(value)
-        ? prev.filter((p) => p !== value)
-        : [...prev, value]
-    );
+    setPrefs((prev) => (prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]));
   }
   function addVia() {
     setVias((v) => [...v, ""]);
@@ -1239,9 +1099,7 @@ function AIPlannerInner() {
     setVias((v) => v.filter((_, idx) => idx !== i));
   }
   function setCustomStopAt(i: number, val: string) {
-    setCustomDayStops((arr) =>
-      arr.map((x, idx) => (idx === i ? val : x))
-    );
+    setCustomDayStops((arr) => arr.map((x, idx) => (idx === i ? val : x)));
   }
 
   /* ======= Generate ======= */
@@ -1258,24 +1116,13 @@ function AIPlannerInner() {
         alert("Επίλεξε έγκυρο Start/End από τη λίστα.");
         return;
       }
-      namesSeq = buildRouteRegion(
-        start,
-        end,
-        days,
-        region,
-        effectiveVias,
-        (name) => findPort(name, region)
-      );
+      namesSeq = buildRouteRegion(start, end, days, region, effectiveVias, (name) => findPort(name, region));
     } else {
       if (!findPort(customStart)) {
         alert("Επίλεξε έγκυρο Start (custom).");
         return;
       }
-      const seq = buildRouteCustomByDays(
-        customStart,
-        customDayStops,
-        (name) => findPort(name)
-      );
+      const seq = buildRouteCustomByDays(customStart, customDayStops, (name) => findPort(name));
       if (!seq) {
         alert("Συμπλήρωσε έγκυρους προορισμούς για κάθε ημέρα.");
         return;
@@ -1293,18 +1140,12 @@ function AIPlannerInner() {
 
     const legs: Leg[] = [];
     for (let i = 0; i < coords.length - 1; i++) {
-      const nm = Math.max(
-        1,
-        Math.round(haversineNM(coords[i], coords[i + 1]))
-      );
+      const nm = Math.max(1, Math.round(haversineNM(coords[i], coords[i + 1])));
       const { hours, fuelL } = legStats(nm, yacht);
       const window = suggestWindow(region, hours, weatherAwareWin);
       const dep = depTime || "09:00";
       const arr = addHoursToTime(dep, hours);
-      const cost =
-        yachtType === "Motor"
-          ? Math.round(fuelL * fuelPrice)
-          : 0;
+      const cost = yachtType === "Motor" ? Math.round(fuelL * fuelPrice) : 0;
       legs.push({
         from: namesSeq![i],
         to: namesSeq![i + 1],
@@ -1319,64 +1160,30 @@ function AIPlannerInner() {
     const totalDays = (namesSeq?.length ?? 1) - 1;
     const cards: DayCard[] = [];
     for (let d = 0; d < totalDays; d++) {
-      const date = startDate
-        ? addDaysISO(startDate, d)
-        : "";
+      const date = startDate ? addDaysISO(startDate, d) : "";
       const leg = legs[d];
       const notes = [
-        mode === "Region" && region === "Cyclades"
-          ? "Meltemi possible· προτίμησε πρωινές μετακινήσεις."
-          : "",
-        mode === "Region" && region === "Saronic"
-          ? "Προστατευμένα νερά· ιδανικό για οικογένειες."
-          : "",
-        mode === "Region" && region === "Ionian"
-          ? "Ήρεμα κανάλια & πράσινες ακτές· εξαιρετικά αγκυροβόλια."
-          : "",
-        mode === "Region" && region === "Dodecanese"
-          ? "Ιστορικά λιμάνια· πιο μεγάλα ανοικτά σκέλη."
-          : "",
-        mode === "Region" && region === "Sporades"
-          ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά."
-          : "",
-        mode === "Region" && region === "NorthAegean"
-          ? "Αυθεντικά λιμάνια (incl. Χαλκιδική)."
-          : "",
-        mode === "Region" && region === "Crete"
-          ? "Μεγαλύτερα σκέλη· οργάνωσε καύσιμα & θέσεις."
-          : "",
-        prefs.includes("nightlife")
-          ? "Άφιξη αργά για βραδινό/μπαρ."
-          : "",
-        prefs.includes("family")
-          ? "Αμμουδιές & μικρότερα σκέλη."
-          : "",
-        prefs.includes("gastronomy")
-          ? "Κράτηση σε παραθαλάσσια ταβέρνα."
-          : "",
+        mode === "Region" && region === "Cyclades" ? "Meltemi possible· προτίμησε πρωινές μετακινήσεις." : "",
+        mode === "Region" && region === "Saronic" ? "Προστατευμένα νερά· ιδανικό για οικογένειες." : "",
+        mode === "Region" && region === "Ionian" ? "Ήρεμα κανάλια & πράσινες ακτές· εξαιρετικά αγκυροβόλια." : "",
+        mode === "Region" && region === "Dodecanese" ? "Ιστορικά λιμάνια· πιο μεγάλα ανοικτά σκέλη." : "",
+        mode === "Region" && region === "Sporades" ? "Θαλάσσιο πάρκο & πευκόφυτα νησιά." : "",
+        mode === "Region" && region === "NorthAegean" ? "Αυθεντικά λιμάνια (incl. Χαλκιδική)." : "",
+        mode === "Region" && region === "Crete" ? "Μεγαλύτερα σκέλη· οργάνωσε καύσιμα & θέσεις." : "",
+        prefs.includes("nightlife") ? "Άφιξη αργά για βραδινό/μπαρ." : "",
+        prefs.includes("family") ? "Αμμουδιές & μικρότερα σκέλη." : "",
+        prefs.includes("gastronomy") ? "Κράτηση σε παραθαλάσσια ταβέρνα." : "",
       ]
         .filter(Boolean)
         .join(" ");
-      cards.push({
-        day: d + 1,
-        date,
-        leg,
-        notes,
-        userNotes: {},
-      });
+      cards.push({ day: d + 1, date, leg, notes, userNotes: {} });
     }
 
-    const pending =
-      pendingNotesRef.current as Record<string, any> | null;
+    const pending = pendingNotesRef.current as Record<string, any> | null;
     if (pending && cards.length) {
       cards.forEach((c, idx) => {
         const key = String(idx + 1);
-        if (pending[key]) {
-          c.userNotes = {
-            ...(c.userNotes ?? {}),
-            ...pending[key],
-          };
-        }
+        if (pending[key]) c.userNotes = { ...(c.userNotes ?? {}), ...pending[key] };
       });
       pendingNotesRef.current = null;
     }
@@ -1384,32 +1191,12 @@ function AIPlannerInner() {
     setPlan(cards);
     setActiveTab("crew");
 
-    // Prefetch thumbs
-    (async () => {
-      const uniq = Array.from(new Set(legs.map((l) => l.to)));
-      const next: Record<string, string | undefined> = {};
-      for (const t of uniq) {
-        try {
-          const c = await fetchWikiCard(t);
-          next[t] = c.imageUrl;
-        } catch {
-          next[t] = undefined;
-        }
-      }
-      setThumbs(next);
-    })();
-
     // Prefetch LIVE WX for each destination (to)
     (async () => {
-      const uniqNames = Array.from(
-        new Set(legs.map((l) => l.to))
-      );
+      const uniqNames = Array.from(new Set(legs.map((l) => l.to)));
       const next: Record<string, SpotWeather> = {};
       for (const name of uniqNames) {
-        const p =
-          mode === "Region"
-            ? findPort(name, region)
-            : findPort(name);
+        const p = mode === "Region" ? findPort(name, region) : findPort(name);
         if (!p) continue;
         try {
           const w = await fetchSpotWeather(p.lat, p.lon);
@@ -1448,13 +1235,7 @@ function AIPlannerInner() {
     if (!plan?.length) return null;
     const obj: Record<string, any> = {};
     plan.forEach((c) => {
-      if (
-        c.userNotes &&
-        (c.userNotes.marina ||
-          c.userNotes.food ||
-          c.userNotes.beach)
-      )
-        obj[String(c.day)] = c.userNotes;
+      if (c.userNotes && (c.userNotes.marina || c.userNotes.food || c.userNotes.beach)) obj[String(c.day)] = c.userNotes;
     });
     return Object.keys(obj).length ? obj : null;
   }
@@ -1501,36 +1282,22 @@ function AIPlannerInner() {
     if (first) namesSeq.push(first);
     for (const d of plan) if (d.leg?.to) namesSeq.push(d.leg.to);
     return namesSeq
-      .map((n) =>
-        mode === "Region" ? findPort(n, region) : findPort(n)
-      )
+      .map((n) => (mode === "Region" ? findPort(n, region) : findPort(n)))
       .filter(Boolean) as PortCoord[];
   }, [plan, mode, region]);
 
-  const markers: { name: string; lat: number; lon: number }[] =
-    useMemo(() => {
-      if (!ready || !ports?.length) return [];
-      let list = ports as any[];
-      if (
-        mode === "Region" &&
-        regionMode !== "Auto" &&
-        mapPickMode === "Via"
-      ) {
-        const wanted = regionMode;
-        list = list.filter((p) => {
-          const r = (p.region ?? p.area ?? "").toString();
-          return (
-            r &&
-            normalize(r) === normalize(wanted as string)
-          );
-        });
-      }
-      return list.map((p) => ({
-        name: p.name,
-        lat: p.lat,
-        lon: p.lon,
-      }));
-    }, [ready, ports, mode, regionMode, mapPickMode]);
+  const markers: { name: string; lat: number; lon: number }[] = useMemo(() => {
+    if (!ready || !ports?.length) return [];
+    let list = ports as any[];
+    if (mode === "Region" && regionMode !== "Auto" && mapPickMode === "Via") {
+      const wanted = regionMode;
+      list = list.filter((p) => {
+        const r = (p.region ?? p.area ?? "").toString();
+        return r && normalize(r) === normalize(wanted as string);
+      });
+    }
+    return list.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon }));
+  }, [ready, ports, mode, regionMode, mapPickMode]);
 
   const activeNames = useMemo(() => {
     const set = new Set<string>();
@@ -1559,10 +1326,7 @@ function AIPlannerInner() {
     } else {
       if (mapPickMode === "Start") return void setCustomStart(pClean);
       if (mapPickMode === "Custom") {
-        const i = Math.max(
-          1,
-          Math.min(customDays, customPickIndex)
-        );
+        const i = Math.max(1, Math.min(customDays, customPickIndex));
         setCustomStopAt(i - 1, pClean);
         return;
       }
@@ -1573,10 +1337,7 @@ function AIPlannerInner() {
       }
       if (mapPickMode === "Via") {
         const i = customDayStops.findIndex((x) => !x);
-        setCustomStopAt(
-          i >= 0 ? i : customDayStops.length - 1,
-          pClean
-        );
+        setCustomStopAt(i >= 0 ? i : customDayStops.length - 1, pClean);
         return;
       }
     }
@@ -1586,16 +1347,16 @@ function AIPlannerInner() {
   return (
     <div className="bg-white text-slate-900">
       <section className="mx-auto max-w-7xl px-6 py-12">
-        <h1 className="text-3xl font-bold tracking-tight text-brand-navy no-print">
-          AI Itinerary Draft
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight text-brand-navy no-print">AI Itinerary Draft</h1>
+        <p className="mt-2 max-w-2xl text-slate-600 no-print">
+          <b>Auto AI Planner</b> ή πλήρως Custom. Βάλε ημερομηνία & στοιχεία σκάφους, πρόσθεσε στάσεις και κάνε generate.
+        </p>
 
-        {/* FORM (same as before) */}
+        {/* FORM */}
         <form onSubmit={handleGenerate} className="mt-6 grid grid-cols-1 gap-4 no-print">
+          {/* Mode selector */}
           <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm font-medium text-brand-navy">
-              Planner Mode
-            </label>
+            <label className="text-sm font-medium text-brand-navy">Planner Mode</label>
             <select
               value={mode}
               onChange={(e) => setMode(e.target.value as PlannerMode)}
@@ -1604,21 +1365,243 @@ function AIPlannerInner() {
               <option value="Region">Auto AI Planner</option>
               <option value="Custom">Custom (day-by-day)</option>
             </select>
-            {!ready && (
-              <span className="text-xs text-slate-500">
-                Φορτώνω ports…
-              </span>
-            )}
-            {error && (
-              <span className="text-xs text-red-600">
-                Σφάλμα dataset
-              </span>
-            )}
+            {!ready && <span className="text-xs text-slate-500">Φορτώνω ports…</span>}
+            {error && <span className="text-xs text-red-600">Σφάλμα dataset</span>}
           </div>
 
-          {/* ... (κρατάμε ακριβώς το υπόλοιπο form/controls σου, δεν το πειράζω) ... */}
-          {/* Για να μην σε πνίξω εδώ, είναι ίδιο με αυτό που ήδη έχεις στον κώδικα σου. */}
-          {/* Αν θες 100% byte-to-byte ίδιο, πες μου να το ξανακολλήσω όλο. */}
+          {/* Common controls */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-7">
+            <div className="flex flex-col md:col-span-2">
+              <label htmlFor="date" className="mb-1 text-xs font-medium text-gray-600">
+                Ημερομηνία αναχώρησης
+              </label>
+              <input
+                id="date"
+                type="date"
+                value={startDate || ""}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label htmlFor="yt" className="mb-1 text-xs font-medium text-gray-600">
+                Τύπος σκάφους
+              </label>
+              <select
+                id="yt"
+                value={yachtType}
+                onChange={(e) => setYachtType(e.target.value as YachtType)}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+              >
+                <option value="Motor">Motor</option>
+                <option value="Sailing">Sailing</option>
+              </select>
+            </div>
+            <div className="flex flex-col">
+              <label htmlFor="speed" className="mb-1 text-xs font-medium text-gray-600">
+                Ταχύτητα (kn)
+              </label>
+              <input
+                id="speed"
+                type="number"
+                min={4}
+                value={speed}
+                onChange={(e) => setSpeed(parseFloat(e.target.value || "10"))}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+                placeholder="π.χ. 20"
+              />
+            </div>
+            {yachtType === "Motor" && (
+              <>
+                <div className="flex flex-col">
+                  <label htmlFor="lph" className="mb-1 text-xs font-medium text-gray-600">
+                    Κατανάλωση (L/h)
+                  </label>
+                  <input
+                    id="lph"
+                    type="number"
+                    min={5}
+                    value={lph}
+                    onChange={(e) => setLph(parseFloat(e.target.value || "120"))}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+                    placeholder="π.χ. 180"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="fuel" className="mb-1 text-xs font-medium text-gray-600">
+                    Τιμή καυσίμου (€/L)
+                  </label>
+                  <input
+                    id="fuel"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={fuelPrice}
+                    onChange={(e) => setFuelPrice(parseFloat(e.target.value || "1.8"))}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+                    placeholder="π.χ. 1.80"
+                  />
+                </div>
+              </>
+            )}
+            <div className="flex flex-col">
+              <label htmlFor="dep" className="mb-1 text-xs font-medium text-gray-600">
+                Ώρα αναχώρησης
+              </label>
+              <input
+                id="dep"
+                type="time"
+                value={depTime}
+                onChange={(e) => setDepTime(e.target.value || "09:00")}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+              />
+            </div>
+            <label className="mt-7 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={weatherAwareWin} onChange={(e) => setWeatherAwareWin(e.target.checked)} />
+              Weather-aware window
+            </label>
+          </div>
+
+          {/* REGION MODE */}
+          {mode === "Region" && (
+            <>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="flex flex-col">
+                  <label className="mb-1 text-xs font-medium text-gray-600">Αφετηρία (λιμάνι)</label>
+                  <AutoCompleteInput value={start} onChange={setStart} placeholder="π.χ. Alimos / Άλιμος" options={PORT_OPTIONS} />
+                </div>
+                <div className="flex flex-col">
+                  <label className="mb-1 text-xs font-medium text-gray-600">Προορισμός (λιμάνι)</label>
+                  <AutoCompleteInput value={end} onChange={setEnd} placeholder="default: ίδιο με start" options={PORT_OPTIONS} />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="region" className="mb-1 text-xs font-medium text-gray-600">
+                    Περιοχή
+                  </label>
+                  <select
+                    id="region"
+                    value={regionMode}
+                    onChange={(e) => setRegionMode(e.target.value as any)}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+                  >
+                    <option value="Auto">Auto</option>
+                    <option value="Saronic">Saronic</option>
+                    <option value="Cyclades">Cyclades</option>
+                    <option value="Ionian">Ionian</option>
+                    <option value="Dodecanese">Dodecanese</option>
+                    <option value="Sporades">Sporades</option>
+                    <option value="NorthAegean">North Aegean</option>
+                    <option value="Crete">Crete</option>
+                  </select>
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="days" className="mb-1 text-xs font-medium text-gray-600">
+                    Ημέρες ταξιδιού
+                  </label>
+                  <input
+                    id="days"
+                    type="number"
+                    min={2}
+                    max={21}
+                    value={days}
+                    onChange={(e) => setDays(parseInt(e.target.value || "7", 10))}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+                    placeholder="π.χ. 7"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium text-brand-navy">Προαιρετικές διελεύσεις/στάσεις (σειρά)</div>
+                  <button
+                    type="button"
+                    onClick={addVia}
+                    className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
+                  >
+                    + Add Stop
+                  </button>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {vias.map((v, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <AutoCompleteInput value={v} onChange={(val) => setViaAt(i, val)} placeholder={`Stop ${i + 1}`} options={VIA_OPTIONS} />
+                      <button
+                        type="button"
+                        onClick={() => removeVia(i)}
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50"
+                        title="Remove stop"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* CUSTOM MODE */}
+          {mode === "Custom" && (
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="flex flex-col">
+                  <label className="mb-1 text-xs font-medium text-gray-600">Αφετηρία (Day 0)</label>
+                  <AutoCompleteInput value={customStart} onChange={setCustomStart} placeholder="Start" options={PORT_OPTIONS} />
+                </div>
+                <div className="flex flex-col">
+                  <label htmlFor="cdays" className="mb-1 text-xs font-medium text-gray-600">
+                    Ημέρες
+                  </label>
+                  <input
+                    id="cdays"
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={customDays}
+                    onChange={(e) => setCustomDays(parseInt(e.target.value || "7", 10))}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-gold"
+                    placeholder="π.χ. 7"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className="text-sm font-medium text-brand-navy">Προορισμοί ανά ημέρα</div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Συμπλήρωσε τον προορισμό <b>κάθε ημέρας</b> (τέλος ημέρας). Τα legs υπολογίζονται αυτόματα.
+                </p>
+                <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {customDayStops.map((stop, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-20 text-xs text-slate-500">Day {i + 1}</div>
+                      <AutoCompleteInput
+                        value={stop}
+                        onChange={(val) => setCustomStopAt(i, val)}
+                        placeholder={`Destination for Day ${i + 1}`}
+                        options={PORT_OPTIONS}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Preferences */}
+          <div className="flex flex-wrap gap-2">
+            {["family", "nightlife", "gastronomy"].map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => onTogglePref(p)}
+                className={`rounded-full border px-3 py-1 text-sm ${
+                  prefs.includes(p) ? "border-brand-navy bg-brand-navy text-white" : "border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
 
           <button
             id="generate-btn"
@@ -1634,33 +1617,48 @@ function AIPlannerInner() {
         {/* OUTPUT */}
         {plan && (
           <div className="mt-8" id="print-root">
-            {/* Tabs */}
-            <div className="mb-3 no-print">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setActiveTab("crew")}
-                  className={`px-4 py-2 rounded-2xl text-sm font-medium border ${
-                    activeTab === "crew"
-                      ? "bg-black text-white border-black"
-                      : "bg-white hover:bg-neutral-100"
-                  }`}
-                >
-                  For Captain & Crew
-                </button>
-                <button
-                  onClick={() => setActiveTab("vip")}
-                  className={`px-4 py-2 rounded-2xl text-sm font-medium border ${
-                    activeTab === "vip"
-                      ? "bg-black text-white border-black"
-                      : "bg-white hover:bg-neutral-100"
-                  }`}
-                >
-                  For VIP Guests
-                </button>
-              </div>
+            {/* Map toolbar */}
+            <div className="no-print mb-2 flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-brand-navy">Map Pick Mode:</span>
+              <label className="text-sm flex items-center gap-1">
+                <input type="radio" name="pick" checked={mapPickMode === "Start"} onChange={() => setMapPickMode("Start")} />
+                Start
+              </label>
+              <label className="text-sm flex items-center gap-1">
+                <input type="radio" name="pick" checked={mapPickMode === "End"} onChange={() => setMapPickMode("End")} />
+                End
+              </label>
+              <label className="text-sm flex items-center gap-1">
+                <input type="radio" name="pick" checked={mapPickMode === "Via"} onChange={() => setMapPickMode("Via")} />
+                {mode === "Region" ? "Via (Region)" : "Next Stop (Custom)"}{" "}
+              </label>
+
+              <label className="text-sm flex items-center gap-2 ml-2">
+                <input type="checkbox" checked={routeWeatherAware} onChange={(e) => setRouteWeatherAware(e.target.checked)} />
+                In-transit weather (routing)
+              </label>
+
+              {mode === "Custom" && (
+                <>
+                  <label className="text-sm flex items-center gap-1">
+                    <input type="radio" name="pick" checked={mapPickMode === "Custom"} onChange={() => setMapPickMode("Custom")} />
+                    Set Day:
+                  </label>
+                  <select
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                    value={customPickIndex}
+                    onChange={(e) => setCustomPickIndex(parseInt(e.target.value, 10))}
+                  >
+                    {Array.from({ length: customDays }, (_, i) => i + 1).map((d) => (
+                      <option key={d} value={d}>
+                        Day {d}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
 
-            {/* MAP (same) */}
             {mapPoints.length >= 1 && (
               <div className="no-print mb-6">
                 <div className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-200">
@@ -1673,11 +1671,36 @@ function AIPlannerInner() {
                     onLegMeteo={(rows) => setLegMeteo(rows)}
                   />
                 </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  * Map preview για σχεδιασμό. Η διακεκομμένη γραμμή είναι εκτίμηση, όχι ναυτικός διάδρομος.
+                </div>
               </div>
             )}
 
+            {/* Tabs */}
+            <div className="mb-3 no-print">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setActiveTab("crew")}
+                  className={`px-4 py-2 rounded-2xl text-sm font-medium border ${
+                    activeTab === "crew" ? "bg-black text-white border-black" : "bg-white hover:bg-neutral-100"
+                  }`}
+                >
+                  For Captain & Crew
+                </button>
+                <button
+                  onClick={() => setActiveTab("vip")}
+                  className={`px-4 py-2 rounded-2xl text-sm font-medium border ${
+                    activeTab === "vip" ? "bg-black text-white border-black" : "bg-white hover:bg-neutral-100"
+                  }`}
+                >
+                  For VIP Guests
+                </button>
+              </div>
+            </div>
+
             {/* CREW */}
-            {activeTab === "crew" && (
+            {activeTab === "crew" && plan && (
               <CaptainCrewToolkit
                 plan={plan}
                 startDate={startDate}
@@ -1691,7 +1714,7 @@ function AIPlannerInner() {
             )}
 
             {/* VIP */}
-            {activeTab === "vip" && (
+            {activeTab === "vip" && plan && (
               <>
                 <VipGuestsView
                   plan={plan}
@@ -1706,15 +1729,33 @@ function AIPlannerInner() {
                   <GenerateFinalItineraryButton
                     dayCards={plan}
                     yacht={{ type: yachtType, speed, lph }}
-                    tripTitle={
-                      mode === "Region"
-                        ? `${start} → ${end ?? start} • ${startDate}`
-                        : `Custom Cruise • ${startDate}`
-                    }
+                    tripTitle={mode === "Region" ? `${start} → ${end ?? start} • ${startDate}` : `Custom Cruise • ${startDate}`}
                   />
                 </div>
               </>
             )}
+
+            <div className="mb-4 flex items-center justify-between no-print mt-6">
+              <div className="text-sm text-slate-500">
+                Mode: <span className="font-medium text-brand-navy">{mode === "Region" ? "Auto AI Planner" : "Custom"}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+                >
+                  Copy link
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="rounded-xl border border-brand-navy bg-white px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-gold hover:text-brand-navy"
+                >
+                  Export PDF
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </section>
