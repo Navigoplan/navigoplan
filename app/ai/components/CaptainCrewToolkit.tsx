@@ -1,4 +1,3 @@
-// app/ai/components/CaptainCrewToolkit.tsx
 "use client";
 import React, { useMemo } from "react";
 
@@ -93,6 +92,67 @@ function renderVhf(vhf: any) {
     return parts.join(" • ");
   }
   return null;
+}
+
+/* ========= Facilities UI helpers ========= */
+const FAC_ICON: Record<string, string> = {
+  water: "💧",
+  electricity: "🔌",
+  fuel: "⛽",
+  restaurants: "🍽️",
+  shops: "🛍️",
+  atm: "🏧",
+  showers: "🚿",
+  laundry: "🧺",
+  repairs: "🛠️",
+  provisions: "🥫",
+  berths: "🛳️",
+  berth: "🛳️",
+  wifi: "📶",
+  pharmacy: "💊",
+  supermarket: "🛒",
+  taxi: "🚕",
+  hospital: "🏥",
+};
+
+function titleizeKey(k: string) {
+  return k
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function FacilityChip({
+  k,
+  v,
+}: {
+  k: string;
+  v: any;
+}) {
+  const icon = FAC_ICON[k] ?? "✅";
+  // Hide false / null / empty
+  if (v === false || v == null) return null;
+
+  // boolean true -> icon + label
+  if (v === true) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800">
+        <span>{icon}</span>
+        <span>{titleizeKey(k)}</span>
+      </span>
+    );
+  }
+
+  // string/number -> icon + label + short detail
+  const s = String(v).trim();
+  if (!s) return null;
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800">
+      <span>{icon}</span>
+      <span className="font-medium">{titleizeKey(k)}</span>
+      <span className="text-slate-600">• {s}</span>
+    </span>
+  );
 }
 
 /* ========= VHF + Hazards (seed) ========= */
@@ -224,7 +284,7 @@ export default function CaptainCrewToolkit({
     new Set([plan?.[0]?.leg?.from, ...plan.map((d) => d.leg?.to)].filter(Boolean) as string[])
   );
 
-  // ✅ SeaGuide: use globals without declaring types (fixes TS error)
+  // Globals (SeaGuide)
   const seaGuideLoaded = (window as any).__NAVIGOPLAN_SEAGUIDE__?.count ?? 0;
   const sgLookup = (window as any).__NAVIGOPLAN_SEAGUIDE_LOOKUP__ as undefined | ((stop: string, port?: any) => any);
   const sgExtract = (window as any).__NAVIGOPLAN_SEAGUIDE_EXTRACT__ as undefined | ((entry: any, lang?: "el" | "en") => any);
@@ -240,8 +300,6 @@ export default function CaptainCrewToolkit({
         out[stop] = null;
         continue;
       }
-
-      // try variants to catch “Island of …” etc (lightweight)
       const variants = [
         stop,
         stop.replace(/^Island of\s+/i, "").trim(),
@@ -263,16 +321,18 @@ export default function CaptainCrewToolkit({
 
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-      {/* HEADER */}
-      <div className="relative h-28 bg-gradient-to-r from-[#001428] via-[#012b55] to-[#001428]">
-        <div className="absolute inset-0 opacity-20 [background:radial-gradient(80%_60%_at_70%_30%,white,transparent)]" />
+      {/* HEADER (more readable) */}
+      <div className="relative h-28 bg-gradient-to-r from-[#071a2e] via-[#0b2d52] to-[#071a2e]">
+        <div className="absolute inset-0 opacity-10 [background:radial-gradient(80%_60%_at_70%_30%,white,transparent)]" />
         <div className="relative h-full flex items-center px-6">
           <div>
-            <div className="text-xs uppercase text-neutral-300">
+            <div className="text-xs uppercase text-neutral-200 tracking-wider">
               Navigoplan • Captain & Crew Toolkit
             </div>
-            <h2 className="text-2xl font-semibold text-white">Operational Plan</h2>
-            <div className="text-neutral-300 text-sm">
+            <h2 className="text-2xl font-semibold text-white drop-shadow-sm">
+              Operational Plan
+            </h2>
+            <div className="text-neutral-200 text-sm">
               Από {formatDate(startDate)} • {plan.length} days • {speed} kn{" "}
               {yachtType === "Motor" ? `• ${lph} L/h` : "• Sailing"}
             </div>
@@ -303,24 +363,16 @@ export default function CaptainCrewToolkit({
                     <td className="px-3 py-2">
                       {r.from} → {r.to}
                     </td>
-                    <td className="px-3 py-2">
-                      {Number.isFinite(r.avgWind) ? r.avgWind : "—"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {Number.isFinite(r.avgWave) ? r.avgWave : "—"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {Number.isFinite(r.maxWind) ? r.maxWind : "—"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {Number.isFinite(r.maxWave) ? r.maxWave : "—"}
-                    </td>
+                    <td className="px-3 py-2">{Number.isFinite(r.avgWind) ? r.avgWind : "—"}</td>
+                    <td className="px-3 py-2">{Number.isFinite(r.avgWave) ? r.avgWave : "—"}</td>
+                    <td className="px-3 py-2">{Number.isFinite(r.maxWind) ? r.maxWind : "—"}</td>
+                    <td className="px-3 py-2">{Number.isFinite(r.maxWave) ? r.maxWave : "—"}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td colSpan={5} className="px-3 py-3 text-slate-500">
-                    — No data (enable routing WX and regenerate) —
+                    — No data yet. Αυτό γεμίζει όταν το RouteMapClient υπολογίσει meteo πάνω στη διαδρομή —
                   </td>
                 </tr>
               )}
@@ -405,7 +457,9 @@ export default function CaptainCrewToolkit({
                       <>
                         {Math.round(wx.windKts)} kt • Bft {bft} ({bftLabel(bft)})
                         {wx.gustKts != null && <> • ριπές {Math.round(wx.gustKts)} kt</>}
-                        <div className="mt-1 text-[11px] text-slate-500">Waves: (coming soon)</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          Waves: (coming soon)
+                        </div>
                       </>
                     ) : (
                       "—"
@@ -421,7 +475,9 @@ export default function CaptainCrewToolkit({
                           <span
                             key={`h-${i}`}
                             className={`inline-block border rounded-full px-2 py-0.5 text-xs ${
-                              h.sev >= 2 ? "bg-amber-100 border-amber-200" : "bg-neutral-100 border-neutral-200"
+                              h.sev >= 2
+                                ? "bg-amber-100 border-amber-200"
+                                : "bg-neutral-100 border-neutral-200"
                             }`}
                             title={h.note}
                           >
@@ -429,7 +485,12 @@ export default function CaptainCrewToolkit({
                           </span>
                         ))}
                         {warns.map((w, i) => (
-                          <span key={`w-${i}`} className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(w.sev)}`}>
+                          <span
+                            key={`w-${i}`}
+                            className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(
+                              w.sev
+                            )}`}
+                          >
                             {w.text}
                           </span>
                         ))}
@@ -450,7 +511,9 @@ export default function CaptainCrewToolkit({
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-neutral-800">Captain’s Operational Brief (Sea Guide)</div>
+              <div className="text-sm font-semibold text-neutral-800">
+                Captain’s Operational Brief (Sea Guide)
+              </div>
               <div className="mt-1 text-xs text-slate-500">
                 VHF • Contacts • Seasonal Weather Patterns 🔵 • Approach • Anchorage • Protection • Mooring • Hazards • Captain Tips • VIP • Facilities
               </div>
@@ -465,59 +528,35 @@ export default function CaptainCrewToolkit({
               const entry = seaGuideByStop[stop] ?? null;
               const extracted = entry && sgExtract ? sgExtract(entry, "el") : null;
 
-              const vhf =
-                extracted?.vhf_port_authority ||
-                renderVhf(entry?.vhf) ||
-                null;
+              const vhf = extracted?.vhf_port_authority || renderVhf(entry?.vhf) || null;
+              const contacts = extracted?.contacts_port_authority || entry?.contacts || null;
 
-              const contacts =
-                extracted?.contacts_port_authority ||
-                entry?.contacts ||
-                null;
+              const weatherSummer = extracted?.weather_summer || pickText(entry?.weather?.summer, "el");
+              const weatherWinter = extracted?.weather_winter || pickText(entry?.weather?.winter, "el");
+              const approach = extracted?.approach || pickText(entry?.approach, "el");
 
-              const weatherSummer =
-                extracted?.weather_summer || pickText(entry?.weather?.summer, "el");
-              const weatherWinter =
-                extracted?.weather_winter || pickText(entry?.weather?.winter, "el");
+              const anchMin = extracted?.anch_depth_min ?? entry?.anchorage?.depth_m?.min;
+              const anchMax = extracted?.anch_depth_max ?? entry?.anchorage?.depth_m?.max;
+              const anchBottom = extracted?.anch_bottom ?? entry?.anchorage?.bottom ?? [];
+              const anchHolding = extracted?.anch_holding || pickText(entry?.anchorage?.holding, "el");
+              const windGood = extracted?.anch_protection_good ?? entry?.anchorage?.protection?.wind_good ?? [];
+              const windPoor = extracted?.anch_protection_poor ?? entry?.anchorage?.protection?.wind_poor ?? [];
 
-              const approach =
-                extracted?.approach || pickText(entry?.approach, "el");
-
-              const anchMin =
-                extracted?.anch_depth_min ?? entry?.anchorage?.depth_m?.min;
-              const anchMax =
-                extracted?.anch_depth_max ?? entry?.anchorage?.depth_m?.max;
-              const anchBottom =
-                extracted?.anch_bottom ?? entry?.anchorage?.bottom ?? [];
-              const anchHolding =
-                extracted?.anch_holding || pickText(entry?.anchorage?.holding, "el");
-              const windGood =
-                extracted?.anch_protection_good ?? entry?.anchorage?.protection?.wind_good ?? [];
-              const windPoor =
-                extracted?.anch_protection_poor ?? entry?.anchorage?.protection?.wind_poor ?? [];
-
-              const mooring =
-                extracted?.mooring || pickText(entry?.mooring, "el");
-
-              const hazards =
-                (extracted?.hazards as string[])?.length
-                  ? extracted.hazards
-                  : (entry?.hazards?.el || entry?.hazards?.en || []);
-
-              const tips =
-                (extracted?.captain_tips as string[])?.length
-                  ? extracted.captain_tips
-                  : (entry?.captain_tips?.el || entry?.captain_tips?.en || []);
-
-              const vip =
-                extracted?.vip_info || pickText(entry?.vip_info, "el");
+              const mooring = extracted?.mooring || pickText(entry?.mooring, "el");
+              const hazards = (extracted?.hazards as string[])?.length ? extracted.hazards : (entry?.hazards?.el || entry?.hazards?.en || []);
+              const tips = (extracted?.captain_tips as string[])?.length ? extracted.captain_tips : (entry?.captain_tips?.el || entry?.captain_tips?.en || []);
+              const vip = extracted?.vip_info || pickText(entry?.vip_info, "el");
 
               return (
                 <details key={stop} className="rounded-xl border border-slate-200">
                   <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-900">
                     {stop}
-                    {entry?.category ? <span className="ml-2 text-xs text-slate-500">{String(entry.category)}</span> : null}
-                    {entry?.region ? <span className="ml-2 text-xs text-slate-400">• {String(entry.region)}</span> : null}
+                    {entry?.category ? (
+                      <span className="ml-2 text-xs text-slate-500">{String(entry.category)}</span>
+                    ) : null}
+                    {entry?.region ? (
+                      <span className="ml-2 text-xs text-slate-400">• {String(entry.region)}</span>
+                    ) : null}
                   </summary>
 
                   <div className="border-t border-slate-200 px-3 py-3 text-sm text-slate-800">
@@ -532,6 +571,7 @@ export default function CaptainCrewToolkit({
                               <div className="text-sm">{vhf}</div>
                             </div>
                           )}
+
                           {contacts && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Contacts</div>
@@ -589,26 +629,31 @@ export default function CaptainCrewToolkit({
                               <div className="text-xs font-semibold text-slate-600">Anchorage Details</div>
                               {(anchMin != null || anchMax != null) && (
                                 <div className="text-sm">
-                                  <span className="text-xs text-slate-500">Depth:</span> {anchMin ?? "—"}–{anchMax ?? "—"} m
+                                  <span className="text-xs text-slate-500">Depth:</span>{" "}
+                                  {anchMin ?? "—"}–{anchMax ?? "—"} m
                                 </div>
                               )}
                               {Array.isArray(anchBottom) && anchBottom.length > 0 && (
                                 <div className="text-sm">
-                                  <span className="text-xs text-slate-500">Bottom:</span> {anchBottom.join(", ")}
+                                  <span className="text-xs text-slate-500">Bottom:</span>{" "}
+                                  {anchBottom.join(", ")}
                                 </div>
                               )}
                               {anchHolding && (
                                 <div className="mt-1 text-sm">
-                                  <span className="text-xs text-slate-500">Holding:</span> {anchHolding}
+                                  <span className="text-xs text-slate-500">Holding:</span>{" "}
+                                  {anchHolding}
                                 </div>
                               )}
                               <div className="mt-2 text-sm">
                                 <div className="text-xs font-semibold text-slate-500">Protection from Wind</div>
                                 <div className="text-sm">
-                                  <span className="text-xs text-slate-500">Wind good:</span> {(Array.isArray(windGood) ? windGood : []).join(", ") || "—"}
+                                  <span className="text-xs text-slate-500">Wind good:</span>{" "}
+                                  {(Array.isArray(windGood) ? windGood : []).join(", ") || "—"}
                                 </div>
                                 <div className="text-sm">
-                                  <span className="text-xs text-slate-500">Wind poor:</span> {(Array.isArray(windPoor) ? windPoor : []).join(", ") || "—"}
+                                  <span className="text-xs text-slate-500">Wind poor:</span>{" "}
+                                  {(Array.isArray(windPoor) ? windPoor : []).join(", ") || "—"}
                                 </div>
                               </div>
                             </div>
@@ -634,7 +679,7 @@ export default function CaptainCrewToolkit({
 
                           {tips.length > 0 && (
                             <div>
-                              <div className="text-xs font-semibold text-slate-600">Captain’s Tips</div>
+                              <div className="text-xs font-semibold text-slate-600">Captain’s tips</div>
                               <ul className="mt-1 list-disc pl-5 text-sm">
                                 {tips.map((t: string, idx: number) => (
                                   <li key={idx}>{t}</li>
@@ -643,15 +688,14 @@ export default function CaptainCrewToolkit({
                             </div>
                           )}
 
+                          {/* Facilities (icons + no "true") */}
                           {entry?.facilities && typeof entry.facilities === "object" && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Facilities & Services</div>
-                              <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                                {Object.entries(entry.facilities).map(([k, v]) => (
-                                  <span key={k} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-                                    {String(k).replace(/_/g, " ")}: {String(v)}
-                                  </span>
-                                ))}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {Object.entries(entry.facilities)
+                                  .map(([k, v]) => <FacilityChip key={k} k={k} v={v} />)
+                                  .filter(Boolean)}
                               </div>
                             </div>
                           )}
@@ -666,6 +710,7 @@ export default function CaptainCrewToolkit({
         </div>
       </div>
 
+      {/* FOOTER */}
       <div className="border-t bg-neutral-50 px-6 py-4 text-sm text-neutral-600">
         ⚓ Οι πληροφορίες προορίζονται για επιχειρησιακή καθοδήγηση και δεν αντικαθιστούν επίσημες Notice to Mariners ή forecast bulletins.
       </div>
