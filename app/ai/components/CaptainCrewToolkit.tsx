@@ -1,3 +1,4 @@
+// app/ai/components/CaptainCrewToolkit.tsx
 "use client";
 import React, { useMemo } from "react";
 
@@ -116,18 +117,10 @@ const FAC_ICON: Record<string, string> = {
 };
 
 function titleizeKey(k: string) {
-  return k
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function FacilityChip({
-  k,
-  v,
-}: {
-  k: string;
-  v: any;
-}) {
+function FacilityChip({ k, v }: { k: string; v: any }) {
   const icon = FAC_ICON[k] ?? "✅";
   // Hide false / null / empty
   if (v === false || v == null) return null;
@@ -321,7 +314,7 @@ export default function CaptainCrewToolkit({
 
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-      {/* HEADER (more readable) */}
+      {/* HEADER */}
       <div className="relative h-28 bg-gradient-to-r from-[#071a2e] via-[#0b2d52] to-[#071a2e]">
         <div className="absolute inset-0 opacity-10 [background:radial-gradient(80%_60%_at_70%_30%,white,transparent)]" />
         <div className="relative h-full flex items-center px-6">
@@ -402,110 +395,6 @@ export default function CaptainCrewToolkit({
         </div>
       )}
 
-      {/* TABLE */}
-      <div className="p-6 overflow-x-auto">
-        <table className="min-w-full border-collapse text-sm">
-          <thead>
-            <tr className="bg-neutral-100 text-neutral-700">
-              <th className="px-3 py-2 text-left">Day</th>
-              <th className="px-3 py-2 text-left">Date</th>
-              <th className="px-3 py-2 text-left">From → To</th>
-              <th className="px-3 py-2 text-left">NM</th>
-              <th className="px-3 py-2 text-left">Hours</th>
-              <th className="px-3 py-2 text-left">Depart</th>
-              <th className="px-3 py-2 text-left">Arrive</th>
-              <th className="px-3 py-2 text-left">Live Weather 🟢</th>
-              <th className="px-3 py-2 text-left">Live Wind & Waves 🟢</th>
-              <th className="px-3 py-2 text-left">VHF</th>
-              <th className="px-3 py-2 text-left">Hazards</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plan.map((d) => {
-              const l = d.leg;
-              const wx = l ? destWeather[l.to] : undefined;
-              const bft = ktToBeaufort(wx?.windKts);
-              const warns = computeWarnings(l, wx);
-              const localHaz = l?.to ? HAZARDS_MAP[l.to] ?? [] : [];
-
-              return (
-                <tr key={d.day} className="border-t align-top hover:bg-neutral-50">
-                  <td className="px-3 py-2 font-medium">{d.day}</td>
-                  <td className="px-3 py-2">{formatDate(d.date)}</td>
-                  <td className="px-3 py-2 font-medium text-brand-navy">
-                    {l ? `${l.from} → ${l.to}` : "—"}
-                  </td>
-                  <td className="px-3 py-2">{l?.nm ?? "—"}</td>
-                  <td className="px-3 py-2">{l ? formatHoursHM(l.hours) : "—"}</td>
-                  <td className="px-3 py-2">{l?.eta?.dep ?? "—"}</td>
-                  <td className="px-3 py-2">{l?.eta?.arr ?? "—"}</td>
-
-                  <td className="px-3 py-2 text-xs">
-                    {wx ? (
-                      <>
-                        {wx.label ?? "—"} {wx.tempC != null && <>({wx.tempC}°C)</>}
-                        {wx.cloudPct != null && <> • ☁ {wx.cloudPct}%</>}
-                        {wx.precipMM != null && <> • 🌧 {wx.precipMM}mm</>}
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-
-                  <td className="px-3 py-2 text-xs">
-                    {wx?.windKts != null ? (
-                      <>
-                        {Math.round(wx.windKts)} kt • Bft {bft} ({bftLabel(bft)})
-                        {wx.gustKts != null && <> • ριπές {Math.round(wx.gustKts)} kt</>}
-                        <div className="mt-1 text-[11px] text-slate-500">
-                          Waves: (coming soon)
-                        </div>
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-
-                  <td className="px-3 py-2">{l?.to ? VHF_MAP[l.to] ?? "—" : "—"}</td>
-
-                  <td className="px-3 py-2">
-                    {localHaz.length > 0 || warns.length > 0 ? (
-                      <div className="flex flex-col gap-1">
-                        {localHaz.map((h, i) => (
-                          <span
-                            key={`h-${i}`}
-                            className={`inline-block border rounded-full px-2 py-0.5 text-xs ${
-                              h.sev >= 2
-                                ? "bg-amber-100 border-amber-200"
-                                : "bg-neutral-100 border-neutral-200"
-                            }`}
-                            title={h.note}
-                          >
-                            ⚠ {h.label}
-                          </span>
-                        ))}
-                        {warns.map((w, i) => (
-                          <span
-                            key={`w-${i}`}
-                            className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(
-                              w.sev
-                            )}`}
-                          >
-                            {w.text}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-neutral-500">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
       {/* Captain’s Operational Brief (Sea Guide) */}
       <div className="px-6 pb-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -531,22 +420,6 @@ export default function CaptainCrewToolkit({
               const vhf = extracted?.vhf_port_authority || renderVhf(entry?.vhf) || null;
               const contacts = extracted?.contacts_port_authority || entry?.contacts || null;
 
-              const weatherSummer = extracted?.weather_summer || pickText(entry?.weather?.summer, "el");
-              const weatherWinter = extracted?.weather_winter || pickText(entry?.weather?.winter, "el");
-              const approach = extracted?.approach || pickText(entry?.approach, "el");
-
-              const anchMin = extracted?.anch_depth_min ?? entry?.anchorage?.depth_m?.min;
-              const anchMax = extracted?.anch_depth_max ?? entry?.anchorage?.depth_m?.max;
-              const anchBottom = extracted?.anch_bottom ?? entry?.anchorage?.bottom ?? [];
-              const anchHolding = extracted?.anch_holding || pickText(entry?.anchorage?.holding, "el");
-              const windGood = extracted?.anch_protection_good ?? entry?.anchorage?.protection?.wind_good ?? [];
-              const windPoor = extracted?.anch_protection_poor ?? entry?.anchorage?.protection?.wind_poor ?? [];
-
-              const mooring = extracted?.mooring || pickText(entry?.mooring, "el");
-              const hazards = (extracted?.hazards as string[])?.length ? extracted.hazards : (entry?.hazards?.el || entry?.hazards?.en || []);
-              const tips = (extracted?.captain_tips as string[])?.length ? extracted.captain_tips : (entry?.captain_tips?.el || entry?.captain_tips?.en || []);
-              const vip = extracted?.vip_info || pickText(entry?.vip_info, "el");
-
               return (
                 <details key={stop} className="rounded-xl border border-slate-200">
                   <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-900">
@@ -554,153 +427,38 @@ export default function CaptainCrewToolkit({
                     {entry?.category ? (
                       <span className="ml-2 text-xs text-slate-500">{String(entry.category)}</span>
                     ) : null}
-                    {entry?.region ? (
-                      <span className="ml-2 text-xs text-slate-400">• {String(entry.region)}</span>
-                    ) : null}
+                    {/* ✅ region label intentionally hidden (ambiguous matches) */}
                   </summary>
 
                   <div className="border-t border-slate-200 px-3 py-3 text-sm text-slate-800">
                     {!entry ? (
                       <div className="text-xs text-slate-500">No Sea Guide match for this stop yet.</div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <div className="space-y-3">
-                          {vhf && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">VHF & Communications</div>
-                              <div className="text-sm">{vhf}</div>
-                            </div>
-                          )}
-
-                          {contacts && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">Contacts</div>
-                              {typeof contacts === "string" ? (
-                                <div className="text-sm">{contacts}</div>
-                              ) : (
-                                <div className="text-sm space-y-1">
-                                  {Object.entries(contacts).map(([k, v]) => (
-                                    <div key={k}>
-                                      <span className="text-xs text-slate-500">{String(k).replace(/_/g, " ")}:</span>{" "}
-                                      <span>{String(v)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {(weatherSummer || weatherWinter) && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">Seasonal Weather Patterns 🔵</div>
-                              {weatherSummer && (
-                                <div className="mt-1">
-                                  <div className="text-[11px] font-semibold text-slate-500">Summer</div>
-                                  <div className="text-sm">{weatherSummer}</div>
-                                </div>
-                              )}
-                              {weatherWinter && (
-                                <div className="mt-2">
-                                  <div className="text-[11px] font-semibold text-slate-500">Winter</div>
-                                  <div className="text-sm">{weatherWinter}</div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {approach && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">Approach & Entry</div>
-                              <div className="text-sm">{approach}</div>
-                            </div>
-                          )}
-
-                          {vip && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">VIP Info</div>
-                              <div className="text-sm">{vip}</div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-3">
-                          {(anchMin != null || anchMax != null || anchHolding || (anchBottom?.length ?? 0) > 0) && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">Anchorage Details</div>
-                              {(anchMin != null || anchMax != null) && (
-                                <div className="text-sm">
-                                  <span className="text-xs text-slate-500">Depth:</span>{" "}
-                                  {anchMin ?? "—"}–{anchMax ?? "—"} m
-                                </div>
-                              )}
-                              {Array.isArray(anchBottom) && anchBottom.length > 0 && (
-                                <div className="text-sm">
-                                  <span className="text-xs text-slate-500">Bottom:</span>{" "}
-                                  {anchBottom.join(", ")}
-                                </div>
-                              )}
-                              {anchHolding && (
-                                <div className="mt-1 text-sm">
-                                  <span className="text-xs text-slate-500">Holding:</span>{" "}
-                                  {anchHolding}
-                                </div>
-                              )}
-                              <div className="mt-2 text-sm">
-                                <div className="text-xs font-semibold text-slate-500">Protection from Wind</div>
-                                <div className="text-sm">
-                                  <span className="text-xs text-slate-500">Wind good:</span>{" "}
-                                  {(Array.isArray(windGood) ? windGood : []).join(", ") || "—"}
-                                </div>
-                                <div className="text-sm">
-                                  <span className="text-xs text-slate-500">Wind poor:</span>{" "}
-                                  {(Array.isArray(windPoor) ? windPoor : []).join(", ") || "—"}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {mooring && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">Mooring & Berthing</div>
-                              <div className="text-sm">{mooring}</div>
-                            </div>
-                          )}
-
-                          {hazards.length > 0 && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">Hazards & Local Risks</div>
-                              <ul className="mt-1 list-disc pl-5 text-sm">
-                                {hazards.map((h: string, idx: number) => (
-                                  <li key={idx}>{h}</li>
+                      <>
+                        {vhf && (
+                          <div className="mb-2">
+                            <div className="text-xs font-semibold text-slate-600">VHF & Communications</div>
+                            <div className="text-sm">{vhf}</div>
+                          </div>
+                        )}
+                        {contacts && (
+                          <div>
+                            <div className="text-xs font-semibold text-slate-600">Contacts</div>
+                            {typeof contacts === "string" ? (
+                              <div className="text-sm">{contacts}</div>
+                            ) : (
+                              <div className="text-sm space-y-1">
+                                {Object.entries(contacts).map(([k, v]) => (
+                                  <div key={k}>
+                                    <span className="text-xs text-slate-500">{String(k).replace(/_/g, " ")}:</span>{" "}
+                                    <span>{String(v)}</span>
+                                  </div>
                                 ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {tips.length > 0 && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">Captain’s tips</div>
-                              <ul className="mt-1 list-disc pl-5 text-sm">
-                                {tips.map((t: string, idx: number) => (
-                                  <li key={idx}>{t}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {/* Facilities (icons + no "true") */}
-                          {entry?.facilities && typeof entry.facilities === "object" && (
-                            <div>
-                              <div className="text-xs font-semibold text-slate-600">Facilities & Services</div>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {Object.entries(entry.facilities)
-                                  .map(([k, v]) => <FacilityChip key={k} k={k} v={v} />)
-                                  .filter(Boolean)}
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </details>
