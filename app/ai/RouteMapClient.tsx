@@ -63,6 +63,9 @@ const GRID_MARGIN_DEG = 0.75;
 const NEAR_LAND_PENALTY = 1.2;
 const SIMPLIFY_EPS = 0.003;
 
+// ✅ OOM guard
+const MAX_GRID_CELLS = 220_000;
+
 /* Weather impact (penalty) */
 const WEATHER_WIND_REF = 12;
 const WEATHER_WAVE_REF = 2.0;
@@ -147,6 +150,10 @@ type GridNode = {
 function buildGridForBounds(minLat:number,maxLat:number,minLon:number,maxLon:number,coastPolys: PolyRings[],cellDeg:number) {
   const rows = Math.max(12, Math.ceil((maxLat - minLat) / cellDeg));
   const cols = Math.max(12, Math.ceil((maxLon - minLon) / cellDeg));
+
+  // ✅ hard cap to prevent OOM
+  if (rows * cols > MAX_GRID_CELLS) return null;
+
   const grid: GridNode[][] = new Array(rows);
 
   for (let r = 0; r < rows; r++) {
@@ -179,20 +186,6 @@ function buildGridForBounds(minLat:number,maxLat:number,minLon:number,maxLon:num
 
 /* ---- Weather (Open-Meteo Marine) ---- */
 const _weatherCache = new Map<string, WeatherField>();
-
-function closestTimeIndex(times: any[], nowMs: number) {
-  if (!Array.isArray(times) || !times.length) return 0;
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < times.length; i++) {
-    const ms = Date.parse(String(times[i]));
-    if (!Number.isFinite(ms)) continue;
-    const d = Math.abs(ms - nowMs);
-    if (d < bestD) { bestD = d; best = i; }
-  }
-  return best;
-}
-
 async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLon:number): Promise<WeatherField|null> {
   const step = 0.3;
   const lats:number[] = []; const lons:number[] = [];
@@ -200,8 +193,6 @@ async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLo
   for (let lon = Math.floor(minLon/step)*step; lon <= maxLon; lon += step) lons.push(parseFloat(lon.toFixed(2)));
 
   const latParam = lats.join(","); const lonParam = lons.join(",");
-
-  // ✅ timezone fixed to UTC for stable parsing
   const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${latParam}&longitude=${lonParam}&hourly=wave_height,wind_speed_10m&length_unit=metric&windspeed_unit=ms&timezone=UTC`;
 
   try {
@@ -213,13 +204,26 @@ async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLo
     const results = data?.results ?? [data];
     const nowMs = Date.now();
 
+    // find closest time index
+    const pickIdx = (times: any[]) => {
+      if (!Array.isArray(times) || !times.length) return 0;
+      let best = 0, bestD = Infinity;
+      for (let i = 0; i < times.length; i++) {
+        const ms = Date.parse(String(times[i]));
+        if (!Number.isFinite(ms)) continue;
+        const d = Math.abs(ms - nowMs);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return best;
+    };
+
     for (let i=0;i<results.length;i++){
       const r = results[i];
       const lat = Array.isArray(data.latitude) ? data.latitude[i] : (r?.latitude ?? data.latitude);
       const lon = Array.isArray(data.longitude)? data.longitude[i] : (r?.longitude ?? data.longitude);
 
       const times: any[] = r?.hourly?.time ?? data?.hourly?.time ?? [];
-      const idx = closestTimeIndex(times, nowMs);
+      const idx = pickIdx(times);
 
       const windArr = (r?.hourly?.wind_speed_10m ?? data?.hourly?.wind_speed_10m) ?? [];
       const waveArr = (r?.hourly?.wave_height ?? data?.hourly?.wave_height) ?? [];
@@ -453,16 +457,25 @@ export default function RouteMapClient({
         const maxLat = Math.max(a.lat, b.lat) + GRID_MARGIN_DEG;
         const minLon = Math.min(a.lon, b.lon) - GRID_MARGIN_DEG;
         const maxLon = Math.max(a.lon, b.lon) + GRID_MARGIN_DEG;
-        const { grid, nodeFor } = buildGridForBounds(minLat, maxLat, minLon, maxLon, coastPolys, cellDeg);
-        const start = nodeFor(a.lat, a.lon);
-        const goal  = nodeFor(b.lat, b.lon);
-        const field = weatherAware ? (weatherFieldsForLeg[i] ?? null) : null;
 
-        const path = aStarWater(grid, start, goal, field, weatherAware);
-        if (path) {
-          const mid = path.map(n => [n.lat, n.lon] as [number, number]);
-          const midS = simplifyRDP(mid, SIMPLIFY_EPS);
-          seg = [[a.lat, a.lon], ...midS, [b.lat, b.lon]];
+        const built = buildGridForBounds(minLat, maxLat, minLon, maxLon, coastPolys, cellDeg);
+        if (!built) {
+          // ✅ OOM guard fallback
+          seg = [[a.lat, a.lon], [b.lat, b.lon]];
+        } else {
+          const { grid, nodeFor } = built;
+          const start = nodeFor(a.lat, a.lon);
+          const goal  = nodeFor(b.lat, b.lon);
+          const field = weatherAware ? (weatherFieldsForLeg[i] ?? null) : null;
+
+          const path = aStarWater(grid, start, goal, field, weatherAware);
+          if (path) {
+            const mid = path.map(n => [n.lat, n.lon] as [number, number]);
+            const midS = simplifyRDP(mid, SIMPLIFY_EPS);
+            seg = [[a.lat, a.lon], ...midS, [b.lat, b.lon]];
+          } else {
+            seg = [[a.lat, a.lon], [b.lat, b.lon]];
+          }
         }
       }
       if (!seg) seg = [[a.lat, a.lon], [b.lat, b.lon]];
@@ -533,7 +546,7 @@ export default function RouteMapClient({
       }
     }
     onLegMeteo(out);
-  }, [onLegMeteo, legSegments, weatherFieldsForLeg, effPoints, weatherAware]);
+  }, [onLegMeteo, legSegments, weatherFieldsForLeg, effPoints]);
 
   /* progressive draw */
   const [drawCount, setDrawCount] = useState(0);
@@ -560,7 +573,7 @@ export default function RouteMapClient({
     return legEndIdx.length - 1;
   }, [drawCount, legEndIdx]);
 
-  /* follow ship / auto-zoom (controlled by followShip) */
+  /* follow ship / auto-zoom */
   const lastFollowedPointRef = useRef<string>("");
   const prevLegRef = useRef<number>(-999);
 
@@ -594,11 +607,6 @@ export default function RouteMapClient({
     map.flyTo(tip as any, targetZoom, { duration: 0.5 });
   }, [animatedLatLngs, followShip, map]);
 
-  /* markers */
-  const markerStart = effPoints[0] ?? null;
-  const markerMids  = effPoints.slice(1, -1);
-  const markerEnd   = effPoints.at(-1) ?? null;
-
   /* bounds/center */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if ((waterLatLngs?.length ?? 0) < 2) return null;
@@ -624,82 +632,39 @@ export default function RouteMapClient({
       <MapContainer center={center} zoom={7} minZoom={3} maxZoom={14} scrollWheelZoom style={{ height:"100%", width:"100%" }}>
         <CaptureMap onReady={setMap} />
 
-        {/* GEBCO */}
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
           <TileLayer attribution="&copy; GEBCO" url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png" opacity={0.9} />
         </Pane>
 
-        {/* water tint */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
           <Rectangle bounds={WORLD_BOUNDS} pathOptions={{ color:"transparent", weight:0, fillColor:"#7fa8d8", fillOpacity:0.35 }} interactive={false} />
         </Pane>
 
-        {/* land */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (<GeoJSON data={coast} style={() => ({ color:"#0b1220", weight:2, opacity:1, fillColor:"#ffffff", fillOpacity:1 })} />)}
         </Pane>
 
-        {/* labels */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
           <TileLayer attribution="&copy; OpenStreetMap contributors, &copy; CARTO" url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.75} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
           <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.25} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png" tileSize={256} zoomOffset={0} detectRetina opacity={0.55} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
         </Pane>
 
-        {/* seamarks */}
         <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
-        {/* full route shadow */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline pane="pane-route-shadow" positions={waterLatLngs} pathOptions={{ color:"#9aa3b2", weight:2, opacity:0.6, lineJoin:"round", lineCap:"round" }} />
           )}
         </Pane>
 
-        {/* progressive dashed route */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {animatedLatLngs.length >= 2 && (
             <Polyline pane="pane-route" positions={animatedLatLngs} pathOptions={{ color:"#0b1220", weight:3, opacity:0.95, dashArray:"6 8", lineJoin:"round", lineCap:"round" }} />
           )}
-
-          {markerStart && (
-            <AnimatedDot center={[markerStart.lat, markerStart.lon] as LatLngExpression} label={`Start: ${effPoints[0]?.name}`} active appearAtMs={0} baseRadius={8} />
-          )}
-
-          {markerMids.map((p, i) => {
-            const legIdx = i;
-            const appearWhenIdx = legEndIdx[legIdx] ?? 0;
-            const appearAt = (appearWhenIdx + 1) * DRAW_INTERVAL_MS;
-            const active = isActive(p.name);
-            return (
-              <AnimatedDot key={`${p.name}-${i}`} center={[p.lat, p.lon] as LatLngExpression} label={p.name} active={active} appearAtMs={appearAt} onClick={() => flyTo(p.name, p.lat, p.lon)} baseRadius={5} />
-            );
-          })}
-
-          {markerEnd && (
-            <AnimatedDot center={[markerEnd.lat, markerEnd.lon] as LatLngExpression} label={`End: ${effPoints.at(-1)?.name}`} active appearAtMs={(legEndIdx[legEndIdx.length - 1] ?? 0) * DRAW_INTERVAL_MS} onClick={() => flyTo(markerEnd.name, markerEnd.lat, markerEnd.lon)} baseRadius={8} />
-          )}
         </Pane>
-
-        {/* dataset markers */}
-        {markers?.length ? (
-          <Pane name="pane-dataset" style={{ zIndex: 430 }}>
-            {markers.map((m, i) => (
-              <CircleMarker
-                key={`${m.name}-${i}`}
-                pane="pane-dataset"
-                center={[m.lat, m.lon] as LatLngExpression}
-                radius={3.5}
-                eventHandlers={{ click: () => flyTo(m.name, m.lat, m.lon) }}
-                pathOptions={{ color: isActive(m.name) ? "#c4a962" : "#0b122033", fillColor: isActive(m.name) ? "#c4a962" : "#0b122033", fillOpacity: isActive(m.name) ? 0.95 : 0.5, weight: isActive(m.name) ? 2 : 1 }}
-              >
-                {isActive(m.name) && (<Tooltip direction="top" offset={[0,-6]} opacity={0.95}>{m.name}</Tooltip>)}
-              </CircleMarker>
-            ))}
-          </Pane>
-        ) : null}
 
         {bounds && <FitBounds bounds={bounds} />}
       </MapContainer>
