@@ -57,7 +57,9 @@ export function FinalVideoFlow({
   video4Url,
   fullPayload,
 }: Props) {
-  const [mode, setMode] = useState<"idle" | "video" | "card" | "finalReveal">("idle");
+  const [mode, setMode] = useState<"idle" | "video" | "card" | "finalReveal">(
+    "idle"
+  );
   const [activeDay, setActiveDay] = useState(0);
 
   const [currentVideo, setCurrentVideo] = useState<VideoId | null>(null);
@@ -68,8 +70,8 @@ export function FinalVideoFlow({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
 
-  // Used to allow the first play to be user-gesture initiated
-  const playTokenRef = useRef(0);
+  // ✅ First-play MUST be user-gesture initiated
+  const gesturePlayArmedRef = useRef(false);
 
   const isLastDay = activeDay === days.length - 1;
   const isPenultimateDay = activeDay === days.length - 2;
@@ -89,64 +91,60 @@ export function FinalVideoFlow({
 
   const isVideoStep = mode === "video" && !!currentVideo && !!videoSrc;
 
-  /* ========= Helper: safe play ========= */
   function primeVideo(el: HTMLVideoElement) {
-    // autoplay policies: must be muted for programmatic play
     el.muted = true;
     el.playsInline = true;
     (el as any).webkitPlaysInline = true;
-    el.controls = false;
     el.preload = "metadata";
+    el.controls = false;
     (el as any).disablePictureInPicture = true;
     (el as any).controlsList = "nodownload nofullscreen noremoteplayback";
   }
 
-  async function tryPlay(el: HTMLVideoElement) {
+  async function hardPlay(el: HTMLVideoElement) {
     try {
       primeVideo(el);
-      // Force reload current src
       el.pause();
       el.currentTime = 0;
       el.load();
-
       const p = el.play();
-      if (p && typeof (p as any).then === "function") {
-        await p;
-      }
+      if (p && typeof (p as any).then === "function") await p;
       setVideoError(null);
       return true;
-    } catch (e) {
+    } catch {
       setVideoError("Autoplay was blocked. Click the video once to start.");
       return false;
     }
   }
 
-  /* ========= Auto play when video changes ========= */
+  /* ========= Auto play on video change (for v2/v3/v4) ========= */
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
 
-    if (isVideoStep && videoSrc) {
-      // When started from a user gesture we increment token; allow that frame to play immediately.
-      const token = playTokenRef.current;
-
-      // Run asap, but keep it resilient if not gesture
-      const id = window.requestAnimationFrame(() => {
-        // If token changed while waiting, we still try for current
-        if (videoRef.current) {
-          tryPlay(videoRef.current);
-        }
-      });
-
-      return () => window.cancelAnimationFrame(id);
-    } else {
+    if (!isVideoStep || !videoSrc) {
       el.pause();
       setVideoError(null);
+      return;
     }
+
+    // If we are armed (first video started via Start click), we will NOT rely on this effect
+    if (gesturePlayArmedRef.current) return;
+
+    // For subsequent videos, try normal play (usually allowed after a gesture happened once)
+    const id = window.requestAnimationFrame(() => {
+      if (videoRef.current) hardPlay(videoRef.current);
+    });
+
+    return () => window.cancelAnimationFrame(id);
   }, [isVideoStep, videoSrc]);
 
   /* ========= Start a sequence ========= */
-  function startVideoSequence(vids: VideoId[], after: "card" | "finalReveal", dayIndex: number) {
+  function startVideoSequence(
+    vids: VideoId[],
+    after: "card" | "finalReveal",
+    dayIndex: number
+  ) {
     if (!vids.length) return;
     setQueue(vids);
     setCurrentVideo(vids[0]);
@@ -155,25 +153,33 @@ export function FinalVideoFlow({
     setMode("video");
   }
 
-  /* ========= Start Journey (USER GESTURE PLAY) ========= */
+  /* ========= Start Journey (USER GESTURE DIRECT PLAY) ========= */
   async function handleStartJourney() {
     if (!days.length) return;
 
+    setVideoError(null);
     setActiveDay(0);
+
+    // set up first video state
     setQueue(["v1"]);
     setCurrentVideo("v1");
     setNextStep("card");
     setNextDayIndex(0);
     setMode("video");
 
-    // Mark this as user-initiated play attempt
-    playTokenRef.current += 1;
+    // ✅ arm direct play for this render
+    gesturePlayArmedRef.current = true;
 
-    // Wait one frame for <video> to be in DOM with correct src, then play
+    // Wait 1 frame so <video> exists with src, then play immediately (still within gesture chain)
     requestAnimationFrame(async () => {
       const el = videoRef.current;
-      if (!el) return;
-      await tryPlay(el);
+      if (!el) {
+        gesturePlayArmedRef.current = false;
+        return;
+      }
+      await hardPlay(el);
+      // disarm so next videos can be played by effect
+      gesturePlayArmedRef.current = false;
     });
   }
 
@@ -221,10 +227,13 @@ export function FinalVideoFlow({
   function renderStartOverlay() {
     return (
       <div className="pointer-events-auto max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-5 py-4 text-center">
-        <div className="text-xs uppercase text-gray-500">Navigoplan • Virtual Journey</div>
+        <div className="text-xs uppercase text-gray-500">
+          Navigoplan • Virtual Journey
+        </div>
         <div className="mt-2 text-xl font-semibold">Start your journey</div>
         <p className="mt-2 text-sm text-gray-700">
-          Press <b>Start the journey</b> to watch your yacht leaving the berth and begin Day 1.
+          Press <b>Start the journey</b> to watch your yacht leaving the berth
+          and begin Day 1.
         </p>
         <div className="mt-4 flex justify-center">
           <button
@@ -245,7 +254,9 @@ export function FinalVideoFlow({
     return (
       <div className="pointer-events-auto max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-5 py-4">
         <div className="text-xs uppercase text-gray-500">VIP Day {day}</div>
-        <div className="text-xl font-semibold mt-1">{leg ? `${leg.from} → ${leg.to}` : "Leisure Day"}</div>
+        <div className="text-xl font-semibold mt-1">
+          {leg ? `${leg.from} → ${leg.to}` : "Leisure Day"}
+        </div>
         <div className="mt-2 text-sm text-gray-700">
           {date && (
             <>
@@ -255,11 +266,16 @@ export function FinalVideoFlow({
           )}
           {leg && (
             <>
-              NM: {(leg.nm ?? 0).toFixed(1)} • Time: {formatHM(leg.hours)} • Fuel: {(leg.fuelL ?? 0).toFixed(0)} L
+              NM: {(leg.nm ?? 0).toFixed(1)} • Time: {formatHM(leg.hours)} •
+              Fuel: {(leg.fuelL ?? 0).toFixed(0)} L
             </>
           )}
         </div>
-        {notes && <div className="mt-2 text-sm text-gray-800 whitespace-pre-wrap">📝 {notes}</div>}
+        {notes && (
+          <div className="mt-2 text-sm text-gray-800 whitespace-pre-wrap">
+            📝 {notes}
+          </div>
+        )}
         <div className="mt-4 flex justify-end">
           <button
             onClick={handleDayCardButton}
@@ -273,26 +289,45 @@ export function FinalVideoFlow({
   }
 
   function renderFinalReveal() {
-    const cards: any[] = Array.isArray(fullPayload?.dayCards) ? fullPayload.dayCards : [];
+    const cards: any[] = Array.isArray(fullPayload?.dayCards)
+      ? fullPayload.dayCards
+      : [];
 
     return (
       <div className="pointer-events-auto max-w-4xl w-[92vw] rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-6 py-5">
-        <div className="text-xs uppercase text-gray-500">Final VIP Itinerary</div>
-        <div className="text-xl font-semibold mt-1 mb-3">{fullPayload?.tripTitle ?? "Final Itinerary"}</div>
+        <div className="text-xs uppercase text-gray-500">
+          Final VIP Itinerary
+        </div>
+        <div className="text-xl font-semibold mt-1 mb-3">
+          {fullPayload?.tripTitle ?? "Final Itinerary"}
+        </div>
 
         <div className="space-y-2 text-sm text-gray-800 max-h-[420px] overflow-auto">
           {(cards.length ? cards : days).map((d: any) => (
-            <div key={d.day} className="rounded-lg border border-gray-200 px-3 py-2 bg-white">
+            <div
+              key={d.day}
+              className="rounded-lg border border-gray-200 px-3 py-2 bg-white"
+            >
               <div className="font-semibold text-gray-900">
                 Day {d.day} {d.leg ? `– ${d.leg.from} → ${d.leg.to}` : ""}
               </div>
-              {d.date && <div className="text-xs text-gray-500">📅 {formatDate(d.date)}</div>}
-              {d.leg && (
-                <div className="text-xs mt-1">
-                  NM: {(d.leg.nm ?? 0).toFixed(1)} • Time: {formatHM(d.leg.hours)} • Fuel: {(d.leg.fuelL ?? 0).toFixed(0)} L
+              {d.date && (
+                <div className="text-xs text-gray-500">
+                  📅 {formatDate(d.date)}
                 </div>
               )}
-              {d.notes && <div className="mt-2 text-xs whitespace-pre-wrap">📝 {d.notes}</div>}
+              {d.leg && (
+                <div className="text-xs mt-1">
+                  NM: {(d.leg.nm ?? 0).toFixed(1)} • Time:{" "}
+                  {formatHM(d.leg.hours)} • Fuel:{" "}
+                  {(d.leg.fuelL ?? 0).toFixed(0)} L
+                </div>
+              )}
+              {d.notes && (
+                <div className="mt-2 text-xs whitespace-pre-wrap">
+                  📝 {d.notes}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -315,8 +350,15 @@ export function FinalVideoFlow({
             autoPlay
             preload="metadata"
             onEnded={handleVideoEnded}
-            onError={() => setVideoError("Video failed to load (check path & deployment).")}
-            controls
+            onError={() =>
+              setVideoError("Video failed to load (check path & deployment).")
+            }
+            onClick={() => {
+              // If autoplay got blocked, a click should start it
+              const el = videoRef.current;
+              if (!el) return;
+              hardPlay(el);
+            }}
           />
         )}
 
@@ -337,7 +379,9 @@ export function FinalVideoFlow({
           {mode === "idle" && <div className="mt-6">{renderStartOverlay()}</div>}
           {mode === "card" && <div className="mt-6">{renderDayCard()}</div>}
           {mode === "finalReveal" && (
-            <div className="mt-6 flex justify-center w-full">{renderFinalReveal()}</div>
+            <div className="mt-6 flex justify-center w-full">
+              {renderFinalReveal()}
+            </div>
           )}
         </div>
       </div>
