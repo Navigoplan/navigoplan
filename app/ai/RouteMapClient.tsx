@@ -1,4 +1,3 @@
-// app/ai/RouteMapClient.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -186,8 +185,7 @@ function closestTimeIndex(times: any[], nowMs: number) {
   let best = 0;
   let bestD = Infinity;
   for (let i = 0; i < times.length; i++) {
-    const t = times[i];
-    const ms = Date.parse(String(t));
+    const ms = Date.parse(String(times[i]));
     if (!Number.isFinite(ms)) continue;
     const d = Math.abs(ms - nowMs);
     if (d < bestD) { bestD = d; best = i; }
@@ -203,10 +201,8 @@ async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLo
 
   const latParam = lats.join(","); const lonParam = lons.join(",");
 
-  // ✅ timezone=UTC so time strings parse consistently
-  const url =
-    `https://marine-api.open-meteo.com/v1/marine?latitude=${latParam}&longitude=${lonParam}` +
-    `&hourly=wave_height,wind_speed_10m&length_unit=metric&windspeed_unit=ms&timezone=UTC`;
+  // ✅ timezone fixed to UTC for stable parsing
+  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${latParam}&longitude=${lonParam}&hourly=wave_height,wind_speed_10m&length_unit=metric&windspeed_unit=ms&timezone=UTC`;
 
   try {
     const res = await fetch(url);
@@ -214,23 +210,20 @@ async function fetchWeatherField(minLat:number,maxLat:number,minLon:number,maxLo
     const data = await res.json();
 
     const entries: WeatherCell[] = [];
-    const results = Array.isArray(data?.results) ? data.results : [data];
+    const results = data?.results ?? [data];
     const nowMs = Date.now();
 
     for (let i=0;i<results.length;i++){
       const r = results[i];
-
-      // latitude/longitude may be arrays or scalars
       const lat = Array.isArray(data.latitude) ? data.latitude[i] : (r?.latitude ?? data.latitude);
       const lon = Array.isArray(data.longitude)? data.longitude[i] : (r?.longitude ?? data.longitude);
 
       const times: any[] = r?.hourly?.time ?? data?.hourly?.time ?? [];
       const idx = closestTimeIndex(times, nowMs);
 
-      const windArr = r?.hourly?.wind_speed_10m ?? data?.hourly?.wind_speed_10m ?? [];
-      const waveArr = r?.hourly?.wave_height ?? data?.hourly?.wave_height ?? [];
+      const windArr = (r?.hourly?.wind_speed_10m ?? data?.hourly?.wind_speed_10m) ?? [];
+      const waveArr = (r?.hourly?.wave_height ?? data?.hourly?.wave_height) ?? [];
 
-      // multi-location may be [loc][time] or [time]
       const wind = Array.isArray(windArr?.[0]) ? windArr?.[i]?.[idx] : windArr?.[idx];
       const wave = Array.isArray(waveArr?.[0]) ? waveArr?.[i]?.[idx] : waveArr?.[idx];
 
@@ -415,7 +408,7 @@ export default function RouteMapClient({
   }, []);
   const coastPolys = useMemo(() => collectPolys(coast), [coast]);
 
-  /* weather prefetch per leg (for routing penalty only) */
+  /* weather prefetch per leg */
   const [weatherFieldsForLeg, setWeatherFieldsForLeg] = useState<(WeatherField|null)[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -503,59 +496,43 @@ export default function RouteMapClient({
   useEffect(() => {
     if (!onLegMeteo) return;
     if (!effPoints.length || !legSegments.length) { onLegMeteo([]); return; }
+    const out: Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }> = [];
 
-    let cancelled = false;
-    (async () => {
-      if (!weatherAware) {
-        onLegMeteo(legSegments.map((_, i) => ({
-          index:i, from: effPoints[i].name, to: effPoints[i+1].name,
-          avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN
-        })));
-        return;
+    for (let i = 0; i < legSegments.length; i++) {
+      const seg = legSegments[i];
+      const field = weatherFieldsForLeg[i] ?? null;
+      if (!seg?.length || !field) {
+        out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
+        continue;
+      }
+      let windSum = 0, waveSum = 0, n = 0, maxW = -Infinity, maxH = -Infinity;
+
+      for (let k = 0; k < seg.length; k += 3) {
+        const [lat, lon] = seg[k];
+        const w = field.get(lat, lon);
+        if (!w) continue;
+        windSum += w.wind;
+        waveSum += w.wave;
+        n++;
+        if (w.wind > maxW) maxW = w.wind;
+        if (w.wave > maxH) maxH = w.wave;
       }
 
-      const out: Array<{ index:number; from:string; to:string; avgWind:number; avgWave:number; maxWind:number; maxWave:number }> = [];
-
-      for (let i = 0; i < legSegments.length; i++) {
-        const seg = legSegments[i];
-        const field = weatherFieldsForLeg[i] ?? null;
-        if (!seg?.length || !field) {
-          out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
-          continue;
-        }
-
-        let windSum = 0, waveSum = 0, n = 0, maxW = -Infinity, maxH = -Infinity;
-        // sample a bit denser than before (every 3 points) to avoid missing grid cells
-        for (let k = 0; k < seg.length; k += 3) {
-          const [lat, lon] = seg[k];
-          const w = field.get(lat, lon);
-          if (!w) continue;
-          windSum += w.wind;
-          waveSum += w.wave;
-          n++;
-          if (w.wind > maxW) maxW = w.wind;
-          if (w.wave > maxH) maxH = w.wave;
-        }
-
-        if (n === 0 || !Number.isFinite(windSum) || !Number.isFinite(waveSum)) {
-          out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
-        } else {
-          out.push({
-            index:i,
-            from: effPoints[i].name,
-            to: effPoints[i+1].name,
-            avgWind: +(windSum / n).toFixed(2),
-            avgWave: +(waveSum / n).toFixed(2),
-            maxWind: +maxW.toFixed(2),
-            maxWave: +maxH.toFixed(2),
-          });
-        }
+      if (n === 0) {
+        out.push({ index:i, from: effPoints[i].name, to: effPoints[i+1].name, avgWind: NaN, avgWave: NaN, maxWind: NaN, maxWave: NaN });
+      } else {
+        out.push({
+          index:i,
+          from: effPoints[i].name,
+          to: effPoints[i+1].name,
+          avgWind: +(windSum / n).toFixed(2),
+          avgWave: +(waveSum / n).toFixed(2),
+          maxWind: +maxW.toFixed(2),
+          maxWave: +maxH.toFixed(2),
+        });
       }
-
-      if (!cancelled) onLegMeteo(out);
-    })();
-
-    return () => { cancelled = true; };
+    }
+    onLegMeteo(out);
   }, [onLegMeteo, legSegments, weatherFieldsForLeg, effPoints, weatherAware]);
 
   /* progressive draw */
@@ -583,7 +560,7 @@ export default function RouteMapClient({
     return legEndIdx.length - 1;
   }, [drawCount, legEndIdx]);
 
-  /* follow ship / auto-zoom */
+  /* follow ship / auto-zoom (controlled by followShip) */
   const lastFollowedPointRef = useRef<string>("");
   const prevLegRef = useRef<number>(-999);
 
@@ -617,10 +594,12 @@ export default function RouteMapClient({
     map.flyTo(tip as any, targetZoom, { duration: 0.5 });
   }, [animatedLatLngs, followShip, map]);
 
+  /* markers */
   const markerStart = effPoints[0] ?? null;
   const markerMids  = effPoints.slice(1, -1);
   const markerEnd   = effPoints.at(-1) ?? null;
 
+  /* bounds/center */
   const bounds = useMemo<LatLngBoundsExpression | null>(() => {
     if ((waterLatLngs?.length ?? 0) < 2) return null;
     const L = require("leaflet") as typeof import("leaflet");
@@ -645,34 +624,41 @@ export default function RouteMapClient({
       <MapContainer center={center} zoom={7} minZoom={3} maxZoom={14} scrollWheelZoom style={{ height:"100%", width:"100%" }}>
         <CaptureMap onReady={setMap} />
 
+        {/* GEBCO */}
         <Pane name="pane-gebco" style={{ zIndex: 200 }}>
           <TileLayer attribution="&copy; GEBCO" url="https://tiles.gebco.net/data/tiles/{z}/{x}/{y}.png" opacity={0.9} />
         </Pane>
 
+        {/* water tint */}
         <Pane name="pane-water" style={{ zIndex: 305 }}>
           <Rectangle bounds={WORLD_BOUNDS} pathOptions={{ color:"transparent", weight:0, fillColor:"#7fa8d8", fillOpacity:0.35 }} interactive={false} />
         </Pane>
 
+        {/* land */}
         <Pane name="pane-land" style={{ zIndex: 310 }}>
           {coast && (<GeoJSON data={coast} style={() => ({ color:"#0b1220", weight:2, opacity:1, fillColor:"#ffffff", fillOpacity:1 })} />)}
         </Pane>
 
+        {/* labels */}
         <Pane name="pane-labels" style={{ zIndex: 360 }}>
           <TileLayer attribution="&copy; OpenStreetMap contributors, &copy; CARTO" url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.75} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
           <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png" tileSize={512} zoomOffset={-1} detectRetina={false} opacity={0.25} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_over/{z}/{x}/{y}.png" tileSize={256} zoomOffset={0} detectRetina opacity={0.55} errorTileUrl={TRANSPARENT_1PX} pane="pane-labels" />
         </Pane>
 
+        {/* seamarks */}
         <Pane name="pane-seamarks" style={{ zIndex: 400 }}>
           <TileLayer attribution="&copy; OpenSeaMap" url="https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png" opacity={0.5} />
         </Pane>
 
+        {/* full route shadow */}
         <Pane name="pane-route-shadow" style={{ zIndex: 440 }}>
           {waterLatLngs.length >= 2 && (
             <Polyline pane="pane-route-shadow" positions={waterLatLngs} pathOptions={{ color:"#9aa3b2", weight:2, opacity:0.6, lineJoin:"round", lineCap:"round" }} />
           )}
         </Pane>
 
+        {/* progressive dashed route */}
         <Pane name="pane-route" style={{ zIndex: 450 }}>
           {animatedLatLngs.length >= 2 && (
             <Polyline pane="pane-route" positions={animatedLatLngs} pathOptions={{ color:"#0b1220", weight:3, opacity:0.95, dashArray:"6 8", lineJoin:"round", lineCap:"round" }} />
@@ -697,6 +683,7 @@ export default function RouteMapClient({
           )}
         </Pane>
 
+        {/* dataset markers */}
         {markers?.length ? (
           <Pane name="pane-dataset" style={{ zIndex: 430 }}>
             {markers.map((m, i) => (

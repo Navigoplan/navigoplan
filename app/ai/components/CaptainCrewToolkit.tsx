@@ -116,23 +116,14 @@ const FAC_ICON: Record<string, string> = {
 };
 
 function titleizeKey(k: string) {
-  return k
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function FacilityChip({
-  k,
-  v,
-}: {
-  k: string;
-  v: any;
-}) {
+function FacilityChip({ k, v }: { k: string; v: any }) {
   const icon = FAC_ICON[k] ?? "✅";
   // Hide false / null / empty
   if (v === false || v == null) return null;
 
-  // boolean true -> icon + label
   if (v === true) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800">
@@ -142,7 +133,6 @@ function FacilityChip({
     );
   }
 
-  // string/number -> icon + label + short detail
   const s = String(v).trim();
   if (!s) return null;
 
@@ -372,7 +362,7 @@ export default function CaptainCrewToolkit({
               ) : (
                 <tr>
                   <td colSpan={5} className="px-3 py-3 text-slate-500">
-                    — No data yet. Αυτό γεμίζει όταν το RouteMapClient υπολογίσει meteo πάνω στη διαδρομή —
+                    — No data (enable routing WX and regenerate) —
                   </td>
                 </tr>
               )}
@@ -402,7 +392,7 @@ export default function CaptainCrewToolkit({
         </div>
       )}
 
-      {/* TABLE */}
+      {/* TABLE (daily view + LIVE WX + hazards fallback) */}
       <div className="p-6 overflow-x-auto">
         <table className="min-w-full border-collapse text-sm">
           <thead>
@@ -457,9 +447,7 @@ export default function CaptainCrewToolkit({
                       <>
                         {Math.round(wx.windKts)} kt • Bft {bft} ({bftLabel(bft)})
                         {wx.gustKts != null && <> • ριπές {Math.round(wx.gustKts)} kt</>}
-                        <div className="mt-1 text-[11px] text-slate-500">
-                          Waves: (coming soon)
-                        </div>
+                        <div className="mt-1 text-[11px] text-slate-500">Waves: (coming soon)</div>
                       </>
                     ) : (
                       "—"
@@ -475,9 +463,7 @@ export default function CaptainCrewToolkit({
                           <span
                             key={`h-${i}`}
                             className={`inline-block border rounded-full px-2 py-0.5 text-xs ${
-                              h.sev >= 2
-                                ? "bg-amber-100 border-amber-200"
-                                : "bg-neutral-100 border-neutral-200"
+                              h.sev >= 2 ? "bg-amber-100 border-amber-200" : "bg-neutral-100 border-neutral-200"
                             }`}
                             title={h.note}
                           >
@@ -487,9 +473,7 @@ export default function CaptainCrewToolkit({
                         {warns.map((w, i) => (
                           <span
                             key={`w-${i}`}
-                            className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(
-                              w.sev
-                            )}`}
+                            className={`inline-block border rounded-full px-2 py-0.5 text-xs ${warnClass(w.sev)}`}
                           >
                             {w.text}
                           </span>
@@ -543,8 +527,10 @@ export default function CaptainCrewToolkit({
               const windPoor = extracted?.anch_protection_poor ?? entry?.anchorage?.protection?.wind_poor ?? [];
 
               const mooring = extracted?.mooring || pickText(entry?.mooring, "el");
-              const hazards = (extracted?.hazards as string[])?.length ? extracted.hazards : (entry?.hazards?.el || entry?.hazards?.en || []);
-              const tips = (extracted?.captain_tips as string[])?.length ? extracted.captain_tips : (entry?.captain_tips?.el || entry?.captain_tips?.en || []);
+              const hazards =
+                (extracted?.hazards as string[])?.length ? extracted.hazards : (entry?.hazards?.el || entry?.hazards?.en || []);
+              const tips =
+                (extracted?.captain_tips as string[])?.length ? extracted.captain_tips : (entry?.captain_tips?.el || entry?.captain_tips?.en || []);
               const vip = extracted?.vip_info || pickText(entry?.vip_info, "el");
 
               return (
@@ -554,9 +540,7 @@ export default function CaptainCrewToolkit({
                     {entry?.category ? (
                       <span className="ml-2 text-xs text-slate-500">{String(entry.category)}</span>
                     ) : null}
-                    {entry?.region ? (
-                      <span className="ml-2 text-xs text-slate-400">• {String(entry.region)}</span>
-                    ) : null}
+                    {/* ✅ region label hidden (ambiguous matches) */}
                   </summary>
 
                   <div className="border-t border-slate-200 px-3 py-3 text-sm text-slate-800">
@@ -564,6 +548,7 @@ export default function CaptainCrewToolkit({
                       <div className="text-xs text-slate-500">No Sea Guide match for this stop yet.</div>
                     ) : (
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {/* LEFT */}
                         <div className="space-y-3">
                           {vhf && (
                             <div>
@@ -623,28 +608,33 @@ export default function CaptainCrewToolkit({
                           )}
                         </div>
 
+                        {/* RIGHT */}
                         <div className="space-y-3">
-                          {(anchMin != null || anchMax != null || anchHolding || (anchBottom?.length ?? 0) > 0) && (
+                          {entry.anchorage && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Anchorage Details</div>
+
                               {(anchMin != null || anchMax != null) && (
                                 <div className="text-sm">
                                   <span className="text-xs text-slate-500">Depth:</span>{" "}
                                   {anchMin ?? "—"}–{anchMax ?? "—"} m
                                 </div>
                               )}
+
                               {Array.isArray(anchBottom) && anchBottom.length > 0 && (
                                 <div className="text-sm">
                                   <span className="text-xs text-slate-500">Bottom:</span>{" "}
                                   {anchBottom.join(", ")}
                                 </div>
                               )}
+
                               {anchHolding && (
                                 <div className="mt-1 text-sm">
                                   <span className="text-xs text-slate-500">Holding:</span>{" "}
                                   {anchHolding}
                                 </div>
                               )}
+
                               <div className="mt-2 text-sm">
                                 <div className="text-xs font-semibold text-slate-500">Protection from Wind</div>
                                 <div className="text-sm">
@@ -679,7 +669,7 @@ export default function CaptainCrewToolkit({
 
                           {tips.length > 0 && (
                             <div>
-                              <div className="text-xs font-semibold text-slate-600">Captain’s tips</div>
+                              <div className="text-xs font-semibold text-slate-600">Captain’s Tips</div>
                               <ul className="mt-1 list-disc pl-5 text-sm">
                                 {tips.map((t: string, idx: number) => (
                                   <li key={idx}>{t}</li>
@@ -688,7 +678,6 @@ export default function CaptainCrewToolkit({
                             </div>
                           )}
 
-                          {/* Facilities (icons + no "true") */}
                           {entry?.facilities && typeof entry.facilities === "object" && (
                             <div>
                               <div className="text-xs font-semibold text-slate-600">Facilities & Services</div>
