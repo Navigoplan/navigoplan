@@ -16,7 +16,7 @@ function safeAtobToJSON<T = unknown>(s: string): T | null {
 const STORAGE_KEY = "navigoplan.finalItinerary";
 
 export default function FinalItineraryPage() {
-  const [days, setDays] = useState<VideoDayCard[]>([]);
+  const [days, setDays] = useState<VideoDayCard[] | null>(null);
   const [ready, setReady] = useState(false);
   const [fullPayload, setFullPayload] = useState<any | null>(null);
 
@@ -26,13 +26,10 @@ export default function FinalItineraryPage() {
     const sp = new URLSearchParams(window.location.search);
     const dataParam = sp.get("data");
 
-    let resolvedDays: VideoDayCard[] = [];
-
-    // 1️⃣ Από URL (?data=)
     if (dataParam) {
       const decoded = safeAtobToJSON<any>(dataParam);
       if (decoded?.stops?.length) {
-        resolvedDays = decoded.stops.map((s: any) => ({
+        const videoDays: VideoDayCard[] = decoded.stops.map((s: any) => ({
           day: s.day,
           date: s.info?.date,
           notes: s.info?.notes,
@@ -46,18 +43,18 @@ export default function FinalItineraryPage() {
               }
             : undefined,
         }));
+        setDays(videoDays);
       }
     }
 
-    // 2️⃣ FULL payload από sessionStorage (guest reveal)
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
         setFullPayload(parsed);
 
-        if (!resolvedDays.length && parsed?.dayCards?.length) {
-          resolvedDays = parsed.dayCards.map((d: any) => ({
+        if (!days || days.length === 0) {
+          const videoDays: VideoDayCard[] = (parsed.dayCards || []).map((d: any) => ({
             day: d.day,
             date: d.date,
             notes: d.notes,
@@ -71,58 +68,50 @@ export default function FinalItineraryPage() {
                 }
               : undefined,
           }));
+          setDays(videoDays);
         }
       } catch (e) {
-        console.error("FinalItineraryPage parse error:", e);
+        console.error("Failed to parse stored itinerary", e);
       }
     }
 
-    setDays(resolvedDays);
     setReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---------- Loading ---------- */
   if (!ready) {
     return (
       <main className="p-6">
-        <h1 className="text-2xl font-semibold mb-2">Final Journey</h1>
-        <p className="text-sm text-gray-600">Loading your cinematic itinerary…</p>
+        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey</h1>
+        <p className="text-sm text-gray-600">Loading your itinerary…</p>
       </main>
     );
   }
 
-  /* ---------- No data ---------- */
-  if (!days.length) {
+  if (!days || days.length === 0) {
     return (
       <main className="p-6">
-        <h1 className="text-2xl font-semibold mb-2">Final Journey</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey</h1>
         <p className="text-sm text-gray-600">
-          No itinerary data found. Please generate an itinerary from the AI Planner (VIP Guests).
+          No itinerary data found. Please generate an itinerary from the AI Planner (VIP Guests) first.
         </p>
       </main>
     );
   }
 
-  /* ---------- OK ---------- */
   return (
     <main className="p-4 sm:p-8">
-      <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
-        Final Journey – Cinematic Itinerary
-      </h1>
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey – Cinematic Itinerary</h1>
       <p className="text-sm text-gray-600 mb-4">
         Start the journey, travel between islands, return to berth and reveal the full VIP itinerary.
       </p>
 
       <FinalVideoFlow
         days={days}
-
-        /* 🎬 ΤΑ 4 ΤΕΛΙΚΑ VIDEO */
-        video1Url="/videos/berth-to-island.mp4"
-        video2Url="/videos/island-to-island.mp4"
-        video3Url="/videos/island-to-berth.mp4"
-        video4Url="/videos/berth-zoom-out.mp4"
-
-        /* VIP reveal */
+        video1Url="/berth-to-island.mp4"
+        video2Url="/island-to-island.mp4"
+        video3Url="/island-to-berth.mp4"
+        video4Url="/berth-zoom-out.mp4"
         fullPayload={fullPayload}
       />
     </main>
