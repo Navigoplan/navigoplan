@@ -22,12 +22,11 @@ type VideoId = "v1" | "v2" | "v3" | "v4";
 
 type Props = {
   days: DayCard[];
-  // 4 videos
-  video1Url: string; // berth-to-island
-  video2Url: string; // island-to-island
-  video3Url: string; // island-to-berth
-  video4Url: string; // berth-zoom-out (final reveal)
-  fullPayload?: any | null; // optional (if you pass it from page.tsx)
+  video1Url: string;
+  video2Url: string;
+  video3Url: string;
+  video4Url: string;
+  fullPayload?: any | null;
 };
 
 function formatHM(h?: number) {
@@ -60,7 +59,6 @@ export function FinalVideoFlow({
   const isPenultimateDay = activeDay === days.length - 2;
   const currentDay = days[activeDay];
 
-  /* ========= Map VideoId -> URL ========= */
   const videoSrc: string | undefined =
     currentVideo === "v1"
       ? video1Url
@@ -74,7 +72,6 @@ export function FinalVideoFlow({
 
   const isVideoStep = mode === "video" && !!currentVideo && !!videoSrc;
 
-  /* ========= Auto play όταν αλλάζει video ========= */
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -82,26 +79,22 @@ export function FinalVideoFlow({
     if (isVideoStep && videoSrc) {
       setVideoError(null);
 
-      // IMPORTANT: keep muted for autoplay policies
       el.muted = true;
       (el as any).playsInline = true;
       (el as any).webkitPlaysInline = true;
 
       try {
         el.pause();
-        // Force reload new src
         el.load();
         el.currentTime = 0;
 
         const p = el.play();
         if (p && typeof (p as any).catch === "function") {
-          (p as any).catch((err: any) => {
-            setVideoError("Autoplay was blocked. Click on the video once to start playback.");
-            // leave it paused, user can click play
-            console.warn("Video play blocked:", err);
+          (p as any).catch(() => {
+            setVideoError("Autoplay was blocked. Click the video once to start.");
           });
         }
-      } catch (e: any) {
+      } catch {
         setVideoError("Video could not start.");
       }
     } else {
@@ -109,7 +102,6 @@ export function FinalVideoFlow({
     }
   }, [isVideoStep, videoSrc, currentVideo, mode]);
 
-  /* ========= Helper: start a video sequence ========= */
   function startVideoSequence(vids: VideoId[], after: "card" | "finalReveal", dayIndex: number) {
     if (!vids.length) return;
     setQueue(vids);
@@ -119,20 +111,16 @@ export function FinalVideoFlow({
     setMode("video");
   }
 
-  /* ========= Start Journey ========= */
   function handleStartJourney() {
     if (!days.length) return;
     setActiveDay(0);
-    // Start -> berth-to-island -> Day1
     startVideoSequence(["v1"], "card", 0);
   }
 
-  /* ========= Video ended ========= */
   function handleVideoEnded() {
-    setQueue((prevQueue) => {
-      if (prevQueue.length <= 1) {
+    setQueue((prev) => {
+      if (prev.length <= 1) {
         setCurrentVideo(null);
-
         if (nextStep === "card") {
           setActiveDay(nextDayIndex);
           setMode("card");
@@ -141,33 +129,25 @@ export function FinalVideoFlow({
         } else {
           setMode("idle");
         }
-
         return [];
-      } else {
-        const newQueue = prevQueue.slice(1);
-        setCurrentVideo(newQueue[0]);
-        return newQueue;
       }
+      const nq = prev.slice(1);
+      setCurrentVideo(nq[0]);
+      return nq;
     });
   }
 
-  /* ========= Continue from day card ========= */
   function handleDayCardButton() {
     if (!days.length) return;
 
     if (isLastDay) {
-      // last day -> berth zoom out -> reveal
       startVideoSequence(["v4"], "finalReveal", activeDay);
       return;
     }
-
     if (isPenultimateDay) {
-      // penultimate day -> island-to-berth -> last day card
       startVideoSequence(["v3"], "card", activeDay + 1);
       return;
     }
-
-    // middle days -> island-to-island -> next day card
     startVideoSequence(["v2"], "card", activeDay + 1);
   }
 
@@ -226,7 +206,7 @@ export function FinalVideoFlow({
   }
 
   function renderFinalReveal() {
-    const dayCards: any[] = Array.isArray(fullPayload?.dayCards) ? fullPayload.dayCards : [];
+    const cards: any[] = Array.isArray(fullPayload?.dayCards) ? fullPayload.dayCards : [];
 
     return (
       <div className="pointer-events-auto max-w-4xl w-[92vw] rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-6 py-5">
@@ -234,7 +214,7 @@ export function FinalVideoFlow({
         <div className="text-xl font-semibold mt-1 mb-3">{fullPayload?.tripTitle ?? "Final Itinerary"}</div>
 
         <div className="space-y-2 text-sm text-gray-800 max-h-[420px] overflow-auto">
-          {(dayCards.length ? dayCards : days).map((d: any) => (
+          {(cards.length ? cards : days).map((d: any) => (
             <div key={d.day} className="rounded-lg border border-gray-200 px-3 py-2 bg-white">
               <div className="font-semibold text-gray-900">
                 Day {d.day} {d.leg ? `– ${d.leg.from} → ${d.leg.to}` : ""}
@@ -256,7 +236,6 @@ export function FinalVideoFlow({
   return (
     <div className="relative w-full">
       <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-black min-h-[360px]">
-        {/* VIDEO */}
         {videoSrc && (
           <video
             ref={videoRef}
@@ -268,14 +247,13 @@ export function FinalVideoFlow({
             autoPlay
             preload="metadata"
             onEnded={handleVideoEnded}
-            onError={() => setVideoError("Video failed to load. Check the file path & deployment.")}
+            onError={() => setVideoError("Video failed to load (404). Check file path & deploy.")}
             controls={false}
             disablePictureInPicture
             controlsList="nodownload nofullscreen noremoteplayback"
           />
         )}
 
-        {/* small error helper */}
         {videoError && (
           <div className="pointer-events-auto absolute left-4 right-4 bottom-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {videoError}
@@ -287,15 +265,10 @@ export function FinalVideoFlow({
           </div>
         )}
 
-        {/* OVERLAYS */}
         <div className="pointer-events-none absolute inset-0 flex items-start justify-center">
           {mode === "idle" && <div className="mt-6">{renderStartOverlay()}</div>}
           {mode === "card" && <div className="mt-6">{renderDayCard()}</div>}
-          {mode === "finalReveal" && (
-            <div className="mt-6 flex justify-center w-full">
-              {renderFinalReveal()}
-            </div>
-          )}
+          {mode === "finalReveal" && <div className="mt-6 flex justify-center w-full">{renderFinalReveal()}</div>}
         </div>
       </div>
     </div>
