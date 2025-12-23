@@ -19,6 +19,9 @@ export default function FinalItineraryPage() {
   const [days, setDays] = useState<VideoDayCard[] | null>(null);
   const [ready, setReady] = useState(false);
 
+  // ✅ keep full guest payload (for final reveal)
+  const [fullPayload, setFullPayload] = useState<any | null>(null);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -44,48 +47,47 @@ export default function FinalItineraryPage() {
             : undefined,
         }));
         setDays(videoDays);
-        setReady(true);
-        return;
       }
     }
 
-    // 2) Fallback: sessionStorage από GenerateFinalItineraryButton
+    // 2) sessionStorage από GenerateFinalItineraryButton (FULL guest data)
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (raw) {
       try {
-        const parsed = JSON.parse(raw) as {
-          dayCards: any[];
-          tripTitle?: string;
-        };
-        const videoDays: VideoDayCard[] = (parsed.dayCards || []).map((d) => ({
-          day: d.day,
-          date: d.date,
-          notes: d.notes,
-          leg: d.leg
-            ? {
-                from: d.leg.from,
-                to: d.leg.to,
-                nm: d.leg.nm,
-                hours: d.leg.hours,
-                fuelL: d.leg.fuelL,
-              }
-            : undefined,
-        }));
-        setDays(videoDays);
+        const parsed = JSON.parse(raw);
+        setFullPayload(parsed);
+
+        // fallback if URL didn't have stops
+        if (!days || days.length === 0) {
+          const videoDays: VideoDayCard[] = (parsed.dayCards || []).map((d: any) => ({
+            day: d.day,
+            date: d.date,
+            notes: d.notes,
+            leg: d.leg
+              ? {
+                  from: d.leg.from,
+                  to: d.leg.to,
+                  nm: d.leg.nm,
+                  hours: d.leg.hours,
+                  fuelL: d.leg.fuelL,
+                }
+              : undefined,
+          }));
+          setDays(videoDays);
+        }
       } catch (e) {
         console.error("Failed to parse stored itinerary", e);
       }
     }
 
     setReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!ready) {
     return (
       <main className="p-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
-          Final Journey
-        </h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey</h1>
         <p className="text-sm text-gray-600">Loading your itinerary…</p>
       </main>
     );
@@ -94,12 +96,9 @@ export default function FinalItineraryPage() {
   if (!days || days.length === 0) {
     return (
       <main className="p-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
-          Final Journey
-        </h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey</h1>
         <p className="text-sm text-gray-600">
-          No itinerary data found. Please generate an itinerary from the AI
-          Planner (VIP Guests) first.
+          No itinerary data found. Please generate an itinerary from the AI Planner (VIP Guests) first.
         </p>
       </main>
     );
@@ -107,21 +106,20 @@ export default function FinalItineraryPage() {
 
   return (
     <main className="p-4 sm:p-8">
-      <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
-        Final Journey – Cinematic Itinerary
-      </h1>
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey – Cinematic Itinerary</h1>
       <p className="text-sm text-gray-600 mb-4">
-        Watch your yacht depart the marina, visit each island day by day, and
-        return, then view your complete VIP itinerary.
+        Start the journey, continue between islands, return to berth, then reveal the full VIP itinerary.
       </p>
 
       <FinalVideoFlow
         days={days}
-        video1Url="/videos/01_depart_marina.mp4"
-        video2Url="/videos/02_open_to_island.mp4"
-        video3Url="/videos/03_leave_island.mp4"
-        video4Url="/videos/04_open_to_marina.mp4"
-        video5Url="/videos/05_marina_zoom_out.mp4"
+        // ✅ NEW 4 videos
+        video1Url="/videos/berth-to-island.mp4"
+        video2Url="/videos/island-to-island.mp4"
+        video3Url="/videos/island-to-berth.mp4"
+        video4Url="/videos/berth-zoom-out.mp4"
+        // ✅ pass full guest plan for final reveal
+        fullPayload={fullPayload}
       />
     </main>
   );
