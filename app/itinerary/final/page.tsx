@@ -58,7 +58,8 @@ export default function FinalItineraryPage() {
         setFullPayload(parsed);
 
         // fallback if URL didn't have stops
-        if (!days || days.length === 0) {
+        const existingDaysCount = Array.isArray(days) ? days.length : 0;
+        if (!existingDaysCount) {
           const videoDays: VideoDayCard[] = (parsed.dayCards || []).map((d: any) => ({
             day: d.day,
             date: d.date,
@@ -113,11 +114,11 @@ export default function FinalItineraryPage() {
 
       <FinalVideoFlow
         days={days}
-        // ✅ NEW 4 videos
-        video1Url="/videos/berth-to-island.mp4"
-        video2Url="/videos/island-to-island.mp4"
-        video3Url="/videos/island-to-berth.mp4"
-        video4Url="/videos/berth-zoom-out.mp4"
+        // ✅ NEW 4 videos (PUBLIC ROOT)
+        video1Url="/berth-to-island.mp4"
+        video2Url="/island-to-island.mp4"
+        video3Url="/island-to-berth.mp4"
+        video4Url="/berth-zoom-out.mp4"
         // ✅ pass full guest plan for final reveal
         fullPayload={fullPayload}
       />
