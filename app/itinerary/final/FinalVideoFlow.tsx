@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 /* ========= Types ========= */
 type Leg = {
@@ -27,8 +27,7 @@ type Props = {
   video2Url: string; // island-to-island
   video3Url: string; // island-to-berth
   video4Url: string; // berth-zoom-out (final reveal)
-  // full guest payload from sessionStorage
-  fullPayload?: any | null;
+  fullPayload?: any | null; // optional (if you pass it from page.tsx)
 };
 
 function formatHM(h?: number) {
@@ -36,15 +35,6 @@ function formatHM(h?: number) {
   const H = Math.floor(v);
   const M = Math.round((v - H) * 60);
   return `${H}h ${M}m`;
-}
-
-function formatDate(d?: string) {
-  if (!d) return "";
-  try {
-    return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-  } catch {
-    return d;
-  }
 }
 
 export function FinalVideoFlow({
@@ -57,12 +47,14 @@ export function FinalVideoFlow({
 }: Props) {
   const [mode, setMode] = useState<"idle" | "video" | "card" | "finalReveal">("idle");
   const [activeDay, setActiveDay] = useState(0);
+
   const [currentVideo, setCurrentVideo] = useState<VideoId | null>(null);
   const [queue, setQueue] = useState<VideoId[]>([]);
   const [nextStep, setNextStep] = useState<"card" | "finalReveal" | null>(null);
   const [nextDayIndex, setNextDayIndex] = useState<number>(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
 
   const isLastDay = activeDay === days.length - 1;
   const isPenultimateDay = activeDay === days.length - 2;
@@ -86,15 +78,38 @@ export function FinalVideoFlow({
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+
     if (isVideoStep && videoSrc) {
-      el.currentTime = 0;
-      el.play().catch(() => {});
+      setVideoError(null);
+
+      // IMPORTANT: keep muted for autoplay policies
+      el.muted = true;
+      (el as any).playsInline = true;
+      (el as any).webkitPlaysInline = true;
+
+      try {
+        el.pause();
+        // Force reload new src
+        el.load();
+        el.currentTime = 0;
+
+        const p = el.play();
+        if (p && typeof (p as any).catch === "function") {
+          (p as any).catch((err: any) => {
+            setVideoError("Autoplay was blocked. Click on the video once to start playback.");
+            // leave it paused, user can click play
+            console.warn("Video play blocked:", err);
+          });
+        }
+      } catch (e: any) {
+        setVideoError("Video could not start.");
+      }
     } else {
       el.pause();
     }
   }, [isVideoStep, videoSrc, currentVideo, mode]);
 
-  /* ========= Helper: ξεκινά μια σειρά videos ========= */
+  /* ========= Helper: start a video sequence ========= */
   function startVideoSequence(vids: VideoId[], after: "card" | "finalReveal", dayIndex: number) {
     if (!vids.length) return;
     setQueue(vids);
@@ -108,7 +123,7 @@ export function FinalVideoFlow({
   function handleStartJourney() {
     if (!days.length) return;
     setActiveDay(0);
-    // ✅ Start -> berth-to-island -> Day1
+    // Start -> berth-to-island -> Day1
     startVideoSequence(["v1"], "card", 0);
   }
 
@@ -136,27 +151,26 @@ export function FinalVideoFlow({
     });
   }
 
-  /* ========= Continue από κάρτα ημέρας ========= */
+  /* ========= Continue from day card ========= */
   function handleDayCardButton() {
     if (!days.length) return;
 
     if (isLastDay) {
-      // ✅ last day -> berth zoom out -> show full itinerary
+      // last day -> berth zoom out -> reveal
       startVideoSequence(["v4"], "finalReveal", activeDay);
       return;
     }
 
     if (isPenultimateDay) {
-      // ✅ penultimate day -> island-to-berth -> show LAST day card
+      // penultimate day -> island-to-berth -> last day card
       startVideoSequence(["v3"], "card", activeDay + 1);
       return;
     }
 
-    // ✅ middle days -> island-to-island -> next day card
+    // middle days -> island-to-island -> next day card
     startVideoSequence(["v2"], "card", activeDay + 1);
   }
 
-  /* ========= RENDER HELPERS ========= */
   function renderStartOverlay() {
     return (
       <div className="pointer-events-auto max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-5 py-4 text-center">
@@ -188,7 +202,7 @@ export function FinalVideoFlow({
         <div className="mt-2 text-sm text-gray-700">
           {date && (
             <>
-              📅 {formatDate(date)}
+              📅 {date}
               <br />
             </>
           )}
@@ -211,41 +225,26 @@ export function FinalVideoFlow({
     );
   }
 
-  function renderFinalItinerary() {
-    const dayCards: any[] = Array.isArray(fullPayload?.dayCards) ? fullPayload!.dayCards : [];
-    const tripTitle: string = fullPayload?.tripTitle || "Final VIP Itinerary";
+  function renderFinalReveal() {
+    const dayCards: any[] = Array.isArray(fullPayload?.dayCards) ? fullPayload.dayCards : [];
 
     return (
-      <div className="pointer-events-auto w-[92vw] max-w-4xl rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-6 py-5">
+      <div className="pointer-events-auto max-w-4xl w-[92vw] rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-6 py-5">
         <div className="text-xs uppercase text-gray-500">Final VIP Itinerary</div>
-        <div className="text-xl font-semibold mt-1 mb-3">{tripTitle}</div>
+        <div className="text-xl font-semibold mt-1 mb-3">{fullPayload?.tripTitle ?? "Final Itinerary"}</div>
 
         <div className="space-y-2 text-sm text-gray-800 max-h-[420px] overflow-auto">
           {(dayCards.length ? dayCards : days).map((d: any) => (
             <div key={d.day} className="rounded-lg border border-gray-200 px-3 py-2 bg-white">
               <div className="font-semibold text-gray-900">
-                Day {d.day} {d.leg ? `– ${d.leg.from} → ${d.leg.to}` : d.title ? `– ${d.title}` : ""}
+                Day {d.day} {d.leg ? `– ${d.leg.from} → ${d.leg.to}` : ""}
               </div>
-              <div className="text-xs text-gray-500">{d.date ? <>📅 {formatDate(d.date)}</> : null}</div>
-
+              {d.date && <div className="text-xs text-gray-500">📅 {d.date}</div>}
               {d.leg && (
                 <div className="text-xs mt-1">
-                  {d.leg.nm != null && <>NM: {Number(d.leg.nm).toFixed(1)} • </>}
-                  {d.leg.hours != null && <>Time: {formatHM(Number(d.leg.hours))} • </>}
-                  {d.leg.fuelL != null && <>Fuel: {Number(d.leg.fuelL).toFixed(0)} L</>}
+                  NM: {(d.leg.nm ?? 0).toFixed(1)} • Time: {formatHM(d.leg.hours)} • Fuel: {(d.leg.fuelL ?? 0).toFixed(0)} L
                 </div>
               )}
-
-              {d.activities?.length ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {d.activities.slice(0, 10).map((a: string, i2: number) => (
-                    <span key={i2} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700">
-                      {a}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-
               {d.notes && <div className="mt-2 text-xs whitespace-pre-wrap">📝 {d.notes}</div>}
             </div>
           ))}
@@ -254,7 +253,6 @@ export function FinalVideoFlow({
     );
   }
 
-  /* ========= UI ========= */
   return (
     <div className="relative w-full">
       <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-black min-h-[360px]">
@@ -262,13 +260,31 @@ export function FinalVideoFlow({
         {videoSrc && (
           <video
             ref={videoRef}
+            key={videoSrc}
             src={videoSrc}
             className="w-full h-full object-cover"
             playsInline
             muted
             autoPlay
+            preload="metadata"
             onEnded={handleVideoEnded}
+            onError={() => setVideoError("Video failed to load. Check the file path & deployment.")}
+            controls={false}
+            disablePictureInPicture
+            controlsList="nodownload nofullscreen noremoteplayback"
           />
+        )}
+
+        {/* small error helper */}
+        {videoError && (
+          <div className="pointer-events-auto absolute left-4 right-4 bottom-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {videoError}
+            {videoSrc ? (
+              <div className="mt-1 text-xs text-amber-800">
+                Try opening: <span className="font-mono">{videoSrc}</span>
+              </div>
+            ) : null}
+          </div>
         )}
 
         {/* OVERLAYS */}
@@ -277,7 +293,7 @@ export function FinalVideoFlow({
           {mode === "card" && <div className="mt-6">{renderDayCard()}</div>}
           {mode === "finalReveal" && (
             <div className="mt-6 flex justify-center w-full">
-              {renderFinalItinerary()}
+              {renderFinalReveal()}
             </div>
           )}
         </div>
