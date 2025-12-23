@@ -16,10 +16,8 @@ function safeAtobToJSON<T = unknown>(s: string): T | null {
 const STORAGE_KEY = "navigoplan.finalItinerary";
 
 export default function FinalItineraryPage() {
-  const [days, setDays] = useState<VideoDayCard[] | null>(null);
+  const [days, setDays] = useState<VideoDayCard[]>([]);
   const [ready, setReady] = useState(false);
-
-  // ✅ keep full guest payload (for final reveal)
   const [fullPayload, setFullPayload] = useState<any | null>(null);
 
   useEffect(() => {
@@ -28,11 +26,13 @@ export default function FinalItineraryPage() {
     const sp = new URLSearchParams(window.location.search);
     const dataParam = sp.get("data");
 
-    // 1) Από URL ?data= (stops compact)
+    let resolvedDays: VideoDayCard[] = [];
+
+    // 1️⃣ Από URL (?data=)
     if (dataParam) {
       const decoded = safeAtobToJSON<any>(dataParam);
       if (decoded?.stops?.length) {
-        const videoDays: VideoDayCard[] = decoded.stops.map((s: any) => ({
+        resolvedDays = decoded.stops.map((s: any) => ({
           day: s.day,
           date: s.info?.date,
           notes: s.info?.notes,
@@ -46,21 +46,18 @@ export default function FinalItineraryPage() {
               }
             : undefined,
         }));
-        setDays(videoDays);
       }
     }
 
-    // 2) sessionStorage από GenerateFinalItineraryButton (FULL guest data)
+    // 2️⃣ FULL payload από sessionStorage (guest reveal)
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
         setFullPayload(parsed);
 
-        // fallback if URL didn't have stops
-        const existingDaysCount = Array.isArray(days) ? days.length : 0;
-        if (!existingDaysCount) {
-          const videoDays: VideoDayCard[] = (parsed.dayCards || []).map((d: any) => ({
+        if (!resolvedDays.length && parsed?.dayCards?.length) {
+          resolvedDays = parsed.dayCards.map((d: any) => ({
             day: d.day,
             date: d.date,
             notes: d.notes,
@@ -74,52 +71,58 @@ export default function FinalItineraryPage() {
                 }
               : undefined,
           }));
-          setDays(videoDays);
         }
       } catch (e) {
-        console.error("Failed to parse stored itinerary", e);
+        console.error("FinalItineraryPage parse error:", e);
       }
     }
 
+    setDays(resolvedDays);
     setReady(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ---------- Loading ---------- */
   if (!ready) {
     return (
       <main className="p-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey</h1>
-        <p className="text-sm text-gray-600">Loading your itinerary…</p>
+        <h1 className="text-2xl font-semibold mb-2">Final Journey</h1>
+        <p className="text-sm text-gray-600">Loading your cinematic itinerary…</p>
       </main>
     );
   }
 
-  if (!days || days.length === 0) {
+  /* ---------- No data ---------- */
+  if (!days.length) {
     return (
       <main className="p-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey</h1>
+        <h1 className="text-2xl font-semibold mb-2">Final Journey</h1>
         <p className="text-sm text-gray-600">
-          No itinerary data found. Please generate an itinerary from the AI Planner (VIP Guests) first.
+          No itinerary data found. Please generate an itinerary from the AI Planner (VIP Guests).
         </p>
       </main>
     );
   }
 
+  /* ---------- OK ---------- */
   return (
     <main className="p-4 sm:p-8">
-      <h1 className="text-2xl sm:text-3xl font-semibold mb-2">Final Journey – Cinematic Itinerary</h1>
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
+        Final Journey – Cinematic Itinerary
+      </h1>
       <p className="text-sm text-gray-600 mb-4">
-        Start the journey, continue between islands, return to berth, then reveal the full VIP itinerary.
+        Start the journey, travel between islands, return to berth and reveal the full VIP itinerary.
       </p>
 
       <FinalVideoFlow
         days={days}
-        // ✅ NEW 4 videos (PUBLIC ROOT)
-        video1Url="/berth-to-island.mp4"
-        video2Url="/island-to-island.mp4"
-        video3Url="/island-to-berth.mp4"
-        video4Url="/berth-zoom-out.mp4"
-        // ✅ pass full guest plan for final reveal
+
+        /* 🎬 ΤΑ 4 ΤΕΛΙΚΑ VIDEO */
+        video1Url="/videos/berth-to-island.mp4"
+        video2Url="/videos/island-to-island.mp4"
+        video3Url="/videos/island-to-berth.mp4"
+        video4Url="/videos/berth-zoom-out.mp4"
+
+        /* VIP reveal */
         fullPayload={fullPayload}
       />
     </main>
