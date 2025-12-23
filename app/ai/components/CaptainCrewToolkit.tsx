@@ -121,7 +121,6 @@ function titleizeKey(k: string) {
 
 function FacilityChip({ k, v }: { k: string; v: any }) {
   const icon = FAC_ICON[k] ?? "✅";
-  // Hide false / null / empty
   if (v === false || v == null) return null;
 
   if (v === true) {
@@ -309,6 +308,14 @@ export default function CaptainCrewToolkit({
     return out;
   }, [stopOrder, seaGuideDetails, sgLookup]);
 
+  // ✅ Only show in-transit table if ANY row has real numbers
+  const hasTransitData = useMemo(() => {
+    if (!Array.isArray(legMeteo) || !legMeteo.length) return false;
+    return legMeteo.some((r) =>
+      [r.avgWind, r.avgWave, r.maxWind, r.maxWave].some((x) => Number.isFinite(x))
+    );
+  }, [legMeteo]);
+
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
       {/* HEADER (more readable) */}
@@ -330,25 +337,25 @@ export default function CaptainCrewToolkit({
         </div>
       </div>
 
-      {/* In-transit weather per leg */}
-      <div className="px-6 pt-5">
-        <div className="mb-2 text-sm font-semibold text-neutral-800">
-          In-transit weather per leg
-        </div>
-        <div className="overflow-x-auto border rounded-xl">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-neutral-50 border-b">
-                <th className="text-left px-3 py-2">Leg</th>
-                <th className="text-left px-3 py-2">Avg wind (m/s)</th>
-                <th className="text-left px-3 py-2">Avg wave (m)</th>
-                <th className="text-left px-3 py-2">Max wind</th>
-                <th className="text-left px-3 py-2">Max wave</th>
-              </tr>
-            </thead>
-            <tbody>
-              {legMeteo.length ? (
-                legMeteo.map((r, i) => (
+      {/* In-transit weather per leg (hidden if empty) */}
+      {hasTransitData && (
+        <div className="px-6 pt-5">
+          <div className="mb-2 text-sm font-semibold text-neutral-800">
+            In-transit weather per leg
+          </div>
+          <div className="overflow-x-auto border rounded-xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-neutral-50 border-b">
+                  <th className="text-left px-3 py-2">Leg</th>
+                  <th className="text-left px-3 py-2">Avg wind (m/s)</th>
+                  <th className="text-left px-3 py-2">Avg wave (m)</th>
+                  <th className="text-left px-3 py-2">Max wind</th>
+                  <th className="text-left px-3 py-2">Max wave</th>
+                </tr>
+              </thead>
+              <tbody>
+                {legMeteo.map((r, i) => (
                   <tr key={i} className="border-b">
                     <td className="px-3 py-2">
                       {r.from} → {r.to}
@@ -358,18 +365,12 @@ export default function CaptainCrewToolkit({
                     <td className="px-3 py-2">{Number.isFinite(r.maxWind) ? r.maxWind : "—"}</td>
                     <td className="px-3 py-2">{Number.isFinite(r.maxWave) ? r.maxWave : "—"}</td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-3 py-3 text-slate-500">
-                    — No data (enable routing WX and regenerate) —
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* SUMMARY */}
       {summary.length > 0 && (
@@ -540,7 +541,7 @@ export default function CaptainCrewToolkit({
                     {entry?.category ? (
                       <span className="ml-2 text-xs text-slate-500">{String(entry.category)}</span>
                     ) : null}
-                    {/* ✅ region label hidden (ambiguous matches) */}
+                    {/* region label intentionally hidden (ambiguous matches) */}
                   </summary>
 
                   <div className="border-t border-slate-200 px-3 py-3 text-sm text-slate-800">
@@ -548,7 +549,6 @@ export default function CaptainCrewToolkit({
                       <div className="text-xs text-slate-500">No Sea Guide match for this stop yet.</div>
                     ) : (
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        {/* LEFT */}
                         <div className="space-y-3">
                           {vhf && (
                             <div>
@@ -608,7 +608,6 @@ export default function CaptainCrewToolkit({
                           )}
                         </div>
 
-                        {/* RIGHT */}
                         <div className="space-y-3">
                           {entry.anchorage && (
                             <div>
