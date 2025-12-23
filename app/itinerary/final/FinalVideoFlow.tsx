@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 /* ========= Types ========= */
 type Leg = {
@@ -22,10 +22,10 @@ type VideoId = "v1" | "v2" | "v3" | "v4";
 
 type Props = {
   days: DayCard[];
-  video1Url: string;
-  video2Url: string;
-  video3Url: string;
-  video4Url: string;
+  video1Url: string; // berth-to-island
+  video2Url: string; // island-to-island
+  video3Url: string; // island-to-berth
+  video4Url: string; // berth-zoom-out (final reveal)
   fullPayload?: any | null;
 };
 
@@ -34,6 +34,19 @@ function formatHM(h?: number) {
   const H = Math.floor(v);
   const M = Math.round((v - H) * 60);
   return `${H}h ${M}m`;
+}
+
+function formatDate(d?: string) {
+  if (!d) return "";
+  try {
+    return new Date(d).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return d;
+  }
 }
 
 export function FinalVideoFlow({
@@ -55,12 +68,15 @@ export function FinalVideoFlow({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
 
+  // Used to allow the first play to be user-gesture initiated
+  const playTokenRef = useRef(0);
+
   const isLastDay = activeDay === days.length - 1;
   const isPenultimateDay = activeDay === days.length - 2;
   const currentDay = days[activeDay];
 
-  const videoSrc: string | undefined =
-    currentVideo === "v1"
+  const videoSrc = useMemo(() => {
+    return currentVideo === "v1"
       ? video1Url
       : currentVideo === "v2"
       ? video2Url
@@ -69,39 +85,67 @@ export function FinalVideoFlow({
       : currentVideo === "v4"
       ? video4Url
       : undefined;
+  }, [currentVideo, video1Url, video2Url, video3Url, video4Url]);
 
   const isVideoStep = mode === "video" && !!currentVideo && !!videoSrc;
 
+  /* ========= Helper: safe play ========= */
+  function primeVideo(el: HTMLVideoElement) {
+    // autoplay policies: must be muted for programmatic play
+    el.muted = true;
+    el.playsInline = true;
+    (el as any).webkitPlaysInline = true;
+    el.controls = false;
+    el.preload = "metadata";
+    (el as any).disablePictureInPicture = true;
+    (el as any).controlsList = "nodownload nofullscreen noremoteplayback";
+  }
+
+  async function tryPlay(el: HTMLVideoElement) {
+    try {
+      primeVideo(el);
+      // Force reload current src
+      el.pause();
+      el.currentTime = 0;
+      el.load();
+
+      const p = el.play();
+      if (p && typeof (p as any).then === "function") {
+        await p;
+      }
+      setVideoError(null);
+      return true;
+    } catch (e) {
+      setVideoError("Autoplay was blocked. Click the video once to start.");
+      return false;
+    }
+  }
+
+  /* ========= Auto play when video changes ========= */
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
 
     if (isVideoStep && videoSrc) {
-      setVideoError(null);
+      // When started from a user gesture we increment token; allow that frame to play immediately.
+      const token = playTokenRef.current;
 
-      el.muted = true;
-      (el as any).playsInline = true;
-      (el as any).webkitPlaysInline = true;
-
-      try {
-        el.pause();
-        el.load();
-        el.currentTime = 0;
-
-        const p = el.play();
-        if (p && typeof (p as any).catch === "function") {
-          (p as any).catch(() => {
-            setVideoError("Autoplay was blocked. Click the video once to start.");
-          });
+      // Run asap, but keep it resilient if not gesture
+      const id = window.requestAnimationFrame(() => {
+        // If token changed while waiting, we still try for current
+        if (videoRef.current) {
+          tryPlay(videoRef.current);
         }
-      } catch {
-        setVideoError("Video could not start.");
-      }
+      });
+
+      return () => window.cancelAnimationFrame(id);
     } else {
       el.pause();
+      setVideoError(null);
     }
-  }, [isVideoStep, videoSrc, currentVideo, mode]);
+  }, [isVideoStep, videoSrc]);
 
+  /* ========= Start a sequence ========= */
   function startVideoSequence(vids: VideoId[], after: "card" | "finalReveal", dayIndex: number) {
     if (!vids.length) return;
     setQueue(vids);
@@ -111,16 +155,34 @@ export function FinalVideoFlow({
     setMode("video");
   }
 
-  function handleStartJourney() {
+  /* ========= Start Journey (USER GESTURE PLAY) ========= */
+  async function handleStartJourney() {
     if (!days.length) return;
+
     setActiveDay(0);
-    startVideoSequence(["v1"], "card", 0);
+    setQueue(["v1"]);
+    setCurrentVideo("v1");
+    setNextStep("card");
+    setNextDayIndex(0);
+    setMode("video");
+
+    // Mark this as user-initiated play attempt
+    playTokenRef.current += 1;
+
+    // Wait one frame for <video> to be in DOM with correct src, then play
+    requestAnimationFrame(async () => {
+      const el = videoRef.current;
+      if (!el) return;
+      await tryPlay(el);
+    });
   }
 
+  /* ========= Video ended ========= */
   function handleVideoEnded() {
     setQueue((prev) => {
       if (prev.length <= 1) {
         setCurrentVideo(null);
+
         if (nextStep === "card") {
           setActiveDay(nextDayIndex);
           setMode("card");
@@ -131,12 +193,14 @@ export function FinalVideoFlow({
         }
         return [];
       }
+
       const nq = prev.slice(1);
       setCurrentVideo(nq[0]);
       return nq;
     });
   }
 
+  /* ========= Continue from day card ========= */
   function handleDayCardButton() {
     if (!days.length) return;
 
@@ -144,13 +208,16 @@ export function FinalVideoFlow({
       startVideoSequence(["v4"], "finalReveal", activeDay);
       return;
     }
+
     if (isPenultimateDay) {
       startVideoSequence(["v3"], "card", activeDay + 1);
       return;
     }
+
     startVideoSequence(["v2"], "card", activeDay + 1);
   }
 
+  /* ========= Overlays ========= */
   function renderStartOverlay() {
     return (
       <div className="pointer-events-auto max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-5 py-4 text-center">
@@ -182,7 +249,7 @@ export function FinalVideoFlow({
         <div className="mt-2 text-sm text-gray-700">
           {date && (
             <>
-              📅 {date}
+              📅 {formatDate(date)}
               <br />
             </>
           )}
@@ -219,7 +286,7 @@ export function FinalVideoFlow({
               <div className="font-semibold text-gray-900">
                 Day {d.day} {d.leg ? `– ${d.leg.from} → ${d.leg.to}` : ""}
               </div>
-              {d.date && <div className="text-xs text-gray-500">📅 {d.date}</div>}
+              {d.date && <div className="text-xs text-gray-500">📅 {formatDate(d.date)}</div>}
               {d.leg && (
                 <div className="text-xs mt-1">
                   NM: {(d.leg.nm ?? 0).toFixed(1)} • Time: {formatHM(d.leg.hours)} • Fuel: {(d.leg.fuelL ?? 0).toFixed(0)} L
@@ -236,6 +303,7 @@ export function FinalVideoFlow({
   return (
     <div className="relative w-full">
       <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-black min-h-[360px]">
+        {/* VIDEO */}
         {videoSrc && (
           <video
             ref={videoRef}
@@ -247,13 +315,12 @@ export function FinalVideoFlow({
             autoPlay
             preload="metadata"
             onEnded={handleVideoEnded}
-            onError={() => setVideoError("Video failed to load (404). Check file path & deploy.")}
-            controls={false}
-            disablePictureInPicture
-            controlsList="nodownload nofullscreen noremoteplayback"
+            onError={() => setVideoError("Video failed to load (check path & deployment).")}
+            controls
           />
         )}
 
+        {/* error helper */}
         {videoError && (
           <div className="pointer-events-auto absolute left-4 right-4 bottom-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {videoError}
@@ -265,10 +332,13 @@ export function FinalVideoFlow({
           </div>
         )}
 
+        {/* overlays */}
         <div className="pointer-events-none absolute inset-0 flex items-start justify-center">
           {mode === "idle" && <div className="mt-6">{renderStartOverlay()}</div>}
           {mode === "card" && <div className="mt-6">{renderDayCard()}</div>}
-          {mode === "finalReveal" && <div className="mt-6 flex justify-center w-full">{renderFinalReveal()}</div>}
+          {mode === "finalReveal" && (
+            <div className="mt-6 flex justify-center w-full">{renderFinalReveal()}</div>
+          )}
         </div>
       </div>
     </div>
