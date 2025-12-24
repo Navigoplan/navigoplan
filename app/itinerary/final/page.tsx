@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { FinalVideoFlow, DayCard as VideoDayCard } from "./FinalVideoFlow";
 
-/* ========= SAFE DECODE FROM URL ========= */
 function safeAtobToJSON<T = unknown>(s: string): T | null {
   try {
     const json = decodeURIComponent(escape(atob(s)));
@@ -40,8 +39,12 @@ export default function FinalItineraryPage() {
                 nm: s.info.leg.nm,
                 hours: s.info.leg.hours,
                 fuelL: s.info.leg.fuelL,
+                eta: s.info?.eta,
               }
             : undefined,
+          title: s.info?.title,
+          activities: s.info?.activities,
+          port: s.info?.port,
         }));
         setDays(videoDays);
       }
@@ -58,15 +61,10 @@ export default function FinalItineraryPage() {
             day: d.day,
             date: d.date,
             notes: d.notes,
-            leg: d.leg
-              ? {
-                  from: d.leg.from,
-                  to: d.leg.to,
-                  nm: d.leg.nm,
-                  hours: d.leg.hours,
-                  fuelL: d.leg.fuelL,
-                }
-              : undefined,
+            leg: d.leg,
+            title: d.title,
+            activities: d.activities,
+            port: d.port,
           }));
           setDays(videoDays);
         }
@@ -108,6 +106,7 @@ export default function FinalItineraryPage() {
 
       <FinalVideoFlow
         days={days}
+        // ✅ PUBLIC ROOT FILES (must match names in /public)
         video1Url="/berth-to-island.mp4"
         video2Url="/island-to-island.mp4"
         video3Url="/island-to-berth.mp4"
