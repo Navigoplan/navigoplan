@@ -96,13 +96,11 @@ const DEST_INFO: Record<string, DestInfo> = {
     highlights: ["Μουσείο Μπουμπουλίνας", "Ντάπια", "Άγ. Παρασκευή", "Κοκτέιλ το βράδυ"],
   },
   "Porto Cheli": {
-    description:
-      "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
+    description: "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
     highlights: ["Ήρεμες αγκυροβολίες", "Θαλάσσια παιχνίδια", "Φρέσκο ψάρι", "Short hop σε Σπέτσες"],
   },
   Ermioni: {
-    description:
-      "Παραθαλάσσια κωμόπολη σε χερσόνησο, με πευκόφυτο Μπίστι και καλές ταβέρνες.",
+    description: "Παραθαλάσσια κωμόπολη σε χερσόνησο, με πευκόφυτο Μπίστι και καλές ταβέρνες.",
     highlights: ["Περίπατος στο Μπίστι", "Θαλασσινά", "Ήσυχη βραδιά", "Κοντινά μπάνια"],
   },
 };
@@ -162,12 +160,13 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard | null> {
   return card;
 }
 
-/* ========= Sea Guide VIP Info (NEW robust matching) ========= */
+/* ========= Sea Guide VIP + Facilities (robust matching) ========= */
 type SeaGuideEntry = {
   id?: string;
   region?: string;
   name?: { el?: string; en?: string } | string;
   vip_info?: { el?: string; en?: string } | string;
+  facilities?: Record<string, any>;
 };
 
 const SEA_GUIDE_URL = "/data/sea_guide_vol3_master.json";
@@ -179,7 +178,6 @@ type SeaGuideIndex = {
 
 function buildSeaGuideIndex(items: SeaGuideEntry[]): SeaGuideIndex {
   const tokenMap = new Map<string, SeaGuideEntry[]>();
-
   function addToken(tok: string, e: SeaGuideEntry) {
     const k = normalize(tok);
     if (!k) return;
@@ -199,10 +197,7 @@ function buildSeaGuideIndex(items: SeaGuideEntry[]): SeaGuideIndex {
       if (n?.en) names.push(n.en);
     }
 
-    for (const nm of names) {
-      const toks = tokensOf(nm);
-      toks.forEach((t) => addToken(t, e));
-    }
+    for (const nm of names) tokensOf(nm).forEach((t) => addToken(t, e));
   }
 
   return { entries: items, tokenMap };
@@ -210,38 +205,57 @@ function buildSeaGuideIndex(items: SeaGuideEntry[]): SeaGuideIndex {
 
 function bestMatchSeaGuide(toName: string, idx: SeaGuideIndex | null): SeaGuideEntry | null {
   if (!idx) return null;
-
   const qTokens = Array.from(new Set(tokensOf(toName)));
   if (!qTokens.length) return null;
 
   const score = new Map<SeaGuideEntry, number>();
   for (const t of qTokens) {
     const list = idx.tokenMap.get(t) ?? [];
-    for (const e of list) {
-      score.set(e, (score.get(e) ?? 0) + 1);
-    }
+    for (const e of list) score.set(e, (score.get(e) ?? 0) + 1);
   }
 
   let best: SeaGuideEntry | null = null;
   let bestScore = 0;
-
   for (const [e, sc] of score) {
     if (sc > bestScore) {
       bestScore = sc;
       best = e;
     }
   }
-
-  // For simple names like "Poros", even score=1 is often enough
-  // but keep a small safety: require at least 1 token match.
-  if (best && bestScore >= 1) return best;
-
-  return null;
+  return bestScore >= 1 ? best : null;
 }
 
 function extractVipInfo(entry: SeaGuideEntry | null, lang: "el" | "en" = "el") {
   if (!entry) return "";
   return pickText(entry.vip_info, lang).trim();
+}
+
+/* ========= Facilities icons (NEW) ========= */
+const FAC_ICON: Record<string, { icon: string; label: string }> = {
+  restaurants: { icon: "🍽️", label: "Restaurants" },
+  shops: { icon: "🛍️", label: "Shops" },
+  atm: { icon: "🏧", label: "ATM" },
+  fuel: { icon: "⛽", label: "Fuel" },
+  water: { icon: "💧", label: "Water" },
+  electricity: { icon: "🔌", label: "Power" },
+  showers: { icon: "🚿", label: "Showers" },
+  laundry: { icon: "🧺", label: "Laundry" },
+  repairs: { icon: "🛠️", label: "Repairs" },
+};
+
+function pickFacilitiesChips(facilities: Record<string, any> | undefined) {
+  if (!facilities || typeof facilities !== "object") return [];
+  const keys = ["restaurants", "shops", "atm"]; // 👈 όπως ζήτησες (εύκολα προσθέτεις κι άλλα)
+  const out: { k: string; icon: string; label: string }[] = [];
+
+  for (const k of keys) {
+    const v = (facilities as any)[k];
+    if (v === true || (typeof v === "string" && v.trim()) || (typeof v === "number" && !Number.isNaN(v))) {
+      const meta = FAC_ICON[k] ?? { icon: "✅", label: k };
+      out.push({ k, icon: meta.icon, label: meta.label });
+    }
+  }
+  return out;
 }
 
 /* ========= Component ========= */
@@ -277,12 +291,10 @@ export default function VipGuestsView({
       }
       if (!abort) setWiki(next);
     })();
-    return () => {
-      abort = true;
-    };
+    return () => { abort = true; };
   }, [destNames]);
 
-  // SeaGuide index (load once)
+  // SeaGuide index
   useEffect(() => {
     let abort = false;
     (async () => {
@@ -305,9 +317,7 @@ export default function VipGuestsView({
         if (!abort) setSgIndex({ entries: [], tokenMap: new Map() });
       }
     })();
-    return () => {
-      abort = true;
-    };
+    return () => { abort = true; };
   }, []);
 
   return (
@@ -336,19 +346,15 @@ export default function VipGuestsView({
           const wx = destWeather?.[to];
           const curated = DEST_INFO[to];
           const summary = wiki[to]?.summary?.trim();
-
           const mainDesc = curated?.description || summary || "";
           const hi = (curated?.highlights || []).slice(0, 6);
 
-          // ✅ NEW: VIP info from SeaGuide (robust match)
           const sgEntry = bestMatchSeaGuide(to, sgIndex);
           const vipInfo = extractVipInfo(sgEntry, "el");
+          const facChips = pickFacilitiesChips(sgEntry?.facilities);
 
           return (
-            <div
-              key={d.day}
-              className="rounded-2xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
-            >
+            <div key={d.day} className="rounded-2xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
               <div className="grid sm:grid-cols-[120px_1fr_260px] gap-0">
                 <div className="bg-neutral-50 p-4 flex flex-col items-start justify-center">
                   <div className="text-3xl font-semibold leading-none">{d.day}</div>
@@ -367,12 +373,7 @@ export default function VipGuestsView({
                           </div>
                           <div className="mt-1 text-sm text-neutral-600">
                             {Math.round(d.leg.nm)} nm • {formatHoursHM(d.leg.hours)}
-                            {d.leg.eta && (
-                              <>
-                                {" "}
-                                • Depart {d.leg.eta.dep} • Arrive {d.leg.eta.arr} ({d.leg.eta.window})
-                              </>
-                            )}
+                            {d.leg.eta && <> • Depart {d.leg.eta.dep} • Arrive {d.leg.eta.arr} ({d.leg.eta.window})</>}
                           </div>
 
                           {/* Live Weather chips */}
@@ -382,6 +383,17 @@ export default function VipGuestsView({
                             {wx?.cloudPct != null && <span className="rounded-full border px-2 py-1">☁️ {wx.cloudPct}%</span>}
                             {wx?.precipMM != null && <span className="rounded-full border px-2 py-1">🌧 {wx.precipMM} mm/h</span>}
                           </div>
+
+                          {/* ✅ Facilities chips (icons) */}
+                          {facChips.length > 0 && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                              {facChips.map((c) => (
+                                <span key={c.k} className="rounded-full border px-2 py-1 bg-white">
+                                  {c.icon} {c.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         {img && (
@@ -397,13 +409,11 @@ export default function VipGuestsView({
                       {mainDesc && (
                         <p className="mt-3 text-[15px] leading-relaxed text-neutral-800">
                           {mainDesc}
-                          {!curated?.description && summary ? (
-                            <span className="text-neutral-500 text-sm"> (Πηγή: Wikipedia)</span>
-                          ) : null}
+                          {!curated?.description && summary ? <span className="text-neutral-500 text-sm"> (Πηγή: Wikipedia)</span> : null}
                         </p>
                       )}
 
-                      {/* ✅ VIP INFO box */}
+                      {/* VIP info */}
                       {vipInfo && (
                         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                           <span className="font-semibold">VIP:</span> {vipInfo}
