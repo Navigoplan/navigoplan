@@ -19,6 +19,7 @@ export type DayCard = {
   notes?: string;
   title?: string;
   activities?: string[];
+  port?: string;
 };
 
 type VideoId = "v1" | "v2" | "v3" | "v4";
@@ -32,7 +33,7 @@ type Props = {
   fullPayload?: any | null; // sessionStorage payload (VIP dayCards etc)
 };
 
-/* ========= VIP-like curated info (same as VipGuestsView) ========= */
+/* ========= VIP curated info (same list as VipGuestsView) ========= */
 type DestInfo = { description: string; highlights: string[] };
 
 const DEST_INFO: Record<string, DestInfo> = {
@@ -61,8 +62,7 @@ const DEST_INFO: Record<string, DestInfo> = {
     highlights: ["Μουσείο Μπουμπουλίνας", "Ντάπια", "Άγ. Παρασκευή", "Κοκτέιλ το βράδυ"],
   },
   "Porto Cheli": {
-    description:
-      "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
+    description: "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
     highlights: ["Ήρεμες αγκυροβολίες", "Θαλάσσια παιχνίδια", "Φρέσκο ψάρι", "Short hop σε Σπέτσες"],
   },
   Ermioni: {
@@ -72,6 +72,44 @@ const DEST_INFO: Record<string, DestInfo> = {
   },
 };
 
+/* ========= Weather (Open-Meteo like AI Planner) ========= */
+type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string };
+
+const wxCache = new Map<string, SpotWeather>();
+function labelFromWx(precipMM?: number, cloudPct?: number) {
+  if ((precipMM ?? 0) > 0.1) return "Rain";
+  if ((cloudPct ?? 0) >= 70) return "Cloudy";
+  if ((cloudPct ?? 0) >= 30) return "Partly cloudy";
+  return "Clear";
+}
+async function fetchSpotWeather(lat: number, lon: number): Promise<SpotWeather | null> {
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+  if (wxCache.has(key)) return wxCache.get(key)!;
+
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&current=temperature_2m,precipitation,cloud_cover,is_day` +
+    `&timezone=auto`;
+
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const j = await r.json();
+
+    const out: SpotWeather = {
+      tempC: j?.current?.temperature_2m != null ? Math.round(j.current.temperature_2m) : undefined,
+      precipMM: j?.current?.precipitation != null ? +Number(j.current.precipitation).toFixed(1) : undefined,
+      cloudPct: j?.current?.cloud_cover != null ? Math.round(j.current.cloud_cover) : undefined,
+    };
+    out.label = labelFromWx(out.precipMM, out.cloudPct);
+    wxCache.set(key, out);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/* ========= Utils ========= */
 function formatDate(d?: string) {
   if (!d) return "—";
   try {
@@ -81,11 +119,14 @@ function formatDate(d?: string) {
     return d;
   }
 }
-
-function formatHoursHM(hoursFloat: number) {
-  const h = Math.floor(hoursFloat);
-  const m = Math.round((hoursFloat - h) * 60);
+function formatHoursHM(hoursFloat?: number) {
+  const h = Math.floor(hoursFloat ?? 0);
+  const m = Math.round(((hoursFloat ?? 0) - h) * 60);
   return `${h} h ${m} m`;
+}
+function fmtNM(nm?: number) {
+  if (nm == null) return "";
+  return `${Math.round(nm)} nm`;
 }
 
 /* ========= Component ========= */
@@ -98,13 +139,13 @@ export function FinalVideoFlow({
   fullPayload,
 }: Props) {
   /**
-   * IMPORTANT:
-   * - We keep the <video> mounted so the last frame stays visible.
-   * - On ended → pause & show overlay, do NOT set currentVideo null.
+   * We keep the <video> mounted so the last frame stays visible.
+   * onEnded → pause on last frame → show overlay.
    */
   const [mode, setMode] = useState<"idle" | "video" | "card" | "finalReveal">("idle");
   const [activeDay, setActiveDay] = useState(0);
   const [currentVideo, setCurrentVideo] = useState<VideoId | null>(null);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
 
@@ -116,6 +157,7 @@ export function FinalVideoFlow({
   const isLastDay = activeDay === days.length - 1;
   const isPenultimateDay = activeDay === days.length - 2;
 
+  // Build current card data (VIP payload preferred)
   const currentData = useMemo(() => {
     const vip = vipDayCards[activeDay];
     const base = days[activeDay];
@@ -125,6 +167,9 @@ export function FinalVideoFlow({
     const to = leg?.to ?? d?.port ?? d?.name ?? "";
     const curated = DEST_INFO[to];
 
+    // Coordinates: from URL payload (stops) if present
+    // We encoded stops in URL; in FinalItineraryPage we converted to DayCard only.
+    // So we can’t rely on coords here. If later you want coords, we can also pass them.
     return {
       day: d?.day ?? activeDay + 1,
       date: d?.date,
@@ -134,11 +179,30 @@ export function FinalVideoFlow({
       description: curated?.description ?? "",
       highlights: (curated?.highlights ?? []).slice(0, 6),
       activities: Array.isArray(d?.activities) ? d.activities : [],
-      title:
-        d?.title ??
-        (leg?.from && leg?.to ? `${leg.from} → ${leg.to}` : to),
+      title: d?.title ?? (leg?.from && leg?.to ? `${leg.from} → ${leg.to}` : to),
+      // fallback coords by common ports (quick + safe)
+      // (we only need rough coords for live meteo; adjust later with your ports dataset if you want)
+      coords: guessCoords(to),
     };
   }, [activeDay, vipDayCards, days]);
+
+  // Live weather state (per current destination)
+  const [wx, setWx] = useState<SpotWeather | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const c = currentData.coords;
+      if (!c) {
+        if (!cancelled) setWx(null);
+        return;
+      }
+      const w = await fetchSpotWeather(c.lat, c.lon);
+      if (!cancelled) setWx(w);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentData.to]);
 
   const videoSrc = useMemo(() => {
     return currentVideo === "v1"
@@ -172,67 +236,57 @@ export function FinalVideoFlow({
       el.currentTime = 0;
       el.load();
       const p = el.play();
-      if (p && typeof (p as any).catch === "function") {
-        await p;
-      }
+      if (p && typeof (p as any).catch === "function") await p;
     } catch {
       setVideoError("Autoplay was blocked. Click on the video once to start playback.");
     }
   }
 
-  /* ========= Start ========= */
+  useEffect(() => {
+    if (mode !== "video") return;
+    if (!videoSrc) return;
+    const id = window.requestAnimationFrame(() => playNow());
+    return () => window.cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, videoSrc]);
+
   function handleStartJourney() {
     if (!days.length) return;
     setActiveDay(0);
     setCurrentVideo("v1");
     setMode("video");
-
-    // user gesture best-effort
     requestAnimationFrame(() => playNow());
   }
 
-  /* ========= When video ends: pause on last frame + show overlay ========= */
   function handleVideoEnded() {
     const el = videoRef.current;
     if (el) el.pause();
-
-    if (currentVideo === "v4") {
-      setMode("finalReveal");
-    } else {
-      setMode("card");
-    }
+    if (currentVideo === "v4") setMode("finalReveal");
+    else setMode("card");
   }
 
-  /* ========= Continue from overlay ========= */
   function handleContinue() {
-    // If currently showing Day overlay, choose next travel video and move day index
     if (isLastDay) {
-      // last day -> final zoom out
       setCurrentVideo("v4");
       setMode("video");
       requestAnimationFrame(() => playNow());
       return;
     }
-
     if (isPenultimateDay) {
-      // penultimate -> island-to-berth, then move to last day
       setCurrentVideo("v3");
       setMode("video");
       setActiveDay((d) => Math.min(d + 1, days.length - 1));
       requestAnimationFrame(() => playNow());
       return;
     }
-
-    // middle -> island-to-island, then move to next day
     setCurrentVideo("v2");
     setMode("video");
     setActiveDay((d) => Math.min(d + 1, days.length - 1));
     requestAnimationFrame(() => playNow());
   }
 
-  /* ========= VIP-like overlay card ========= */
   function VipStyleOverlayCard() {
-    const { day, date, leg, notes, description, highlights, to, title } = currentData;
+    const { day, date, leg, notes, description, highlights } = currentData;
 
     return (
       <div className="pointer-events-auto w-[92vw] max-w-[980px] rounded-2xl bg-white/85 backdrop-blur-md border border-white/50 shadow-2xl overflow-hidden">
@@ -243,7 +297,7 @@ export function FinalVideoFlow({
             <div className="text-xs uppercase tracking-wider text-neutral-500">Day</div>
           </div>
 
-          {/* Middle main */}
+          {/* Middle */}
           <div className="p-4">
             <div className="text-sm text-neutral-500">{formatDate(date)}</div>
 
@@ -251,19 +305,47 @@ export function FinalVideoFlow({
               <>
                 <div className="mt-1 flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-lg font-semibold">{leg.from} → {leg.to}</div>
-
-                    <div className="mt-1 text-sm text-neutral-700">
-                      {Math.round(leg.nm ?? 0)} nm • {formatHoursHM(leg.hours ?? 0)}
-                      {leg.eta?.dep && leg.eta?.arr && (
-                        <> • Depart {leg.eta.dep} • Arrive {leg.eta.arr}{leg.eta.window ? ` (${leg.eta.window})` : ""}</>
-                      )}
+                    <div className="text-lg font-semibold">
+                      {leg.from} → {leg.to}
                     </div>
 
-                    {/* Description (VIP style) */}
+                    {/* NM / Time / ETA */}
+                    <div className="mt-1 text-sm text-neutral-700">
+                      {fmtNM(leg.nm)}
+                      {leg.hours != null ? ` • ${formatHoursHM(leg.hours)}` : ""}
+                      {leg.eta?.dep && leg.eta?.arr
+                        ? ` • Depart ${leg.eta.dep} • Arrive ${leg.eta.arr}${leg.eta.window ? ` (${leg.eta.window})` : ""}`
+                        : ""}
+                    </div>
+
+                    {/* Weather chips */}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      {wx?.label ? (
+                        <span className="rounded-full border px-2 py-1 bg-white/70">
+                          Weather: {wx.label}
+                        </span>
+                      ) : null}
+                      {wx?.tempC != null ? (
+                        <span className="rounded-full border px-2 py-1 bg-white/70">
+                          🌡 {wx.tempC}°C
+                        </span>
+                      ) : null}
+                      {wx?.cloudPct != null ? (
+                        <span className="rounded-full border px-2 py-1 bg-white/70">
+                          ☁️ {wx.cloudPct}%
+                        </span>
+                      ) : null}
+                      {wx?.precipMM != null ? (
+                        <span className="rounded-full border px-2 py-1 bg-white/70">
+                          🌧 {wx.precipMM} mm/h
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Description + Notes */}
                     {(description || notes) && (
                       <p className="mt-3 text-[15px] leading-relaxed text-neutral-800">
-                        {description ? description : ""}
+                        {description}
                       </p>
                     )}
 
@@ -277,13 +359,13 @@ export function FinalVideoFlow({
               </>
             ) : (
               <>
-                <div className="mt-1 text-lg font-semibold">{title || to || "Leisure day"}</div>
+                <div className="mt-1 text-lg font-semibold">Leisure day</div>
                 {notes && <p className="mt-2 text-neutral-700 whitespace-pre-wrap">{notes}</p>}
               </>
             )}
           </div>
 
-          {/* Right highlights column */}
+          {/* Right highlights */}
           <div className="p-4 border-l bg-neutral-50/70">
             <div className="text-sm font-medium mb-1">Highlights</div>
             {highlights.length ? (
@@ -308,7 +390,6 @@ export function FinalVideoFlow({
     );
   }
 
-  /* ========= Final reveal overlay (keeps last frame) ========= */
   function FinalRevealOverlay() {
     const cards: any[] = Array.isArray(fullPayload?.dayCards) ? fullPayload.dayCards : days;
 
@@ -343,21 +424,19 @@ export function FinalVideoFlow({
 
                   <div className="p-4">
                     <div className="text-sm text-neutral-500">{date}</div>
-
                     {leg ? (
                       <>
                         <div className="mt-1 text-lg font-semibold">{leg.from} → {leg.to}</div>
                         <div className="mt-1 text-sm text-neutral-600">
-                          {Math.round(leg.nm ?? 0)} nm • {formatHoursHM(leg.hours ?? 0)}
-                          {leg.eta?.dep && leg.eta?.arr && (
-                            <> • Depart {leg.eta.dep} • Arrive {leg.eta.arr}{leg.eta.window ? ` (${leg.eta.window})` : ""}</>
-                          )}
+                          {fmtNM(leg.nm)}{leg.hours != null ? ` • ${formatHoursHM(leg.hours)}` : ""}
+                          {leg.eta?.dep && leg.eta?.arr
+                            ? ` • Depart ${leg.eta.dep} • Arrive ${leg.eta.arr}${leg.eta.window ? ` (${leg.eta.window})` : ""}`
+                            : ""}
                         </div>
                       </>
                     ) : (
                       <div className="mt-1 text-lg font-semibold">{d?.title ?? to ?? "Leisure"}</div>
                     )}
-
                     {d?.notes && <p className="mt-2 text-neutral-700 whitespace-pre-wrap">{d.notes}</p>}
                   </div>
 
@@ -383,7 +462,7 @@ export function FinalVideoFlow({
   return (
     <div className="relative w-full">
       <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-black min-h-[360px]">
-        {/* VIDEO stays mounted, so last frame stays */}
+        {/* VIDEO stays mounted so last frame stays visible */}
         {videoSrc && (
           <video
             ref={videoRef}
@@ -402,7 +481,6 @@ export function FinalVideoFlow({
           />
         )}
 
-        {/* Error helper */}
         {videoError && (
           <div className="pointer-events-auto absolute left-4 right-4 bottom-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {videoError}
@@ -445,4 +523,20 @@ export function FinalVideoFlow({
       </div>
     </div>
   );
+}
+
+/* ========= Quick coords fallback for live meteo =========
+   (Optional: later we can pass real coords from your ports dataset) */
+function guessCoords(name: string): { lat: number; lon: number } | null {
+  const m: Record<string, { lat: number; lon: number }> = {
+    Alimos: { lat: 37.919, lon: 23.716 },
+    Aegina: { lat: 37.746, lon: 23.428 },
+    Agistri: { lat: 37.708, lon: 23.355 },
+    Poros: { lat: 37.499, lon: 23.454 },
+    Hydra: { lat: 37.349, lon: 23.466 },
+    Spetses: { lat: 37.262, lon: 23.160 },
+    Ermioni: { lat: 37.386, lon: 23.248 },
+    "Porto Cheli": { lat: 37.326, lon: 23.141 },
+  };
+  return m[name] ?? null;
 }
