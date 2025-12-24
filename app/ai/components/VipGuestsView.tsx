@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 /* ========= Types ========= */
-type YachtType = "Motor" | "Sailing";
 type Leg = {
   from: string;
   to: string;
@@ -20,7 +19,6 @@ type DayCard = {
   notes?: string;
   userNotes?: { marina?: string; food?: string; beach?: string };
 };
-
 type PlannerMode = "Region" | "Custom";
 type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string };
 
@@ -44,19 +42,29 @@ function formatDate(d?: string) {
     return d;
   }
 }
-
 function formatHoursHM(hoursFloat: number) {
   const h = Math.floor(hoursFloat);
   const m = Math.round((hoursFloat - h) * 60);
   return `${h} h ${m} m`;
 }
-
 function normalize(s: string) {
   return (s || "")
     .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
+}
+function tokensOf(s: string) {
+  return normalize(s)
+    .replace(/[^a-z0-9α-ω\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+function pickText(v: any, lang: "el" | "en" = "el") {
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "object") return v?.[lang] || v?.el || v?.en || "";
+  return "";
 }
 
 /* ========= Curated destination info ========= */
@@ -88,11 +96,13 @@ const DEST_INFO: Record<string, DestInfo> = {
     highlights: ["Μουσείο Μπουμπουλίνας", "Ντάπια", "Άγ. Παρασκευή", "Κοκτέιλ το βράδυ"],
   },
   "Porto Cheli": {
-    description: "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
+    description:
+      "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
     highlights: ["Ήρεμες αγκυροβολίες", "Θαλάσσια παιχνίδια", "Φρέσκο ψάρι", "Short hop σε Σπέτσες"],
   },
   Ermioni: {
-    description: "Παραθαλάσσια κωμόπολη σε χερσόνησο, με πευκόφυτο Μπίστι και καλές ταβέρνες.",
+    description:
+      "Παραθαλάσσια κωμόπολη σε χερσόνησο, με πευκόφυτο Μπίστι και καλές ταβέρνες.",
     highlights: ["Περίπατος στο Μπίστι", "Θαλασσινά", "Ήσυχη βραδιά", "Κοντινά μπάνια"],
   },
 };
@@ -125,7 +135,6 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard | null> {
       if (summary?.title) break;
     } catch {}
   }
-
   if (!summary) return null;
 
   const card: WikiCard = {
@@ -153,44 +162,81 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard | null> {
   return card;
 }
 
-/* ========= Sea Guide VIP Info (NEW) ========= */
+/* ========= Sea Guide VIP Info (NEW robust matching) ========= */
 type SeaGuideEntry = {
   id?: string;
+  region?: string;
   name?: { el?: string; en?: string } | string;
   vip_info?: { el?: string; en?: string } | string;
 };
 
 const SEA_GUIDE_URL = "/data/sea_guide_vol3_master.json";
 
-function pickText(v: any, lang: "el" | "en" = "el") {
-  if (!v) return "";
-  if (typeof v === "string") return v;
-  if (typeof v === "object") return v?.[lang] || v?.el || v?.en || "";
-  return "";
-}
+type SeaGuideIndex = {
+  entries: SeaGuideEntry[];
+  tokenMap: Map<string, SeaGuideEntry[]>;
+};
 
-function buildSeaGuideIndex(items: SeaGuideEntry[]) {
-  const exact = new Map<string, SeaGuideEntry>();
+function buildSeaGuideIndex(items: SeaGuideEntry[]): SeaGuideIndex {
+  const tokenMap = new Map<string, SeaGuideEntry[]>();
 
-  function addKey(k: string, e: SeaGuideEntry) {
-    const kk = normalize(k);
-    if (!kk) return;
-    if (!exact.has(kk)) exact.set(kk, e);
+  function addToken(tok: string, e: SeaGuideEntry) {
+    const k = normalize(tok);
+    if (!k) return;
+    const arr = tokenMap.get(k) ?? [];
+    arr.push(e);
+    tokenMap.set(k, arr);
   }
 
   for (const e of items) {
-    if (!e) continue;
-    if (e.id) addKey(e.id, e);
+    const names: string[] = [];
+    if (e?.id) names.push(String(e.id));
 
-    const n = e.name;
-    if (typeof n === "string") addKey(n, e);
+    const n = e?.name;
+    if (typeof n === "string") names.push(n);
     else {
-      if (n?.el) addKey(n.el, e);
-      if (n?.en) addKey(n.en, e);
+      if (n?.el) names.push(n.el);
+      if (n?.en) names.push(n.en);
+    }
+
+    for (const nm of names) {
+      const toks = tokensOf(nm);
+      toks.forEach((t) => addToken(t, e));
     }
   }
 
-  return exact;
+  return { entries: items, tokenMap };
+}
+
+function bestMatchSeaGuide(toName: string, idx: SeaGuideIndex | null): SeaGuideEntry | null {
+  if (!idx) return null;
+
+  const qTokens = Array.from(new Set(tokensOf(toName)));
+  if (!qTokens.length) return null;
+
+  const score = new Map<SeaGuideEntry, number>();
+  for (const t of qTokens) {
+    const list = idx.tokenMap.get(t) ?? [];
+    for (const e of list) {
+      score.set(e, (score.get(e) ?? 0) + 1);
+    }
+  }
+
+  let best: SeaGuideEntry | null = null;
+  let bestScore = 0;
+
+  for (const [e, sc] of score) {
+    if (sc > bestScore) {
+      bestScore = sc;
+      best = e;
+    }
+  }
+
+  // For simple names like "Poros", even score=1 is often enough
+  // but keep a small safety: require at least 1 token match.
+  if (best && bestScore >= 1) return best;
+
+  return null;
 }
 
 function extractVipInfo(entry: SeaGuideEntry | null, lang: "el" | "en" = "el") {
@@ -215,7 +261,7 @@ export default function VipGuestsView({
   }, [plan]);
 
   const [wiki, setWiki] = useState<Record<string, WikiCard | null>>({});
-  const [seaGuideIndex, setSeaGuideIndex] = useState<Map<string, SeaGuideEntry> | null>(null);
+  const [sgIndex, setSgIndex] = useState<SeaGuideIndex | null>(null);
 
   // Wikipedia
   useEffect(() => {
@@ -236,7 +282,7 @@ export default function VipGuestsView({
     };
   }, [destNames]);
 
-  // SeaGuide VIP info index (load once)
+  // SeaGuide index (load once)
   useEffect(() => {
     let abort = false;
     (async () => {
@@ -254,31 +300,15 @@ export default function VipGuestsView({
           ? j.ports
           : [];
         const idx = buildSeaGuideIndex(list);
-        if (!abort) setSeaGuideIndex(idx);
+        if (!abort) setSgIndex(idx);
       } catch {
-        if (!abort) setSeaGuideIndex(new Map());
+        if (!abort) setSgIndex({ entries: [], tokenMap: new Map() });
       }
     })();
     return () => {
       abort = true;
     };
   }, []);
-
-  function lookupSeaGuideEntryByTo(to: string): SeaGuideEntry | null {
-    if (!seaGuideIndex) return null;
-    const key = normalize(to);
-    if (!key) return null;
-    // direct match
-    const hit = seaGuideIndex.get(key);
-    if (hit) return hit;
-
-    // try basic cleanup (remove parentheses)
-    const cleaned = to.replace(/\s*\([^)]+\)\s*/g, " ").trim();
-    const hit2 = seaGuideIndex.get(normalize(cleaned));
-    if (hit2) return hit2;
-
-    return null;
-  }
 
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -306,11 +336,12 @@ export default function VipGuestsView({
           const wx = destWeather?.[to];
           const curated = DEST_INFO[to];
           const summary = wiki[to]?.summary?.trim();
+
           const mainDesc = curated?.description || summary || "";
           const hi = (curated?.highlights || []).slice(0, 6);
 
-          // ✅ NEW: VIP info from SeaGuide JSON
-          const sgEntry = lookupSeaGuideEntryByTo(to);
+          // ✅ NEW: VIP info from SeaGuide (robust match)
+          const sgEntry = bestMatchSeaGuide(to, sgIndex);
           const vipInfo = extractVipInfo(sgEntry, "el");
 
           return (
@@ -372,7 +403,7 @@ export default function VipGuestsView({
                         </p>
                       )}
 
-                      {/* ✅ NEW: VIP INFO line (Sea Guide) */}
+                      {/* ✅ VIP INFO box */}
                       {vipInfo && (
                         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                           <span className="font-semibold">VIP:</span> {vipInfo}
@@ -393,9 +424,7 @@ export default function VipGuestsView({
                   <div className="text-sm font-medium mb-1">Highlights</div>
                   {hi.length ? (
                     <ul className="text-sm text-neutral-700 space-y-1 list-disc pl-5">
-                      {hi.map((x, i) => (
-                        <li key={i}>{x}</li>
-                      ))}
+                      {hi.map((x, i) => (<li key={i}>{x}</li>))}
                     </ul>
                   ) : (
                     <div className="text-sm text-neutral-500">Swim stop, dinner ashore, golden-hour cruise.</div>
