@@ -29,28 +29,66 @@ type Props = {
   video2Url: string; // island-to-island
   video3Url: string; // island-to-berth
   video4Url: string; // berth-zoom-out (final reveal)
-  fullPayload?: any | null; // from sessionStorage (VIP dayCards)
+  fullPayload?: any | null; // sessionStorage payload (VIP dayCards etc)
 };
 
-function formatHM(h?: number) {
-  const v = h ?? 0;
-  const H = Math.floor(v);
-  const M = Math.round((v - H) * 60);
-  return `${H}h ${M}m`;
-}
+/* ========= VIP-like curated info (same as VipGuestsView) ========= */
+type DestInfo = { description: string; highlights: string[] };
+
+const DEST_INFO: Record<string, DestInfo> = {
+  Aegina: {
+    description:
+      "Νησί με μακραίωνη ιστορία: ο Ναός της Αφαίας σχηματίζει με Παρθενώνα και Σούνιο το «ιερό τρίγωνο». Φημισμένο για το φιστίκι ΠΟΠ και τη νεοκλασική Χώρα.",
+    highlights: ["Ναός Αφαίας & θέα", "Μονή Αγίου Νεκταρίου", "Βόλτα στη Χώρα", "Θαλασσινά στο λιμάνι"],
+  },
+  Agistri: {
+    description:
+      "Μικρό πράσινο νησί με πεύκα ως τη θάλασσα και νερά-πισίνα. Ιδανικό για κολύμπι και ήρεμες αγκυροβολίες.",
+    highlights: ["Απονήσος", "Dragonera", "SUP/κανό", "Χαλαρό δείπνο"],
+  },
+  Poros: {
+    description:
+      "Πράσινο νησί απέναντι από τον Γαλατά. Φημίζεται για το Ρολόι, το στενό κανάλι και τις πευκόφυτες ακτές.",
+    highlights: ["Ρολόι", "Μονή Ζωοδόχου Πηγής", "Λιμανάκι της Αγάπης", "Tender στο κανάλι"],
+  },
+  Hydra: {
+    description:
+      "Ύδρα χωρίς αυτοκίνητα: πέτρινα αρχοντικά, ναυτική ιστορία και έντονη καλλιτεχνική ζωή.",
+    highlights: ["Περίπατος στο λιμάνι", "Μουσεία", "Ηλιοβασίλεμα στο Κανόνι", "Σπήλια"],
+  },
+  Spetses: {
+    description: "Νησί της Μπουμπουλίνας — αρχοντικό, ρομαντικό και κοσμικό.",
+    highlights: ["Μουσείο Μπουμπουλίνας", "Ντάπια", "Άγ. Παρασκευή", "Κοκτέιλ το βράδυ"],
+  },
+  "Porto Cheli": {
+    description:
+      "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
+    highlights: ["Ήρεμες αγκυροβολίες", "Θαλάσσια παιχνίδια", "Φρέσκο ψάρι", "Short hop σε Σπέτσες"],
+  },
+  Ermioni: {
+    description:
+      "Παραθαλάσσια κωμόπολη σε χερσόνησο, με πευκόφυτο Μπίστι και καλές ταβέρνες.",
+    highlights: ["Περίπατος στο Μπίστι", "Θαλασσινά", "Ήσυχη βραδιά", "Κοντινά μπάνια"],
+  },
+};
+
 function formatDate(d?: string) {
-  if (!d) return "";
+  if (!d) return "—";
   try {
-    return new Date(d).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    const dt = new Date(d);
+    return dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   } catch {
     return d;
   }
 }
 
+function formatHoursHM(hoursFloat: number) {
+  const h = Math.floor(hoursFloat);
+  const m = Math.round((hoursFloat - h) * 60);
+  return `${h} h ${m} m`;
+}
+
+/* ========= Component ========= */
 export function FinalVideoFlow({
   days,
   video1Url,
@@ -60,48 +98,47 @@ export function FinalVideoFlow({
   fullPayload,
 }: Props) {
   /**
-   * mode:
-   * - idle: start screen
-   * - video: playing
-   * - card: paused on LAST FRAME, overlay visible
-   * - finalReveal: paused on LAST FRAME, overview overlay visible
+   * IMPORTANT:
+   * - We keep the <video> mounted so the last frame stays visible.
+   * - On ended → pause & show overlay, do NOT set currentVideo null.
    */
-  const [mode, setMode] = useState<"idle" | "video" | "card" | "finalReveal">(
-    "idle"
-  );
+  const [mode, setMode] = useState<"idle" | "video" | "card" | "finalReveal">("idle");
   const [activeDay, setActiveDay] = useState(0);
-
   const [currentVideo, setCurrentVideo] = useState<VideoId | null>(null);
-
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
 
-  const isLastDay = activeDay === days.length - 1;
-  const isPenultimateDay = activeDay === days.length - 2;
-
-  // VIP dayCards from session payload (prefer these for content)
   const vipDayCards: any[] = useMemo(() => {
     const arr = fullPayload?.dayCards;
     return Array.isArray(arr) ? arr : [];
   }, [fullPayload]);
 
-  function getDayData(i: number) {
-    // prefer VIP dayCard if exists (richer)
-    const vip = vipDayCards[i];
-    const base = days[i];
+  const isLastDay = activeDay === days.length - 1;
+  const isPenultimateDay = activeDay === days.length - 2;
+
+  const currentData = useMemo(() => {
+    const vip = vipDayCards[activeDay];
+    const base = days[activeDay];
     const d = vip ?? base;
 
-    const day = d?.day ?? i + 1;
-    const date = d?.date;
-    const leg = d?.leg;
-    const title =
-      d?.title ??
-      (leg?.from && leg?.to ? `${leg.from} → ${leg.to}` : d?.port ?? d?.name ?? "");
-    const notes = d?.notes ?? "";
-    const activities: string[] = Array.isArray(d?.activities) ? d.activities : [];
+    const leg: Leg | undefined = d?.leg;
+    const to = leg?.to ?? d?.port ?? d?.name ?? "";
+    const curated = DEST_INFO[to];
 
-    return { day, date, leg, title, notes, activities };
-  }
+    return {
+      day: d?.day ?? activeDay + 1,
+      date: d?.date,
+      leg,
+      to,
+      notes: d?.notes ?? "",
+      description: curated?.description ?? "",
+      highlights: (curated?.highlights ?? []).slice(0, 6),
+      activities: Array.isArray(d?.activities) ? d.activities : [],
+      title:
+        d?.title ??
+        (leg?.from && leg?.to ? `${leg.from} → ${leg.to}` : to),
+    };
+  }, [activeDay, vipDayCards, days]);
 
   const videoSrc = useMemo(() => {
     return currentVideo === "v1"
@@ -128,176 +165,163 @@ export function FinalVideoFlow({
   async function playNow() {
     const el = videoRef.current;
     if (!el || !videoSrc) return;
-
     try {
       primeVideo(el);
       setVideoError(null);
-
       el.pause();
       el.currentTime = 0;
       el.load();
-
       const p = el.play();
       if (p && typeof (p as any).catch === "function") {
         await p;
       }
     } catch {
-      setVideoError(
-        "Autoplay was blocked. Click on the video once to start playback."
-      );
+      setVideoError("Autoplay was blocked. Click on the video once to start playback.");
     }
   }
 
-  // When we enter "video" mode, try to play
-  useEffect(() => {
-    if (mode !== "video") return;
-    if (!videoSrc) return;
-    // try play shortly after render
-    const id = window.requestAnimationFrame(() => playNow());
-    return () => window.cancelAnimationFrame(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, videoSrc]);
-
-  /* ========= Start Journey ========= */
-  async function handleStartJourney() {
+  /* ========= Start ========= */
+  function handleStartJourney() {
     if (!days.length) return;
-
     setActiveDay(0);
     setCurrentVideo("v1");
     setMode("video");
 
-    // user gesture → direct play attempt
+    // user gesture best-effort
     requestAnimationFrame(() => playNow());
   }
 
-  /* ========= Video ended ========= */
+  /* ========= When video ends: pause on last frame + show overlay ========= */
   function handleVideoEnded() {
     const el = videoRef.current;
-    if (el) {
-      // keep last frame on screen
-      el.pause();
-      // keep currentTime at end; do NOT clear videoSrc
-    }
+    if (el) el.pause();
 
     if (currentVideo === "v4") {
-      // final video ended → show final reveal overlay on last frame
       setMode("finalReveal");
-      return;
+    } else {
+      setMode("card");
     }
-
-    // after each travel video: show day card overlay, while keeping frame
-    setMode("card");
   }
 
-  /* ========= Continue from overlay card ========= */
+  /* ========= Continue from overlay ========= */
   function handleContinue() {
-    // If we're on final day card -> play v4 (zoom-out + final reveal)
+    // If currently showing Day overlay, choose next travel video and move day index
     if (isLastDay) {
+      // last day -> final zoom out
       setCurrentVideo("v4");
       setMode("video");
+      requestAnimationFrame(() => playNow());
       return;
     }
 
-    // If we're on penultimate -> play island-to-berth, then advance day
     if (isPenultimateDay) {
+      // penultimate -> island-to-berth, then move to last day
       setCurrentVideo("v3");
       setMode("video");
-      // next day becomes last day after video ends
       setActiveDay((d) => Math.min(d + 1, days.length - 1));
+      requestAnimationFrame(() => playNow());
       return;
     }
 
-    // middle days -> island-to-island, then advance day
+    // middle -> island-to-island, then move to next day
     setCurrentVideo("v2");
     setMode("video");
     setActiveDay((d) => Math.min(d + 1, days.length - 1));
+    requestAnimationFrame(() => playNow());
   }
 
-  /* ========= UI blocks ========= */
-
-  function OverlayCard() {
-    const d = getDayData(activeDay);
-    const dep = d.leg?.eta?.dep;
-    const arr = d.leg?.eta?.arr;
-    const nm = d.leg?.nm;
-    const hrs = d.leg?.hours;
+  /* ========= VIP-like overlay card ========= */
+  function VipStyleOverlayCard() {
+    const { day, date, leg, notes, description, highlights, to, title } = currentData;
 
     return (
-      <div className="pointer-events-auto max-w-xl w-[92vw] sm:w-[620px] rounded-2xl bg-white/90 backdrop-blur border border-white/60 shadow-2xl px-6 py-5">
-        <div className="text-[11px] uppercase tracking-wider text-gray-500">
-          VIP DAY {d.day}
-        </div>
-
-        <div className="mt-1 text-2xl font-semibold text-slate-900">
-          {d.title || "Cruise Day"}
-        </div>
-
-        <div className="mt-2 text-sm text-gray-700 space-y-1">
-          {d.date ? <div>📅 {formatDate(d.date)}</div> : null}
-
-          {(nm != null || hrs != null) && (
-            <div>
-              {nm != null ? <>NM: {Number(nm).toFixed(1)} • </> : null}
-              {hrs != null ? <>Time: {formatHM(Number(hrs))}</> : null}
-              {dep || arr ? (
-                <>
-                  {" "}
-                  •{" "}
-                  {dep ? <>Depart {dep}</> : null}
-                  {arr ? <> • Arrive {arr}</> : null}
-                </>
-              ) : null}
-            </div>
-          )}
-
-          {d.notes ? (
-            <div className="mt-2 whitespace-pre-wrap">📝 {d.notes}</div>
-          ) : null}
-        </div>
-
-        {d.activities?.length ? (
-          <div className="mt-4">
-            <div className="text-xs font-semibold text-slate-600">Highlights</div>
-            <ul className="mt-2 list-disc pl-5 text-sm text-slate-800">
-              {d.activities.slice(0, 8).map((a: string, i: number) => (
-                <li key={i}>{a}</li>
-              ))}
-            </ul>
+      <div className="pointer-events-auto w-[92vw] max-w-[980px] rounded-2xl bg-white/85 backdrop-blur-md border border-white/50 shadow-2xl overflow-hidden">
+        <div className="grid sm:grid-cols-[120px_1fr_260px] gap-0">
+          {/* Left day column */}
+          <div className="bg-neutral-50/70 p-4 flex flex-col items-start justify-center">
+            <div className="text-3xl font-semibold leading-none">{day}</div>
+            <div className="text-xs uppercase tracking-wider text-neutral-500">Day</div>
           </div>
-        ) : null}
 
-        <div className="mt-5 flex justify-end">
-          <button
-            onClick={handleContinue}
-            className="rounded-xl bg-black text-white px-5 py-2 text-sm font-medium hover:bg-black/85"
-          >
-            {isLastDay ? "Finish" : "Continue"}
-          </button>
+          {/* Middle main */}
+          <div className="p-4">
+            <div className="text-sm text-neutral-500">{formatDate(date)}</div>
+
+            {leg ? (
+              <>
+                <div className="mt-1 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-lg font-semibold">{leg.from} → {leg.to}</div>
+
+                    <div className="mt-1 text-sm text-neutral-700">
+                      {Math.round(leg.nm ?? 0)} nm • {formatHoursHM(leg.hours ?? 0)}
+                      {leg.eta?.dep && leg.eta?.arr && (
+                        <> • Depart {leg.eta.dep} • Arrive {leg.eta.arr}{leg.eta.window ? ` (${leg.eta.window})` : ""}</>
+                      )}
+                    </div>
+
+                    {/* Description (VIP style) */}
+                    {(description || notes) && (
+                      <p className="mt-3 text-[15px] leading-relaxed text-neutral-800">
+                        {description ? description : ""}
+                      </p>
+                    )}
+
+                    {notes && (
+                      <p className="mt-2 text-neutral-700 whitespace-pre-wrap">
+                        {notes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mt-1 text-lg font-semibold">{title || to || "Leisure day"}</div>
+                {notes && <p className="mt-2 text-neutral-700 whitespace-pre-wrap">{notes}</p>}
+              </>
+            )}
+          </div>
+
+          {/* Right highlights column */}
+          <div className="p-4 border-l bg-neutral-50/70">
+            <div className="text-sm font-medium mb-1">Highlights</div>
+            {highlights.length ? (
+              <ul className="text-sm text-neutral-700 space-y-1 list-disc pl-5">
+                {highlights.map((x, i) => (<li key={i}>{x}</li>))}
+              </ul>
+            ) : (
+              <div className="text-sm text-neutral-500">Swim stop, dinner ashore, golden-hour cruise.</div>
+            )}
+
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={handleContinue}
+                className="rounded-xl bg-black text-white px-4 py-2 text-sm font-medium hover:bg-black/85"
+              >
+                {isLastDay ? "Finish" : "Continue"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
+  /* ========= Final reveal overlay (keeps last frame) ========= */
   function FinalRevealOverlay() {
-    // show the VIP full itinerary (use fullPayload if available)
-    const cards: any[] = Array.isArray(fullPayload?.dayCards)
-      ? fullPayload.dayCards
-      : days;
+    const cards: any[] = Array.isArray(fullPayload?.dayCards) ? fullPayload.dayCards : days;
 
     return (
-      <div className="pointer-events-auto w-[92vw] max-w-5xl rounded-2xl bg-white/90 backdrop-blur border border-white/60 shadow-2xl px-6 py-5">
+      <div className="pointer-events-auto w-[92vw] max-w-5xl rounded-2xl bg-white/85 backdrop-blur-md border border-white/50 shadow-2xl px-6 py-5">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-gray-500">
-              Final VIP Itinerary
-            </div>
+            <div className="text-[11px] uppercase tracking-wider text-gray-500">Final VIP Itinerary</div>
             <div className="mt-1 text-2xl font-semibold text-slate-900">
               {fullPayload?.tripTitle ?? "Your Journey"}
             </div>
           </div>
-          <div className="text-xs text-slate-500">
-            {cards.length} days
-          </div>
+          <div className="text-xs text-slate-600">{cards.length} days</div>
         </div>
 
         <div className="mt-4 max-h-[420px] overflow-auto space-y-3">
@@ -305,46 +329,49 @@ export function FinalVideoFlow({
             const day = d?.day ?? idx + 1;
             const date = d?.date ? formatDate(d.date) : "";
             const leg = d?.leg;
-            const title =
-              d?.title ??
-              (leg?.from && leg?.to ? `${leg.from} → ${leg.to}` : d?.port ?? "");
+            const to = leg?.to ?? d?.port ?? "";
+            const curated = DEST_INFO[to];
+            const hi = (curated?.highlights ?? []).slice(0, 6);
 
             return (
-              <div key={idx} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="font-semibold text-slate-900">
-                    Day {day} • {title}
+              <div key={idx} className="rounded-2xl border overflow-hidden bg-white shadow-sm">
+                <div className="grid sm:grid-cols-[120px_1fr_260px] gap-0">
+                  <div className="bg-neutral-50 p-4 flex flex-col items-start justify-center">
+                    <div className="text-3xl font-semibold leading-none">{day}</div>
+                    <div className="text-xs uppercase tracking-wider text-neutral-500">Day</div>
                   </div>
-                  <div className="text-xs text-slate-500">{date}</div>
+
+                  <div className="p-4">
+                    <div className="text-sm text-neutral-500">{date}</div>
+
+                    {leg ? (
+                      <>
+                        <div className="mt-1 text-lg font-semibold">{leg.from} → {leg.to}</div>
+                        <div className="mt-1 text-sm text-neutral-600">
+                          {Math.round(leg.nm ?? 0)} nm • {formatHoursHM(leg.hours ?? 0)}
+                          {leg.eta?.dep && leg.eta?.arr && (
+                            <> • Depart {leg.eta.dep} • Arrive {leg.eta.arr}{leg.eta.window ? ` (${leg.eta.window})` : ""}</>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-1 text-lg font-semibold">{d?.title ?? to ?? "Leisure"}</div>
+                    )}
+
+                    {d?.notes && <p className="mt-2 text-neutral-700 whitespace-pre-wrap">{d.notes}</p>}
+                  </div>
+
+                  <div className="p-4 border-l bg-neutral-50">
+                    <div className="text-sm font-medium mb-1">Highlights</div>
+                    {hi.length ? (
+                      <ul className="text-sm text-neutral-700 space-y-1 list-disc pl-5">
+                        {hi.map((x, i2) => (<li key={i2}>{x}</li>))}
+                      </ul>
+                    ) : (
+                      <div className="text-sm text-neutral-500">Swim stop, dinner ashore, golden-hour cruise.</div>
+                    )}
+                  </div>
                 </div>
-
-                {leg && (
-                  <div className="mt-1 text-xs text-slate-700">
-                    {leg.nm != null ? <>NM: {Number(leg.nm).toFixed(1)} • </> : null}
-                    {leg.hours != null ? <>Time: {formatHM(Number(leg.hours))}</> : null}
-                    {leg.eta?.dep ? <> • Dep {leg.eta.dep}</> : null}
-                    {leg.eta?.arr ? <> • Arr {leg.eta.arr}</> : null}
-                  </div>
-                )}
-
-                {d?.notes ? (
-                  <div className="mt-2 text-sm text-slate-800 whitespace-pre-wrap">
-                    {d.notes}
-                  </div>
-                ) : null}
-
-                {Array.isArray(d?.activities) && d.activities.length ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {d.activities.slice(0, 8).map((a: string, i2: number) => (
-                      <span
-                        key={i2}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700"
-                      >
-                        {a}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             );
           })}
@@ -356,7 +383,7 @@ export function FinalVideoFlow({
   return (
     <div className="relative w-full">
       <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-black min-h-[360px]">
-        {/* VIDEO stays mounted so last frame stays visible */}
+        {/* VIDEO stays mounted, so last frame stays */}
         {videoSrc && (
           <video
             ref={videoRef}
@@ -370,13 +397,12 @@ export function FinalVideoFlow({
             onEnded={handleVideoEnded}
             onError={() => setVideoError("Video failed to load (check path & deployment).")}
             onClick={() => {
-              // if autoplay was blocked, click starts it
               if (mode === "video") playNow();
             }}
           />
         )}
 
-        {/* error helper */}
+        {/* Error helper */}
         {videoError && (
           <div className="pointer-events-auto absolute left-4 right-4 bottom-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {videoError}
@@ -388,13 +414,11 @@ export function FinalVideoFlow({
           </div>
         )}
 
-        {/* overlays */}
+        {/* Overlays */}
         <div className="pointer-events-none absolute inset-0 flex items-start justify-center">
           {mode === "idle" && (
-            <div className="pointer-events-auto mt-6 max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/96 backdrop-blur border border-white/70 shadow-xl px-5 py-4 text-center">
-              <div className="text-xs uppercase text-gray-500">
-                Navigoplan • Virtual Journey
-              </div>
+            <div className="pointer-events-auto mt-6 max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/90 backdrop-blur border border-white/60 shadow-xl px-5 py-4 text-center">
+              <div className="text-xs uppercase text-gray-500">Navigoplan • Virtual Journey</div>
               <div className="mt-2 text-xl font-semibold">Start your journey</div>
               <p className="mt-2 text-sm text-gray-700">
                 Press <b>Start the journey</b> to begin the cinematic itinerary.
@@ -410,13 +434,11 @@ export function FinalVideoFlow({
             </div>
           )}
 
-          {/* ✅ Card overlay while keeping last video frame */}
-          {mode === "card" && <div className="mt-6">{OverlayCard()}</div>}
+          {mode === "card" && <div className="mt-6">{VipStyleOverlayCard()}</div>}
 
-          {/* ✅ Final reveal overlay while keeping last video frame */}
           {mode === "finalReveal" && (
             <div className="mt-6 flex justify-center w-full">
-              {FinalRevealOverlay()}
+              <FinalRevealOverlay />
             </div>
           )}
         </div>
