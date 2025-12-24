@@ -103,7 +103,6 @@ export function FinalVideoFlow({
   const [activeDay, setActiveDay] = useState(0);
   const [currentVideo, setCurrentVideo] = useState<VideoId | null>(null);
 
-  // IMPORTANT: update day AFTER the travel video ends (prevents re-render interrupting play)
   const [pendingDay, setPendingDay] = useState<number | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -160,20 +159,15 @@ export function FinalVideoFlow({
     (el as any).controlsList = "nodownload nofullscreen noremoteplayback";
   }
 
-  // ✅ Key fix: do NOT hard-reset/load for every next video.
-  // We set src and then play on canplay (more reliable across browsers).
   function softPlay() {
     const el = videoRef.current;
     if (!el) return;
     try {
       primeVideo(el);
       setVideoError(null);
-      // do NOT el.load() here; let browser manage it.
       const p = el.play();
       if (p && typeof (p as any).catch === "function") {
-        (p as any).catch(() => {
-          setVideoError("Click the video once to start playback.");
-        });
+        (p as any).catch(() => setVideoError("Click the video once to start playback."));
       }
     } catch {
       setVideoError("Click the video once to start playback.");
@@ -185,14 +179,11 @@ export function FinalVideoFlow({
     if (!videoSrc) return;
     const el = videoRef.current;
     if (!el) return;
-    // prepare
     primeVideo(el);
     setVideoError(null);
-    // set to start (safe)
     try {
       el.currentTime = 0;
     } catch {}
-    // try play shortly
     const id = window.requestAnimationFrame(() => softPlay());
     return () => window.cancelAnimationFrame(id);
   }, [mode, videoSrc]);
@@ -208,9 +199,8 @@ export function FinalVideoFlow({
 
   function handleVideoEnded() {
     const el = videoRef.current;
-    if (el) el.pause(); // keep last frame visible
+    if (el) el.pause(); // keep last frame
 
-    // Apply pending day after travel clip ends
     if (pendingDay != null) {
       setActiveDay(pendingDay);
       setPendingDay(null);
@@ -229,7 +219,6 @@ export function FinalVideoFlow({
     }
 
     if (isPenultimateDay) {
-      // play return-to-berth, then AFTER it ends go to last day card
       setPendingDay(Math.min(activeDay + 1, days.length - 1));
       setCurrentVideo("v3");
       setMode("video");
@@ -237,7 +226,6 @@ export function FinalVideoFlow({
       return;
     }
 
-    // middle legs: play island-to-island, then go to next day
     setPendingDay(Math.min(activeDay + 1, days.length - 1));
     setCurrentVideo("v2");
     setMode("video");
@@ -260,9 +248,7 @@ export function FinalVideoFlow({
 
             {leg ? (
               <>
-                <div className="mt-1 text-lg font-semibold">
-                  {leg.from} → {leg.to}
-                </div>
+                <div className="mt-1 text-lg font-semibold">{leg.from} → {leg.to}</div>
 
                 <div className="mt-1 text-sm text-neutral-700">
                   {fmtNM(leg.nm)}
@@ -276,9 +262,7 @@ export function FinalVideoFlow({
                   <p className="mt-3 text-[15px] leading-relaxed text-neutral-800">{description}</p>
                 )}
 
-                {notes && (
-                  <p className="mt-2 text-neutral-700 whitespace-pre-wrap">{notes}</p>
-                )}
+                {notes && <p className="mt-2 text-neutral-700 whitespace-pre-wrap">{notes}</p>}
               </>
             ) : (
               <>
@@ -312,6 +296,7 @@ export function FinalVideoFlow({
     );
   }
 
+  /* ✅ FIXED: Final reveal now includes curated description + highlights */
   function FinalRevealOverlay() {
     const cards: any[] = Array.isArray(fullPayload?.dayCards) ? fullPayload.dayCards : days;
 
@@ -327,11 +312,16 @@ export function FinalVideoFlow({
           <div className="text-xs text-slate-600">{cards.length} days</div>
         </div>
 
-        <div className="mt-4 max-h-[420px] overflow-auto space-y-3">
+        <div className="mt-4 max-h-[520px] overflow-auto space-y-3 pr-1">
           {cards.map((d: any, idx: number) => {
             const day = d?.day ?? idx + 1;
             const date = d?.date ? formatDate(d.date) : "";
-            const leg = d?.leg;
+            const leg = d?.leg as Leg | undefined;
+
+            const to = leg?.to ?? d?.port ?? "";
+            const curated = DEST_INFO[to];
+            const desc = curated?.description ?? "";
+            const hi = (curated?.highlights ?? []).slice(0, 6);
 
             return (
               <div key={idx} className="rounded-2xl border overflow-hidden bg-white shadow-sm">
@@ -343,25 +333,43 @@ export function FinalVideoFlow({
 
                   <div className="p-4">
                     <div className="text-sm text-neutral-500">{date}</div>
+
                     {leg ? (
                       <>
                         <div className="mt-1 text-lg font-semibold">{leg.from} → {leg.to}</div>
                         <div className="mt-1 text-sm text-neutral-600">
-                          {fmtNM(leg.nm)}{leg.hours != null ? ` • ${formatHoursHM(leg.hours)}` : ""}
+                          {fmtNM(leg.nm)}
+                          {leg.hours != null ? ` • ${formatHoursHM(leg.hours)}` : ""}
                           {leg.eta?.dep && leg.eta?.arr
                             ? ` • Depart ${leg.eta.dep} • Arrive ${leg.eta.arr}${leg.eta.window ? ` (${leg.eta.window})` : ""}`
                             : ""}
                         </div>
                       </>
                     ) : (
-                      <div className="mt-1 text-lg font-semibold">{d?.title ?? "Leisure"}</div>
+                      <div className="mt-1 text-lg font-semibold">{d?.title ?? to ?? "Leisure"}</div>
                     )}
-                    {d?.notes && <p className="mt-2 text-neutral-700 whitespace-pre-wrap">{d.notes}</p>}
+
+                    {/* Description + Notes */}
+                    {desc ? (
+                      <p className="mt-3 text-[15px] leading-relaxed text-neutral-800">{desc}</p>
+                    ) : null}
+
+                    {d?.notes ? (
+                      <p className="mt-2 text-neutral-700 whitespace-pre-wrap">{d.notes}</p>
+                    ) : null}
                   </div>
 
                   <div className="p-4 border-l bg-neutral-50">
                     <div className="text-sm font-medium mb-1">Highlights</div>
-                    <div className="text-sm text-neutral-500">—</div>
+                    {hi.length ? (
+                      <ul className="text-sm text-neutral-700 space-y-1 list-disc pl-5">
+                        {hi.map((x, i2) => (<li key={i2}>{x}</li>))}
+                      </ul>
+                    ) : (
+                      <div className="text-sm text-neutral-500">
+                        Swim stop, dinner ashore, golden-hour cruise.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -375,7 +383,6 @@ export function FinalVideoFlow({
   return (
     <div className="relative w-full">
       <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-black min-h-[360px]">
-        {/* VIDEO (stays mounted so last frame stays visible) */}
         {videoSrc && (
           <video
             ref={videoRef}
@@ -388,7 +395,6 @@ export function FinalVideoFlow({
             preload="metadata"
             onEnded={handleVideoEnded}
             onCanPlay={() => {
-              // If we switched src and browser paused, this restarts play reliably
               if (mode === "video") softPlay();
             }}
             onError={() => setVideoError("Video failed to load (check path & deployment).")}
@@ -404,7 +410,6 @@ export function FinalVideoFlow({
           </div>
         )}
 
-        {/* Overlays */}
         <div className="pointer-events-none absolute inset-0 flex items-start justify-center">
           {mode === "idle" && (
             <div className="pointer-events-auto mt-6 max-w-md w-[92vw] sm:w-[520px] rounded-2xl bg-white/90 backdrop-blur border border-white/60 shadow-xl px-5 py-4 text-center">
