@@ -22,7 +22,6 @@ type DayCard = {
 };
 
 type PlannerMode = "Region" | "Custom";
-
 type SpotWeather = { tempC?: number; precipMM?: number; cloudPct?: number; label?: string };
 
 type Props = {
@@ -52,6 +51,14 @@ function formatHoursHM(hoursFloat: number) {
   return `${h} h ${m} m`;
 }
 
+function normalize(s: string) {
+  return (s || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
+
 /* ========= Curated destination info ========= */
 type DestInfo = { description: string; highlights: string[] };
 
@@ -59,12 +66,7 @@ const DEST_INFO: Record<string, DestInfo> = {
   Aegina: {
     description:
       "Νησί με μακραίωνη ιστορία: ο Ναός της Αφαίας σχηματίζει με Παρθενώνα και Σούνιο το «ιερό τρίγωνο». Φημισμένο για το φιστίκι ΠΟΠ και τη νεοκλασική Χώρα.",
-    highlights: [
-      "Ναός Αφαίας & θέα",
-      "Μονή Αγίου Νεκταρίου",
-      "Βόλτα στη Χώρα",
-      "Θαλασσινά στο λιμάνι",
-    ],
+    highlights: ["Ναός Αφαίας & θέα", "Μονή Αγίου Νεκταρίου", "Βόλτα στη Χώρα", "Θαλασσινά στο λιμάνι"],
   },
   Agistri: {
     description:
@@ -82,18 +84,15 @@ const DEST_INFO: Record<string, DestInfo> = {
     highlights: ["Περίπατος στο λιμάνι", "Μουσεία", "Ηλιοβασίλεμα στο Κανόνι", "Σπήλια"],
   },
   Spetses: {
-    description:
-      "Νησί της Μπουμπουλίνας — αρχοντικό, ρομαντικό και κοσμικό.",
+    description: "Νησί της Μπουμπουλίνας — αρχοντικό, ρομαντικό και κοσμικό.",
     highlights: ["Μουσείο Μπουμπουλίνας", "Ντάπια", "Άγ. Παρασκευή", "Κοκτέιλ το βράδυ"],
   },
   "Porto Cheli": {
-    description:
-      "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
+    description: "Κλειστός, προστατευμένος κόλπος στην Ερμιονίδα. Βάση για Σπέτσες/Ύδρα.",
     highlights: ["Ήρεμες αγκυροβολίες", "Θαλάσσια παιχνίδια", "Φρέσκο ψάρι", "Short hop σε Σπέτσες"],
   },
   Ermioni: {
-    description:
-      "Παραθαλάσσια κωμόπολη σε χερσόνησο, με πευκόφυτο Μπίστι και καλές ταβέρνες.",
+    description: "Παραθαλάσσια κωμόπολη σε χερσόνησο, με πευκόφυτο Μπίστι και καλές ταβέρνες.",
     highlights: ["Περίπατος στο Μπίστι", "Θαλασσινά", "Ήσυχη βραδιά", "Κοντινά μπάνια"],
   },
 };
@@ -154,6 +153,51 @@ async function fetchWikiCard(placeName: string): Promise<WikiCard | null> {
   return card;
 }
 
+/* ========= Sea Guide VIP Info (NEW) ========= */
+type SeaGuideEntry = {
+  id?: string;
+  name?: { el?: string; en?: string } | string;
+  vip_info?: { el?: string; en?: string } | string;
+};
+
+const SEA_GUIDE_URL = "/data/sea_guide_vol3_master.json";
+
+function pickText(v: any, lang: "el" | "en" = "el") {
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "object") return v?.[lang] || v?.el || v?.en || "";
+  return "";
+}
+
+function buildSeaGuideIndex(items: SeaGuideEntry[]) {
+  const exact = new Map<string, SeaGuideEntry>();
+
+  function addKey(k: string, e: SeaGuideEntry) {
+    const kk = normalize(k);
+    if (!kk) return;
+    if (!exact.has(kk)) exact.set(kk, e);
+  }
+
+  for (const e of items) {
+    if (!e) continue;
+    if (e.id) addKey(e.id, e);
+
+    const n = e.name;
+    if (typeof n === "string") addKey(n, e);
+    else {
+      if (n?.el) addKey(n.el, e);
+      if (n?.en) addKey(n.en, e);
+    }
+  }
+
+  return exact;
+}
+
+function extractVipInfo(entry: SeaGuideEntry | null, lang: "el" | "en" = "el") {
+  if (!entry) return "";
+  return pickText(entry.vip_info, lang).trim();
+}
+
 /* ========= Component ========= */
 export default function VipGuestsView({
   plan,
@@ -171,7 +215,9 @@ export default function VipGuestsView({
   }, [plan]);
 
   const [wiki, setWiki] = useState<Record<string, WikiCard | null>>({});
+  const [seaGuideIndex, setSeaGuideIndex] = useState<Map<string, SeaGuideEntry> | null>(null);
 
+  // Wikipedia
   useEffect(() => {
     let abort = false;
     (async () => {
@@ -185,8 +231,54 @@ export default function VipGuestsView({
       }
       if (!abort) setWiki(next);
     })();
-    return () => { abort = true; };
+    return () => {
+      abort = true;
+    };
   }, [destNames]);
+
+  // SeaGuide VIP info index (load once)
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      try {
+        const r = await fetch(SEA_GUIDE_URL, { cache: "no-store" });
+        if (!r.ok) throw new Error("sea guide fetch failed");
+        const j = await r.json();
+        const list: SeaGuideEntry[] = Array.isArray(j)
+          ? j
+          : Array.isArray(j?.items)
+          ? j.items
+          : Array.isArray(j?.data)
+          ? j.data
+          : Array.isArray(j?.ports)
+          ? j.ports
+          : [];
+        const idx = buildSeaGuideIndex(list);
+        if (!abort) setSeaGuideIndex(idx);
+      } catch {
+        if (!abort) setSeaGuideIndex(new Map());
+      }
+    })();
+    return () => {
+      abort = true;
+    };
+  }, []);
+
+  function lookupSeaGuideEntryByTo(to: string): SeaGuideEntry | null {
+    if (!seaGuideIndex) return null;
+    const key = normalize(to);
+    if (!key) return null;
+    // direct match
+    const hit = seaGuideIndex.get(key);
+    if (hit) return hit;
+
+    // try basic cleanup (remove parentheses)
+    const cleaned = to.replace(/\s*\([^)]+\)\s*/g, " ").trim();
+    const hit2 = seaGuideIndex.get(normalize(cleaned));
+    if (hit2) return hit2;
+
+    return null;
+  }
 
   return (
     <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -217,8 +309,15 @@ export default function VipGuestsView({
           const mainDesc = curated?.description || summary || "";
           const hi = (curated?.highlights || []).slice(0, 6);
 
+          // ✅ NEW: VIP info from SeaGuide JSON
+          const sgEntry = lookupSeaGuideEntryByTo(to);
+          const vipInfo = extractVipInfo(sgEntry, "el");
+
           return (
-            <div key={d.day} className="rounded-2xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
+            <div
+              key={d.day}
+              className="rounded-2xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
+            >
               <div className="grid sm:grid-cols-[120px_1fr_260px] gap-0">
                 <div className="bg-neutral-50 p-4 flex flex-col items-start justify-center">
                   <div className="text-3xl font-semibold leading-none">{d.day}</div>
@@ -237,7 +336,12 @@ export default function VipGuestsView({
                           </div>
                           <div className="mt-1 text-sm text-neutral-600">
                             {Math.round(d.leg.nm)} nm • {formatHoursHM(d.leg.hours)}
-                            {d.leg.eta && <> • Depart {d.leg.eta.dep} • Arrive {d.leg.eta.arr} ({d.leg.eta.window})</>}
+                            {d.leg.eta && (
+                              <>
+                                {" "}
+                                • Depart {d.leg.eta.dep} • Arrive {d.leg.eta.arr} ({d.leg.eta.window})
+                              </>
+                            )}
                           </div>
 
                           {/* Live Weather chips */}
@@ -267,6 +371,14 @@ export default function VipGuestsView({
                           ) : null}
                         </p>
                       )}
+
+                      {/* ✅ NEW: VIP INFO line (Sea Guide) */}
+                      {vipInfo && (
+                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                          <span className="font-semibold">VIP:</span> {vipInfo}
+                        </div>
+                      )}
+
                       {d.notes && <p className="mt-2 text-neutral-700">{d.notes}</p>}
                     </>
                   ) : (
@@ -281,7 +393,9 @@ export default function VipGuestsView({
                   <div className="text-sm font-medium mb-1">Highlights</div>
                   {hi.length ? (
                     <ul className="text-sm text-neutral-700 space-y-1 list-disc pl-5">
-                      {hi.map((x, i) => (<li key={i}>{x}</li>))}
+                      {hi.map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
                     </ul>
                   ) : (
                     <div className="text-sm text-neutral-500">Swim stop, dinner ashore, golden-hour cruise.</div>
